@@ -1,0 +1,81 @@
+{
+  "_meta": {
+    "tier": "F",
+    "title": "Format & integrity invariants",
+    "description": "Language-neutral port of Bahi's sample-data/test_khata.py. Every invariant is a structural or accounting property any conforming .khata must satisfy; checked directly against the file, independent of any engine. Runner: harness/format_suite.py. Case metadata (home_state, expected identity, capability flags) comes from corpus/manifest.json.",
+    "source": "https://github.com/NakliTechie/Bahi — sample-data/test_khata.py",
+    "kinds": {
+      "sql-empty": "Query MUST return zero rows (it selects violations).",
+      "sql-scalar-zero": "Single scalar MUST equal 0.",
+      "sql-scalar-eq": "Single scalar MUST equal `expected`.",
+      "sql-scalar-min": "Single scalar MUST be >= `min`.",
+      "sql-two-scalars-rel": "Query returns one row (a,b); if a>0 then abs(a-b)/abs(a) MUST be <= `tolRel`.",
+      "native": "Handled in the runner by `native` name (structural checks over zip/manifest/chain)."
+    },
+    "placeholders": {
+      "{{home_state}}": "The case's home_state (ISO 3166-2:IN code) from corpus/manifest.json."
+    }
+  },
+  "invariants": [
+    { "id": "A01", "category": "format", "appliesTo": ["*"], "kind": "native", "native": "file-size-min", "min": 1000, "desc": "File exists and is not suspiciously small." },
+    { "id": "A02", "category": "format", "appliesTo": ["*"], "kind": "native", "native": "zip-has", "entries": ["manifest.json", "books.sqlite"], "desc": "Zip contains the two mandatory members." },
+    { "id": "A03", "category": "format", "appliesTo": ["*"], "kind": "native", "native": "pragma-integrity", "desc": "PRAGMA integrity_check returns 'ok'." },
+    { "id": "A04", "category": "format", "appliesTo": ["*"], "kind": "native", "native": "schema-version", "expected": 12, "desc": "manifest.schemaVersion and meta.schemaVersion both equal 12." },
+    { "id": "A05", "category": "format", "appliesTo": ["*"], "kind": "native", "native": "format-version", "expected": "1.0", "desc": "manifest.khataFormatVersion == '1.0'." },
+    { "id": "A06", "category": "format", "appliesTo": ["*"], "kind": "native", "native": "books-hash", "desc": "manifest.integrity.booksHash == sha256(books.sqlite bytes)." },
+    { "id": "A07", "category": "format", "appliesTo": ["*"], "kind": "native", "native": "audit-head", "desc": "manifest.integrity.auditHead == hash of the last audit_log row." },
+    { "id": "A08", "category": "format", "appliesTo": ["*"], "kind": "native", "native": "company-identity", "desc": "manifest.company {gstin,name,state} match the case's expected identity." },
+
+    { "id": "B01", "category": "trial-balance", "appliesTo": ["*"], "kind": "sql-scalar-zero", "sql": "SELECT SUM(debit)-SUM(credit) FROM entry_lines", "desc": "Grand total of all entry_lines ties to zero (Dr = Cr)." },
+    { "id": "B02", "category": "trial-balance", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT entry_id FROM entry_lines GROUP BY entry_id HAVING SUM(debit)-SUM(credit) <> 0", "desc": "Every individual entry is balanced." },
+    { "id": "B03a", "category": "trial-balance", "appliesTo": ["*"], "kind": "sql-scalar-min", "min": 1, "sql": "SELECT COUNT(*) FROM entry_lines el JOIN accounts a ON a.id=el.account_id WHERE a.type='asset'", "desc": "There are asset postings." },
+    { "id": "B03b", "category": "trial-balance", "appliesTo": ["*"], "kind": "sql-scalar-min", "min": 1, "sql": "SELECT COUNT(*) FROM entry_lines el JOIN accounts a ON a.id=el.account_id WHERE a.type='income'", "desc": "There are income postings." },
+    { "id": "B03c", "category": "trial-balance", "appliesTo": ["*"], "kind": "sql-scalar-min", "min": 1, "sql": "SELECT COUNT(*) FROM entry_lines el JOIN accounts a ON a.id=el.account_id WHERE a.type='liability'", "desc": "There are liability postings." },
+
+    { "id": "C01", "category": "audit-chain", "appliesTo": ["*"], "kind": "sql-scalar-min", "min": 101, "sql": "SELECT COUNT(*) FROM audit_log", "desc": "Audit chain is not suspiciously short (> 100 rows)." },
+    { "id": "C02", "category": "audit-chain", "appliesTo": ["*"], "kind": "native", "native": "chain-links", "desc": "Structural hash-walk: genesis prev_hash is 0*64/''/NULL, and every prev_hash equals the previous row's hash. (Full sha256 recomputation is Tier C.)" },
+    { "id": "C03", "category": "audit-chain", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM audit_log WHERE signature IS NULL OR signature=''", "desc": "Every audit row carries a signature." },
+    { "id": "C04", "category": "audit-chain", "appliesTo": ["*"], "kind": "sql-scalar-min", "min": 1, "sql": "SELECT COUNT(*) FROM audit_log WHERE origin LIKE '%generator.py%'", "desc": "Corpus rows are tagged with the generator origin." },
+
+    { "id": "D01", "category": "snapshot", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM invoices WHERE company_snapshot IS NULL OR company_snapshot=''", "desc": "Inv1: every invoice froze company_snapshot." },
+    { "id": "D02", "category": "snapshot", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM invoices WHERE customer_snapshot IS NULL OR customer_snapshot=''", "desc": "Inv6: every invoice froze customer_snapshot." },
+    { "id": "D03", "category": "snapshot", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM invoices WHERE place_of_supply_name IS NULL OR place_of_supply_name=''", "desc": "Inv4: every invoice froze place_of_supply_name." },
+    { "id": "D04", "category": "snapshot", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM invoice_lines WHERE (hsn_description IS NULL OR hsn_description='') AND hsn_sac IS NOT NULL AND hsn_sac<>''", "desc": "Inv3: lines with an HSN/SAC froze its description." },
+    { "id": "D05", "category": "snapshot", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM invoice_lines WHERE rate_id IS NULL OR rate_id=''", "desc": "Inv2: every taxable line froze its rate_id." },
+    { "id": "D06", "category": "snapshot", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM entry_lines WHERE account_name IS NULL OR account_name=''", "desc": "Inv7: every entry line froze its account_name." },
+    { "id": "D07", "category": "snapshot", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM payment_allocations WHERE invoice_number_snapshot IS NULL OR invoice_number_snapshot=''", "desc": "Every payment allocation froze the invoice number." },
+    { "id": "D08", "category": "snapshot", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM invoices WHERE json_extract(company_snapshot,'$.gstin') IS NULL OR length(json_extract(company_snapshot,'$.gstin'))<>15", "desc": "Every company_snapshot is valid JSON with a 15-char GSTIN." },
+
+    { "id": "E01", "category": "invoice-math", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT invoice_number FROM invoices WHERE (subtotal+cgst+sgst+igst+cess+round_off)-total <> 0", "desc": "Invoice total equals the sum of its components." },
+    { "id": "E02", "category": "invoice-math", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT i.invoice_number FROM invoices i LEFT JOIN invoice_lines il ON il.invoice_id=i.id GROUP BY i.id HAVING i.subtotal-COALESCE(SUM(il.taxable),0) <> 0", "desc": "Invoice lines' taxable values sum to the header subtotal." },
+    { "id": "E03", "category": "invoice-math", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT invoice_number FROM invoices WHERE is_export=0 AND is_sez=0 AND ( (place_of_supply='{{home_state}}' AND igst>0) OR (place_of_supply<>'{{home_state}}' AND (cgst+sgst)>0) )", "desc": "GST routing: intra-state has CGST+SGST (no IGST); inter-state has IGST only." },
+    { "id": "E04", "category": "invoice-math", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM invoice_lines WHERE rate_id IS NULL OR rate_id=''", "desc": "Every invoice line resolves to a rate_id." },
+
+    { "id": "F01", "category": "payment", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT p.id FROM payments p LEFT JOIN payment_allocations pa ON pa.payment_id=p.id GROUP BY p.id HAVING COALESCE(SUM(pa.amount),0) > p.amount", "desc": "Allocations never exceed the payment amount." },
+    { "id": "F02", "category": "payment", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT i.id FROM invoices i LEFT JOIN payment_allocations pa ON pa.invoice_id=i.id GROUP BY i.id HAVING COALESCE(SUM(pa.amount),0) - i.total > 0", "desc": "An invoice is never over-paid (outstanding never goes negative)." },
+    { "id": "F03", "category": "payment", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM payments WHERE ledger_entry_id IS NULL", "desc": "Every payment posted a ledger entry." },
+
+    { "id": "G01a", "category": "gst-summary", "appliesTo": ["*"], "kind": "sql-scalar-zero", "sql": "SELECT COALESCE((SELECT SUM(cgst) FROM invoices),0)-COALESCE((SELECT SUM(cgst) FROM invoice_lines),0)", "desc": "CGST header total ties to line total." },
+    { "id": "G01b", "category": "gst-summary", "appliesTo": ["*"], "kind": "sql-scalar-zero", "sql": "SELECT COALESCE((SELECT SUM(sgst) FROM invoices),0)-COALESCE((SELECT SUM(sgst) FROM invoice_lines),0)", "desc": "SGST header total ties to line total." },
+    { "id": "G01c", "category": "gst-summary", "appliesTo": ["*"], "kind": "sql-scalar-zero", "sql": "SELECT COALESCE((SELECT SUM(igst) FROM invoices),0)-COALESCE((SELECT SUM(igst) FROM invoice_lines),0)", "desc": "IGST header total ties to line total." },
+    { "id": "G02", "category": "gst-summary", "appliesTo": ["*"], "kind": "sql-two-scalars-rel", "tolRel": 0.10, "sql": "SELECT COALESCE((SELECT SUM(cgst+sgst+igst+cess) FROM invoices),0) AS a, COALESCE((SELECT SUM(el.credit-el.debit) FROM entry_lines el JOIN accounts a ON a.id=el.account_id WHERE a.name LIKE '%GST%Output%' OR a.name LIKE '%CGST%Output%' OR a.name LIKE '%SGST%Output%' OR a.name LIKE '%IGST%Output%'),0) AS b", "desc": "Output GST in the ledger is within 10% of invoice GST (credit notes reverse some)." },
+
+    { "id": "H01", "category": "tds", "appliesTo": ["*"], "kind": "sql-scalar-zero", "sql": "SELECT COALESCE((SELECT SUM(tds_amount) FROM tds_deductions),0)-COALESCE((SELECT SUM(el.credit-el.debit) FROM entry_lines el JOIN accounts a ON a.id=el.account_id WHERE a.name LIKE '%TDS Payable%'),0)", "desc": "TDS deducted ties to the TDS Payable ledger credit." },
+    { "id": "H02", "category": "tds", "appliesTo": ["*"], "kind": "sql-empty", "sql": "SELECT id FROM tds_deductions WHERE ledger_entry_id IS NULL", "desc": "Every TDS deduction posted a ledger entry." },
+
+    { "id": "I01", "category": "stock", "appliesTo": ["pharma", "manufacturing"], "kind": "sql-empty", "sql": "SELECT item_id FROM stock_movements GROUP BY item_id HAVING SUM(CASE WHEN movement_type='in' THEN qty ELSE -qty END) < 0", "desc": "Per-item on-hand never goes negative." },
+    { "id": "I02", "category": "stock", "appliesTo": ["pharma", "manufacturing"], "kind": "sql-empty", "sql": "SELECT id FROM stock_movements WHERE movement_type='in' AND ABS(value-qty*rate) > 50", "desc": "Inward stock value equals qty*rate (outward uses WAC/FIFO, excluded)." },
+    { "id": "I03", "category": "stock", "appliesTo": ["consulting"], "kind": "sql-scalar-eq", "expected": 0, "sql": "SELECT COUNT(*) FROM stock_movements", "desc": "A services-only company has no stock movements." },
+
+    { "id": "J01a", "category": "per-company", "appliesTo": ["pharma"], "kind": "sql-scalar-min", "min": 11, "sql": "SELECT COUNT(*) FROM items WHERE hsn_sac LIKE '30%' OR hsn_sac LIKE '90%' OR hsn_sac LIKE '38%'", "desc": "Pharma has goods (HSN) items." },
+    { "id": "J01b", "category": "per-company", "appliesTo": ["pharma"], "kind": "sql-scalar-min", "min": 4, "sql": "SELECT COUNT(*) FROM items WHERE hsn_sac LIKE '99%'", "desc": "Pharma has service (SAC) items." },
+    { "id": "J02a", "category": "per-company", "appliesTo": ["pharma"], "kind": "sql-scalar-min", "min": 1, "sql": "SELECT COUNT(*) FROM credit_notes", "desc": "Pharma has credit notes." },
+    { "id": "J02b", "category": "per-company", "appliesTo": ["pharma"], "kind": "sql-scalar-min", "min": 1, "sql": "SELECT COUNT(*) FROM advances", "desc": "Pharma has at least one advance." },
+    { "id": "J03", "category": "per-company", "appliesTo": ["manufacturing"], "kind": "sql-scalar-eq", "expected": 0, "sql": "SELECT COUNT(*) FROM items WHERE hsn_sac LIKE '99%'", "desc": "A goods-only manufacturer has zero SAC (service) items." },
+    { "id": "J04", "category": "per-company", "appliesTo": ["manufacturing"], "kind": "sql-scalar-min", "min": 501, "sql": "SELECT COUNT(*) FROM stock_movements", "desc": "Manufacturing has heavy inventory movement." },
+    { "id": "J05", "category": "per-company", "appliesTo": ["consulting"], "kind": "sql-scalar-eq", "expected": 0, "sql": "SELECT COUNT(*) FROM purchases", "desc": "A pure-services consultancy has zero purchases." },
+    { "id": "J06", "category": "per-company", "appliesTo": ["consulting"], "kind": "sql-empty", "sql": "SELECT id FROM items WHERE hsn_sac IS NULL OR hsn_sac NOT LIKE '99%'", "desc": "Every consulting item is a SAC service code." },
+    { "id": "J07", "category": "per-company", "appliesTo": ["*"], "kind": "sql-scalar-min", "min": 1, "sql": "SELECT COUNT(*) FROM tds_deductions", "desc": "All three companies have TDS deductions." },
+    { "id": "J08", "category": "per-company", "appliesTo": ["*"], "kind": "sql-scalar-eq", "expected": 1, "sql": "SELECT CASE WHEN MIN(invoice_date) < '2025-01-01' AND MAX(invoice_date) > '2025-01-01' THEN 1 ELSE 0 END FROM invoices", "desc": "Invoice data spans at least two fiscal years." }
+  ]
+}

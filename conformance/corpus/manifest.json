@@ -1,0 +1,100 @@
+{
+  "conformanceVersion": "0.1.0",
+  "formatVersion": "1.0",
+  "schemaVersion": 12,
+  "description": "Machine-readable conformance manifest for the .khata format. Declares the corpus cases (inputs, pinned by sha256), the three conformance tiers, and the language-neutral engine-adapter query contract that Tiers C and R run through. A conforming engine ships one adapter (see ../adapters/README.md) and this manifest drives the harness against it.",
+  "hashContract": {
+    "spec": "../spec/canonical-json.md",
+    "hashVersion": 2,
+    "genesisPrev": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "cases": [
+    {
+      "id": "pharma",
+      "file": "files/pharma.khata",
+      "fileSha256": "a7b5b0650feee5b81f6294a07f1e829e8a32c1726dcdc7979dda3e1c0036a047",
+      "booksSha256": "93c0d3636db6a1a993d2ec018ab50aa279a092e0954148556e8fd0d08be177e9",
+      "auditHead": "09344672f62ac287289965b762f87b455966e9552ab7418576401e99c88129e8",
+      "auditRows": 9186,
+      "homeState": "MH",
+      "identity": { "name": "Vaidya Life Sciences Pvt Ltd", "gstin": "27AABCV1234A1Z5", "state": "MH" },
+      "profile": "goods + services (credit notes, advances)",
+      "capabilities": { "goods": true, "services": true, "purchases": true, "stock": true, "creditNotes": true, "advances": true }
+    },
+    {
+      "id": "manufacturing",
+      "file": "files/manufacturing.khata",
+      "fileSha256": "f32e5aa90fbcbe3bf7b8620877a9ce02ea844b1ee5b4cb5e86b89479d7e873b9",
+      "booksSha256": "ea617c9c2833ad684271db62501d69f3cee8a0cacc101d202aa258bbb595b169",
+      "auditHead": "6b74dbb3e904cb36cc36830429807a1c4dae74c47e5adeb176c5cad6c4f9c5bd",
+      "auditRows": 5470,
+      "homeState": "GJ",
+      "identity": { "name": "Shree Krishna Steel Industries Ltd", "gstin": "24AAACS5678B1Z3", "state": "GJ" },
+      "profile": "goods only (heavy inventory)",
+      "capabilities": { "goods": true, "services": false, "purchases": true, "stock": true, "creditNotes": false, "advances": false }
+    },
+    {
+      "id": "consulting",
+      "file": "files/consulting.khata",
+      "fileSha256": "f2151ffc5e7860f8730d952073907b1a4100f734fea611c818d839b6563e98bb",
+      "booksSha256": "b3c3cd99bc9b24f46d0c16c7967ca787bc3a7f6b4ac53961ce82b511070515d4",
+      "auditHead": "b1a984c62b7eb44f8454844ac31b7157b7ee6d37f7fa6937ba96949e328c2d6a",
+      "auditRows": 1029,
+      "homeState": "KA",
+      "identity": { "name": "Arjun Rao Advisory LLP", "gstin": "29AAEFA9012C1Z7", "state": "KA" },
+      "profile": "services only (no stock, no purchases)",
+      "capabilities": { "goods": false, "services": true, "purchases": false, "stock": false, "creditNotes": false, "advances": false }
+    }
+  ],
+  "tiers": {
+    "F": {
+      "title": "Format & integrity",
+      "engineAgnostic": true,
+      "invariants": "invariants.json",
+      "runner": "../harness/format_suite.py"
+    },
+    "C": {
+      "title": "Canonicalisation + audit chain (byte-for-byte)",
+      "runsThroughAdapter": true,
+      "query": "verify-chain",
+      "expect": { "ok": true, "badRows": [] },
+      "appliesTo": ["*"],
+      "note": "Adapter recomputes sha256(canonicalJson({v:2,...})) for every audit row and walks the chain; MUST report ok:true with zero bad rows. auditRows in each case pins the expected row count."
+    },
+    "R": {
+      "title": "Report golden outputs (byte-for-byte)",
+      "runsThroughAdapter": true,
+      "fixturesDir": "fixtures",
+      "fixturePath": "fixtures/{case}/{query}.json",
+      "queries": [
+        {
+          "name": "trial-balance",
+          "appliesTo": ["*"],
+          "desc": "Per-account aggregation over entry_lines: [{account_id, name, type, debit, credit}] for every account with postings, sorted by account_id. Paise integers. `name` reads the frozen entry_lines.account_name (Invariant 7) falling back to accounts.name."
+        },
+        {
+          "name": "account-type-totals",
+          "appliesTo": ["*"],
+          "desc": "Debit/credit totals grouped by account type: [{type, debit, credit}] sorted by type. Paise integers."
+        },
+        {
+          "name": "gst-outward-summary",
+          "appliesTo": ["*"],
+          "desc": "Outward-supply GST totals from posted invoices: {invoice_count, taxable, cgst, sgst, igst, cess}. Paise integers."
+        },
+        {
+          "name": "stock-on-hand",
+          "appliesTo": ["*"],
+          "desc": "Per-item closing quantity from stock_movements (in − out): [{item_id, item_name, on_hand_qty}] sorted by item_id. Empty array for services-only cases."
+        }
+      ]
+    }
+  },
+  "adapter": {
+    "contract": "../adapters/README.md",
+    "invocation": "<adapter...> <query> <path-to.khata>",
+    "output": "canonical JSON on stdout, exit 0",
+    "reference": "../adapters/js/adapter.mjs",
+    "queries": ["verify-chain", "trial-balance", "account-type-totals", "gst-outward-summary", "stock-on-hand"]
+  }
+}
