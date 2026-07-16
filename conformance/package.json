@@ -1,0 +1,17 @@
+{
+  "name": "@naklitechie/khata-conformance",
+  "version": "0.1.0",
+  "description": "Cross-implementation conformance package for the .khata accounting format: format spec, a 3-file / 53-invariant corpus, golden report fixtures, and a byte-for-byte CI harness. Keeps every engine (Bahi's JS, Folio's Ruby, any third-party reader) faithful to the same contract.",
+  "license": "CC0-1.0",
+  "author": "Chirag Patnaik (@NakliTechie)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "node harness/run.mjs --adapter 'node adapters/js/adapter.mjs' && python3 harness/format_suite.py",
+    "test:engine": "node harness/run.mjs --adapter 'node adapters/js/adapter.mjs'",
+    "test:format": "python3 harness/format_suite.py",
+    "gen-fixtures": "node harness/gen-fixtures.mjs --adapter 'node adapters/js/adapter.mjs'"
+  }
+}
