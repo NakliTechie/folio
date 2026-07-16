@@ -1,0 +1,22 @@
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Working notes (plan-folder convention — never committed)
+plan/
+
+# Rails/Ruby (for when the app lands)
+/.bundle/
+/log/*
+/tmp/*
+/storage/*
+/config/master.key
+/config/credentials/*.key
+.env
+.env.*
+/coverage/
