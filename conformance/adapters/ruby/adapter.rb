@@ -55,8 +55,60 @@ module KhataAdapter
     { 'ok' => bad.empty?, 'count' => rows.length, 'badRows' => bad.first(10) }
   end
 
+  # ── Tier R — report golden outputs (byte-for-byte) ─────────────────────────
+  # Same SQL as the JS reference adapter, over the v12 projection. Integer paise throughout (Ruby
+  # Integer is arbitrary-precision, so no BigInt handling needed). Key order is normalised by
+  # canonical_json, so building the hashes with the contract's field names is sufficient.
+
+  def trial_balance(db)
+    db.execute(
+      'SELECT el.account_id AS account_id, a.name AS name, a.type AS type, ' \
+      'SUM(el.debit) AS debit, SUM(el.credit) AS credit ' \
+      'FROM entry_lines el JOIN accounts a ON a.id = el.account_id ' \
+      'GROUP BY el.account_id ORDER BY el.account_id'
+    ).map do |r|
+      { 'account_id' => r['account_id'], 'name' => r['name'], 'type' => r['type'],
+        'debit' => r['debit'], 'credit' => r['credit'] }
+    end
+  end
+
+  def account_type_totals(db)
+    db.execute(
+      'SELECT a.type AS type, SUM(el.debit) AS debit, SUM(el.credit) AS credit ' \
+      'FROM entry_lines el JOIN accounts a ON a.id = el.account_id ' \
+      'GROUP BY a.type ORDER BY a.type'
+    ).map { |r| { 'type' => r['type'], 'debit' => r['debit'], 'credit' => r['credit'] } }
+  end
+
+  def gst_outward_summary(db)
+    r = db.execute(
+      "SELECT COUNT(*) AS invoice_count, " \
+      "COALESCE(SUM(subtotal),0) AS taxable, " \
+      "COALESCE(SUM(cgst),0) AS cgst, COALESCE(SUM(sgst),0) AS sgst, " \
+      "COALESCE(SUM(igst),0) AS igst, COALESCE(SUM(cess),0) AS cess " \
+      "FROM invoices WHERE status = 'posted'"
+    ).first
+    { 'invoice_count' => r['invoice_count'], 'taxable' => r['taxable'],
+      'cgst' => r['cgst'], 'sgst' => r['sgst'], 'igst' => r['igst'], 'cess' => r['cess'] }
+  end
+
+  def stock_on_hand(db)
+    db.execute(
+      "SELECT sm.item_id AS item_id, COALESCE(i.name,'') AS item_name, " \
+      "SUM(CASE WHEN sm.movement_type='in' THEN sm.qty ELSE -sm.qty END) AS on_hand_qty " \
+      'FROM stock_movements sm LEFT JOIN items i ON i.id = sm.item_id ' \
+      'GROUP BY sm.item_id ORDER BY sm.item_id'
+    ).map do |r|
+      { 'item_id' => r['item_id'], 'item_name' => r['item_name'], 'on_hand_qty' => r['on_hand_qty'] }
+    end
+  end
+
   QUERIES = {
-    'verify-chain' => method(:verify_chain)
+    'verify-chain' => method(:verify_chain),
+    'trial-balance' => method(:trial_balance),
+    'account-type-totals' => method(:account_type_totals),
+    'gst-outward-summary' => method(:gst_outward_summary),
+    'stock-on-hand' => method(:stock_on_hand)
   }.freeze
 
   def run(argv)
