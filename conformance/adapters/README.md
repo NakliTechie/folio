@@ -2,9 +2,18 @@
 
 An **adapter** is the thin bridge between an accounting engine and this conformance harness. It is the
 *only* thing an engine must ship to prove conformance — the corpus, the manifest, and the harness are
-shared and unchanged. Bahi's JS engine conforms through [`js/adapter.mjs`](js/adapter.mjs); Folio's
-Ruby engine will conform through a `ruby/` adapter at M1; a third-party `.khata` reader conforms the
-same way.
+shared and unchanged. Bahi's JS engine conforms through [`js/adapter.mjs`](js/adapter.mjs); a **Ruby**
+engine conforms through [`ruby/adapter.rb`](ruby/adapter.rb) — the second, independent implementation,
+green byte-for-byte against the same corpus (the seed of Folio's Rails engine); a third-party `.khata`
+reader conforms the same way.
+
+Run either against the harness (both produce **byte-identical** output — that agreement, enforced
+through the same divergence-catching harness, is the proof the format is portable across engines):
+
+```sh
+node harness/run.mjs --adapter 'node adapters/js/adapter.mjs'    # reference (JS)
+node harness/run.mjs --adapter 'ruby adapters/ruby/adapter.rb'   # Ruby — needs the sqlite3 gem
+```
 
 ## Invocation
 

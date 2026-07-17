@@ -25,7 +25,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3'
-      - name: Tier C + R (engine adapter, byte-for-byte)
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - name: Install Ruby sqlite3 gem
+        run: gem install sqlite3 --no-document
+      - name: Tier C + R via JS adapter (byte-for-byte)
         run: node harness/run.mjs --adapter 'node adapters/js/adapter.mjs'
+      - name: Tier C + R via Ruby adapter (byte-for-byte — cross-engine parity)
+        run: node harness/run.mjs --adapter 'ruby adapters/ruby/adapter.rb'
       - name: Tier F (format & integrity)
         run: python3 harness/format_suite.py

@@ -43,12 +43,13 @@ files are inputs *and*, via their own audit chain, self-describing golden.
 ## Run it
 
 ```sh
-# everything (engine adapter tiers C+R, then format suite F)
+# everything (both engine adapters through tiers C+R, then format suite F)
 npm test
 
 # individually
-npm run test:engine     # Tier C + R via the JS reference adapter
-npm run test:format     # Tier F (Python, stdlib sqlite3)
+npm run test:engine        # Tier C + R via the JS reference adapter
+npm run test:engine:ruby   # Tier C + R via the Ruby adapter (needs the sqlite3 gem) — cross-engine parity
+npm run test:format        # Tier F (Python, stdlib sqlite3)
 
 # regenerate Tier R golden fixtures from the reference adapter (after an intentional change)
 npm run gen-fixtures
@@ -74,7 +75,8 @@ conformance/
 │   └── invariants.json         Tier F assertions (the ported 53-test suite)
 ├── adapters/
 │   ├── README.md               the engine-adapter contract (how to make a new engine conform)
-│   └── js/                      reference adapter — Bahi's engine semantics, verbatim
+│   ├── js/                      reference adapter — Bahi's engine semantics, verbatim (node:sqlite)
+│   └── ruby/                    second adapter — independent Ruby impl, green byte-for-byte (sqlite3 gem)
 └── harness/
     ├── run.mjs                  Tier C + R runner (byte-for-byte)
     ├── gen-fixtures.mjs         (re)generate Tier R golden
