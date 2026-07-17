@@ -1,0 +1,7 @@
+# Golden fixtures and source are LF — byte-for-byte assertions must not be defeated by CRLF munging.
+*.json    text eol=lf
+*.mjs     text eol=lf
+*.py      text eol=lf
+*.md      text eol=lf
+# The corpus files are binary zip archives — never touch their bytes (their sha256 is pinned).
+*.khata   binary

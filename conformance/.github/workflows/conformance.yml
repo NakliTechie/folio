@@ -1,0 +1,38 @@
+# Conformance CI — runs all three tiers against every committed engine adapter.
+# Note: paths are prefixed with `conformance/` because this package is vendored into the Folio repo
+# for M0. When the package is extracted to its own repo (git subtree split --prefix=conformance),
+# drop the `conformance/` prefixes and the path filter.
+name: khata-conformance
+
+on:
+  push:
+    paths: ['conformance/**']
+  pull_request:
+    paths: ['conformance/**']
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: conformance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'          # node:sqlite is built-in on 22.5+ — no npm install needed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3'
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - name: Install Ruby sqlite3 gem
+        run: gem install sqlite3 --no-document
+      - name: Tier C + R via JS adapter (byte-for-byte)
+        run: node harness/run.mjs --adapter 'node adapters/js/adapter.mjs'
+      - name: Tier C + R via Ruby adapter (byte-for-byte — cross-engine parity)
+        run: node harness/run.mjs --adapter 'ruby adapters/ruby/adapter.rb'
+      - name: Tier F (format & integrity)
+        run: python3 harness/format_suite.py
