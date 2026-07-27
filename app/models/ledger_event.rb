@@ -14,7 +14,10 @@ class LedgerEvent < ApplicationRecord
   validates :hash_hex, length: { is: 64 }
   # prev_hash may legitimately be '' on a genesis row — .khata logs in the wild record
   # genesis as '', NULL, or 64 zeros, and the stored value is what was hashed, so it
-  # must be preserved verbatim rather than normalised.
+  # must be preserved verbatim rather than normalised. But the column is NOT NULL, so
+  # nil is never legal: allow_blank alone let nil through validation and into a
+  # PG::NotNullViolation. '' is meaningful here; nil is not.
+  validates :prev_hash, exclusion: { in: [ nil ], message: "can be '' but not nil" }
   validates :prev_hash, length: { is: 64 }, allow_blank: true
 
   scope :for_tenant, ->(tenant_id) { where(tenant_id: tenant_id) }
@@ -27,8 +30,19 @@ class LedgerEvent < ApplicationRecord
     transaction do
       # Serialize appends per tenant so two writers cannot fork the chain. The unique
       # index on (tenant_id, seq) is the backstop; this lock is what stops the retry.
+      #
+      # Both arguments must be int4 — the (int, int) overload is the only two-arg form.
+      # Passing tenant_id directly bound it as bigint and raised
+      # `function pg_advisory_xact_lock(integer, bigint) does not exist` for any tenant
+      # above 2^31, which tenant_id (a bigint column) will eventually exceed. hashtext
+      # maps the id into int4 instead. A hash collision between two tenants makes them
+      # share a lock — they serialise needlessly, which is safe; the failure mode that
+      # matters is two writers on ONE tenant, and that cannot happen.
       connection.execute(
-        "SELECT pg_advisory_xact_lock(hashtext('ledger_events'), #{tenant_id.to_i})"
+        sanitize_sql_array(
+          [ "SELECT pg_advisory_xact_lock(hashtext('ledger_events'), hashtext(?))",
+            tenant_id.to_s ]
+        )
       )
 
       head = for_tenant(tenant_id).in_order.last

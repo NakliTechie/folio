@@ -72,6 +72,32 @@ class LedgerEventTest < ActiveSupport::TestCase
     assert_equal '{"a":1,"b":2}', a
   end
 
+  # --- H2: the advisory lock must accept a bigint tenant id ---
+
+  test "append! works for a tenant id above the int4 ceiling" do
+    big = 3_000_000_000 # > 2**31-1; tenant_id is a bigint column
+    a = append_one(big, "first")
+    b = append_one(big, "second")
+
+    assert_equal [ 1, 2 ], [ a.seq, b.seq ]
+    assert_equal a.hash_hex, b.prev_hash
+    assert LedgerEvent.verify_chain(big)[:ok]
+  end
+
+  # --- M5: nil prev_hash must not reach the NOT NULL column ---
+
+  test "prev_hash rejects nil at the model but still allows the genesis empty string" do
+    e = LedgerEvent.new(tenant_id: 30, seq: 1, hash_hex: "0" * 64, ts: "t",
+                        actor: "a", action: "x", origin: "o", payload: "{}")
+    e.prev_hash = nil
+    assert_not e.valid?
+    assert_includes e.errors[:prev_hash].join, "not nil"
+
+    e.prev_hash = ""
+    e.valid?
+    assert_empty e.errors[:prev_hash], "'' is a legal genesis prev_hash"
+  end
+
   # --- H1: the walk must follow seq, not primary key ---
 
   test "verify_chain follows seq even when id order disagrees" do
