@@ -20,3 +20,6 @@ plan/
 .env
 .env.*
 /coverage/
+
+# Autopilot worktrees (never committed)
+.worktrees/
