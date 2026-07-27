@@ -62,3 +62,8 @@ group :test do
   gem "capybara"
   gem "selenium-webdriver"
 end
+
+# Reading .khata corpus files (SQLite inside a zip) in conformance tests.
+group :test do
+  gem "sqlite3"
+end
