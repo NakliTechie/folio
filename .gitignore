@@ -8,6 +8,7 @@ Thumbs.db
 *.swp
 
 # Working notes (plan-folder convention — never committed)
+plan
 plan/
 
 # Rails/Ruby (for when the app lands)
