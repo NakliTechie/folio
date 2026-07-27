@@ -1,0 +1,9 @@
+{
+  "ignored_warnings": [
+    {
+      "fingerprint": "c96eb07567e2a7b0ded7cda123645c4e736d3a1b124bb7c0ffaf5070f53dfcf3",
+      "note": "Deliberate and load-bearing. config/initializers/khata_byte_contract.rb sets ActiveSupport.escape_html_entities_in_json = false because ActiveSupport escapes & < > in JSON, which makes every event payload containing one of them hash differently from Bahi's engine \u2014 a silent fork of two implementations that the .khata conformance contract exists to prevent. Found on a real corpus name, 'Health & Glow Pharmacy'; see commit d2c718f and plan/history.md Dead ends. Folio renders no HTML today (zero application routes). REVISIT the moment a view or serializer interpolates JSON into markup \u2014 see the guard test owed in plan/forward-pass-2026-07-28.md Batch C."
+    }
+  ],
+  "brakeman_version": "unpinned"
+}

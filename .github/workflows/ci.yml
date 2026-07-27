@@ -17,6 +17,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # Full history: the read-only guard below diffs against a base commit, and
+          # the default depth-1 checkout does not have one.
+          fetch-depth: 0
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -35,13 +39,26 @@ jobs:
         working-directory: conformance
         run: npm test
 
+      # This previously ran `git diff --quiet HEAD -- conformance/`, which compares the
+      # WORKING TREE to HEAD. On a CI checkout those are identical and `npm test` does
+      # not write into conformance/, so the guard could only ever pass — including for
+      # a PR that committed an edit to the package, since that edit is inside HEAD.
+      # The one automated control over the Bahi<->Folio contract was inert. Diff
+      # against the base commit instead.
       - name: Fail if the conformance package was modified
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          if ! git diff --quiet HEAD -- conformance/; then
-            echo "::error::conformance/ is read-only — it is the anti-drift contract."
-            git diff --stat HEAD -- conformance/
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "No base commit to compare against (branch creation or first push) — skipping."
+            exit 0
+          fi
+          if ! git diff --quiet "$BASE"...HEAD -- conformance/; then
+            echo "::error::conformance/ is read-only — it is the anti-drift contract shared with Bahi. Changing it is a contract version bump, not a code change."
+            git diff --stat "$BASE"...HEAD -- conformance/
             exit 1
           fi
+          echo "conformance/ unchanged since $BASE."
 
   scan_ruby:
     runs-on: ubuntu-latest
@@ -61,20 +78,10 @@ jobs:
       - name: Scan for known security vulnerabilities in gems used
         run: bin/bundler-audit
       
-  scan_js:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      - name: Scan for security vulnerabilities in JavaScript dependencies
-        run: bin/importmap audit
+  # scan_js REMOVED 2026-07-28: it ran `bin/importmap audit`, but the importmap
+  # binstub was never generated (rails new --skip-bundle skipped the install
+  # generators), so the job exited 127 on every run. There is no JavaScript in
+  # this app yet. Restore it — with `bin/rails importmap:install` — when there is.
 
   lint:
     runs-on: ubuntu-latest
@@ -141,49 +148,8 @@ jobs:
           # REDIS_URL: redis://localhost:6379/0
         run: bin/rails db:test:prepare test
 
-  system-test:
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=3
-
-      # redis:
-      #   image: valkey/valkey:8
-      #   ports:
-      #     - 6379:6379
-      #   options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
-
-    steps:
-      - name: Install packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libpq-dev libvips
-
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      - name: Run System Tests
-        env:
-          RAILS_ENV: test
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432
-          # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
-          # REDIS_URL: redis://localhost:6379/0
-        run: bin/rails db:test:prepare test:system
-
-      - name: Keep screenshots from failed system tests
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: screenshots
-          path: ${{ github.workspace }}/tmp/screenshots
-          if-no-files-found: ignore
+  # system-test REMOVED 2026-07-28: it ran `bin/rails test:system` against a
+  # test/system/ directory that does not exist, failing with LoadError every
+  # run. There are zero application routes, so there is nothing to drive. This
+  # comes back with the entry system (Batch 4), which is the first thing a
+  # human can actually click through.
