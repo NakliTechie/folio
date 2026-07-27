@@ -1,0 +1,28 @@
+# Local Postgres for Folio development, and the seed of the self-host packaging
+# story (M6). Self-host and managed SaaS are the same app; only the topology differs.
+#
+# NOTE (assumption logged 2026-07-27): the developer machine this was authored on runs
+# Homebrew Postgres 14.23 on :5432. This file targets 16 because Folio is greenfield and
+# 16 is the sane floor for a new product, and it binds :5433 so it cannot collide with a
+# host Postgres. Reconcile before M6: either raise the host to 16 or pin this to 14.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: folio
+      POSTGRES_PASSWORD: folio
+      POSTGRES_DB: folio_development
+    ports:
+      # Host 5433 -> container 5432, so a host Postgres on 5432 keeps working.
+      - "5433:5432"
+    volumes:
+      - folio_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U folio -d folio_development"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  folio_pgdata:

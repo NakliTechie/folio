@@ -1,0 +1,19 @@
+# Omakase Ruby styling for Rails
+inherit_gem: { rubocop-rails-omakase: rubocop.yml }
+
+AllCops:
+  Exclude:
+    # `conformance/` is a vendored, extraction-ready package pinned by sha256 — the
+    # anti-drift contract shared with Bahi's JS engine. It is READ-ONLY here. Linting
+    # it would tempt an autocorrect, and any byte changed there silently breaks the
+    # cross-implementation guarantee. It carries its own tooling when extracted.
+    - "conformance/**/*"
+    - "db/structure.sql"
+    - "vendor/**/*"
+    - "node_modules/**/*"
+
+# Overwrite or add rules to create your own house style
+#
+# # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
+# Layout/SpaceInsideArrayLiteralBrackets:
+#   Enabled: false
