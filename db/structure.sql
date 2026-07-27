@@ -61,7 +61,8 @@ CREATE TABLE public.ledger_events (
     action character varying NOT NULL,
     ref character varying,
     origin character varying NOT NULL,
-    payload text NOT NULL
+    payload text NOT NULL,
+    CONSTRAINT ledger_events_seq_positive CHECK ((seq > 0))
 );
 
 
@@ -180,5 +181,6 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260728020000'),
 ('20260727214500');
 

@@ -72,7 +72,105 @@ class LedgerEventTest < ActiveSupport::TestCase
     assert_equal '{"a":1,"b":2}', a
   end
 
+  # --- H2: the advisory lock must accept a bigint tenant id ---
+
+  test "append! works for a tenant id above the int4 ceiling" do
+    big = 3_000_000_000 # > 2**31-1; tenant_id is a bigint column
+    a = append_one(big, "first")
+    b = append_one(big, "second")
+
+    assert_equal [ 1, 2 ], [ a.seq, b.seq ]
+    assert_equal a.hash_hex, b.prev_hash
+    assert LedgerEvent.verify_chain(big)[:ok]
+  end
+
+  # --- M5: nil prev_hash must not reach the NOT NULL column ---
+
+  test "prev_hash rejects nil at the model but still allows the genesis empty string" do
+    e = LedgerEvent.new(tenant_id: 30, seq: 1, hash_hex: "0" * 64, ts: "t",
+                        actor: "a", action: "x", origin: "o", payload: "{}")
+    e.prev_hash = nil
+    assert_not e.valid?
+    assert_includes e.errors[:prev_hash].join, "not nil"
+
+    e.prev_hash = ""
+    e.valid?
+    assert_empty e.errors[:prev_hash], "'' is a legal genesis prev_hash"
+  end
+
+  # --- the database forbids the seq the keyset walk cannot see ---
+
+  test "a seq below 1 is rejected by the database" do
+    # verify_chain walks with `seq > last_seq` from last_seq = 0, so a row forged at
+    # seq <= 0 would never be visited. Rather than teach the walker to look for it,
+    # make it unrepresentable — same reasoning as the append-only triggers.
+    err = assert_raises(ActiveRecord::StatementInvalid) do
+      LedgerEvent.connection.execute(<<~SQL)
+        INSERT INTO ledger_events
+          (tenant_id, seq, prev_hash, hash_hex, hash_version, ts, actor, action, origin, payload, recorded_at)
+        VALUES (40, 0, '#{'0' * 64}', '#{'f' * 64}', 2, 't', 'mallory', 'forged', 'x', '{}', clock_timestamp())
+      SQL
+    end
+    assert_match(/ledger_events_seq_positive/, err.message)
+  end
+
+  # --- H1: the walk must follow seq, not primary key ---
+
+  test "verify_chain follows seq even when id order disagrees" do
+    tenant = 20
+    # Build a valid two-link chain by hand, then INSERT IT BACKWARDS so the row with
+    # seq=2 gets the lower id. Every prior test inserted in sequence, which made id
+    # order and seq order identical and hid the fact that find_each batched by id.
+    rows = build_chain(tenant, %w[first second])
+    LedgerEvent.insert_all!([ rows[1], rows[0] ])
+
+    by_id  = LedgerEvent.for_tenant(tenant).order(:id).pluck(:seq)
+    by_seq = LedgerEvent.for_tenant(tenant).order(:seq).pluck(:seq)
+    assert_equal [ 2, 1 ], by_id,  "setup failed: ids must disagree with seq for this test to bite"
+    assert_equal [ 1, 2 ], by_seq
+
+    result = LedgerEvent.verify_chain(tenant)
+    assert result[:ok], "walked in the wrong order — reason=#{result[:reason]} at seq=#{result[:broken_at]}"
+    assert_equal 2, result[:rows]
+    assert_equal rows[1][:hash_hex], result[:head]
+  end
+
+  # --- L3: a gap is indistinguishable from a deletion ---
+
+  test "verify_chain reports a seq gap" do
+    tenant = 21
+    rows = build_chain(tenant, %w[a b c])
+    LedgerEvent.insert_all!([ rows[0], rows[2] ]) # seq 1 and 3, no 2
+
+    result = LedgerEvent.verify_chain(tenant)
+    assert_not result[:ok]
+    assert_equal :seq_gap, result[:reason]
+    assert_equal 3, result[:broken_at]
+  end
+
   private
+
+  # Builds a correctly-hashed chain as plain attribute hashes, without going through
+  # append! — so a test can control insertion order and seq independently.
+  def build_chain(tenant_id, markers)
+    prev = Folio::KhataHash::GENESIS_PREV
+    now = Time.now.utc
+    markers.each_with_index.map do |marker, i|
+      payload = Folio::KhataHash.canonical_payload({ "marker" => marker })
+      ts = "2026-07-28T00:00:0#{i}Z"
+      hash_hex = Folio::KhataHash.event_hash(
+        prev_hash: prev, ts: ts, actor: "tester", action: "test.event",
+        ref: nil, origin: "test", payload_str: payload
+      )
+      row = {
+        tenant_id: tenant_id, seq: i + 1, prev_hash: prev, hash_hex: hash_hex,
+        hash_version: 2, ts: ts, actor: "tester", action: "test.event",
+        ref: nil, origin: "test", payload: payload, recorded_at: now
+      }
+      prev = hash_hex
+      row
+    end
+  end
 
   def append_one(tenant_id, marker)
     LedgerEvent.append!(
