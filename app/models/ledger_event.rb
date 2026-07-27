@@ -57,30 +57,57 @@ class LedgerEvent < ApplicationRecord
   # preimage when it was written), while chain linkage separately asserts that stored
   # prev_hash equals the running head. Recomputing with the walked head instead makes
   # every row after the first fork fail spuriously. Matches the reference adapter.
+  # Only the columns that go into the hash, plus seq. `payload` is unbounded text and
+  # loading whole records for a multi-year tenant is needless pressure.
+  VERIFY_COLUMNS = %i[seq prev_hash hash_hex hash_version ts actor action ref origin payload].freeze
+  VERIFY_BATCH = 1_000
+
   def self.verify_chain(tenant_id)
     prev = Folio::KhataHash::GENESIS_PREV
     count = 0
+    last_seq = 0
 
-    for_tenant(tenant_id).in_order.find_each do |e|
-      # Genesis tolerance: a first row may record '', NULL, or 64 zeros.
-      genesis_ok = prev == Folio::KhataHash::GENESIS_PREV &&
-                   (e.prev_hash.blank? || e.prev_hash == Folio::KhataHash::GENESIS_PREV)
+    # Keyset pagination on seq. NOT find_each: find_each discards any scope order and
+    # forces batching by primary key, so `order(:seq)` was silently ignored and the
+    # chain was walked in id order. That coincides with seq order only while rows are
+    # inserted in sequence — which stops being true the moment anything is imported,
+    # backfilled or interleaved, and then a sound chain fails or a broken one passes.
+    loop do
+      rows = for_tenant(tenant_id)
+               .where("seq > ?", last_seq)
+               .order(:seq)
+               .limit(VERIFY_BATCH)
+               .pluck(*VERIFY_COLUMNS)
+      break if rows.empty?
 
-      unless e.prev_hash == prev || genesis_ok
-        return { ok: false, head: prev, rows: count, broken_at: e.seq, reason: :chain_link }
+      rows.each do |seq, prev_hash, hash_hex, hash_version, ts, actor, action, ref, origin, payload|
+        # A gap is indistinguishable from a deletion, which an append-only log must
+        # not permit. The unique index stops duplicate seq; nothing stopped holes.
+        unless seq == last_seq + 1
+          return { ok: false, head: prev, rows: count, broken_at: seq, reason: :seq_gap }
+        end
+
+        # Genesis tolerance: a first row may record '', NULL, or 64 zeros.
+        genesis_ok = prev == Folio::KhataHash::GENESIS_PREV &&
+                     (prev_hash.blank? || prev_hash == Folio::KhataHash::GENESIS_PREV)
+
+        unless prev_hash == prev || genesis_ok
+          return { ok: false, head: prev, rows: count, broken_at: seq, reason: :chain_link }
+        end
+
+        expected = Folio::KhataHash.row_hash(
+          "hash_version" => hash_version, "prev_hash" => prev_hash, "ts" => ts,
+          "actor" => actor, "action" => action, "ref" => ref,
+          "origin" => origin, "payload" => payload
+        )
+        unless hash_hex == expected
+          return { ok: false, head: prev, rows: count, broken_at: seq, reason: :hash_mismatch }
+        end
+
+        prev = hash_hex
+        last_seq = seq
+        count += 1
       end
-
-      expected = Folio::KhataHash.row_hash(
-        "hash_version" => e.hash_version, "prev_hash" => e.prev_hash, "ts" => e.ts,
-        "actor" => e.actor, "action" => e.action, "ref" => e.ref,
-        "origin" => e.origin, "payload" => e.payload
-      )
-      unless e.hash_hex == expected
-        return { ok: false, head: prev, rows: count, broken_at: e.seq, reason: :hash_mismatch }
-      end
-
-      prev = e.hash_hex
-      count += 1
     end
 
     { ok: true, head: prev, rows: count, broken_at: nil, reason: nil }
