@@ -98,6 +98,22 @@ class LedgerEventTest < ActiveSupport::TestCase
     assert_empty e.errors[:prev_hash], "'' is a legal genesis prev_hash"
   end
 
+  # --- the database forbids the seq the keyset walk cannot see ---
+
+  test "a seq below 1 is rejected by the database" do
+    # verify_chain walks with `seq > last_seq` from last_seq = 0, so a row forged at
+    # seq <= 0 would never be visited. Rather than teach the walker to look for it,
+    # make it unrepresentable — same reasoning as the append-only triggers.
+    err = assert_raises(ActiveRecord::StatementInvalid) do
+      LedgerEvent.connection.execute(<<~SQL)
+        INSERT INTO ledger_events
+          (tenant_id, seq, prev_hash, hash_hex, hash_version, ts, actor, action, origin, payload, recorded_at)
+        VALUES (40, 0, '#{'0' * 64}', '#{'f' * 64}', 2, 't', 'mallory', 'forged', 'x', '{}', clock_timestamp())
+      SQL
+    end
+    assert_match(/ledger_events_seq_positive/, err.message)
+  end
+
   # --- H1: the walk must follow seq, not primary key ---
 
   test "verify_chain follows seq even when id order disagrees" do
