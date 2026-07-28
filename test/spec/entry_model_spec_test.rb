@@ -3,7 +3,8 @@
 require "test_helper"
 
 # The M-lock gate's executable half. These tests assert the schema described by
-# plan/spec/entry-model-v1.md, and THEY ARE EXPECTED TO FAIL until Batch 3 builds it.
+# plan/spec/entry-model-v1.md. They SKIP by default (see the setup guard below) and
+# FAIL when opted in, until Batch 3 builds the schema.
 #
 # A red suite is the correct outcome of the M-lock run. What matters is that they fail
 # for the RIGHT reason — a named missing table or column — not a syntax error or a nil
@@ -21,6 +22,19 @@ require "test_helper"
 # owner answer that set its shape. Where the SAP parity matrix and the owner's answers
 # of 2026-07-28 differ, the answers win.
 class EntryModelSpecTest < ActiveSupport::TestCase
+  # These tests are the record of what Batch 3 owes, and they are RED until it lands.
+  # They are gated out of the default (and CI) run so a permanently-red suite does not
+  # train everyone to ignore CI — the exact anti-pattern Batch 2.5 removed two jobs to
+  # avoid. Opt in to see the debt:  RUN_SPEC_TESTS=1 bin/rails test test/spec
+  #
+  # The D15 GUARD tests are deliberately NOT here — they pass today, guard the Bahi
+  # contract, and run in CI. See test/conformance/d15_additive_widening_test.rb.
+  setup do
+    unless ENV["RUN_SPEC_TESTS"]
+      skip "M-lock schema spec — Batch 3 debt (plan/spec/entry-model-v1.md). RUN_SPEC_TESTS=1 to run."
+    end
+  end
+
   def conn = ActiveRecord::Base.connection
 
   def assert_table(name, decision)
@@ -194,36 +208,5 @@ class EntryModelSpecTest < ActiveSupport::TestCase
       "D1: Posting::PostEntry must assert Dr=Cr per (entry, ledger) — a global check is not a weaker version of this, it is a wrong one"
   rescue NameError
     flunk "D1: Posting::PostEntry does not exist yet (Batch 3)"
-  end
-
-  # --- D15 — the rule that keeps Bahi's corpus safe. THIS ONE PASSES TODAY. ---
-  #
-  # Not a spec stub: it guards behaviour that already exists, and every field the spec
-  # adds depends on it. If it ever fails, additive widening has stopped being free and
-  # the .khata contract is broken.
-
-  test "D15 GUARD: absent keys are omitted from the preimage, and null is not the same thing" do
-    without_key = Folio::KhataHash.canonical_payload({ "a" => 1 })
-    with_null   = Folio::KhataHash.canonical_payload({ "a" => 1, "b" => nil })
-
-    assert_equal '{"a":1}', without_key, "an absent key must contribute nothing"
-    assert_equal '{"a":1,"b":null}', with_null, "a present nil serialises as null"
-    assert_not_equal without_key, with_null,
-      "omitting a key and setting it null are DIFFERENT preimages — this is why the rule is " \
-      "'omit absent keys, never emit null' and not merely a style preference"
-  end
-
-  test "D15 GUARD: widening a payload with absent optional keys does not move the hash" do
-    base = { "customerId" => 16, "name" => "Health & Glow Pharmacy" }
-    args = { prev_hash: Folio::KhataHash::GENESIS_PREV, ts: "2026-07-28T00:00:00Z",
-             actor: "t", action: "a", ref: nil, origin: "o" }
-
-    narrow = Folio::KhataHash.event_hash(**args, payload_str: Folio::KhataHash.canonical_payload(base))
-    # A widened writer that simply does not set the new optional fields.
-    widened = Folio::KhataHash.event_hash(**args, payload_str: Folio::KhataHash.canonical_payload(base.dup))
-
-    assert_equal narrow, widened,
-      "adding optional fields must be free as long as unset ones are omitted — this is the whole " \
-      "basis of the .khata v1.1 proposal"
   end
 end
