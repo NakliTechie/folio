@@ -69,6 +69,22 @@ class Documents::DocumentFlowTest < ActiveSupport::TestCase
     assert_equal 2, Document.where(tenant_id: TENANT).count, "reversal ADDS a document, deletes none"
   end
 
+  test "a reversal is recorded as a NEGATIVE posting, not a naive counter-posting (§7)" do
+    doc = build_jv(amount: 100_000)
+    Documents::Post.call(doc, actor: "u")
+    Documents::Reverse.call(doc, actor: "u")
+
+    rev_entry = Entry.find(doc.reversed_by.posted_entry_id)
+    # The reversal keeps the same accounts with negated amounts, and every line is flagged
+    # is_negative_posting — so turnover is recoverable, not permanently inflated.
+    assert rev_entry.entry_lines.all?(&:is_negative_posting),
+      "every reversal line must set is_negative_posting (§7 — unrecoverable once on the log)"
+    assert_equal %w[1000 4000], rev_entry.entry_lines.order(:line_no).pluck(:account_code),
+      "a reversal is a same-account negative posting, not a counter-posting to the opposite account"
+    # the original post is NOT a negative posting
+    assert Entry.find(doc.posted_entry_id).entry_lines.none?(&:is_negative_posting)
+  end
+
   test "lifecycle: a reversed document cannot be reversed again; a draft cannot be reversed" do
     draft = build_jv
     assert_raises(Documents::Reverse::NotReversible) { Documents::Reverse.call(draft, actor: "u") }
