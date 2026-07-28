@@ -13,10 +13,11 @@ require "json"
 #              FRESH baseline_date, ageing RESET.
 # Getting this wrong produces wrong aged payables, a top-three report.
 #
-# Replayability: the cleared item is found by (tenant, assignment) — a stable business key,
-# never a projection id — and the clearing entry is referenced by its ledger_event_id,
-# which is stable because ledger_events is never rebuilt (only the projection is). So a full
-# Posting.rebuild! reproduces the cleared state deterministically.
+# Replayability: the cleared item is targeted by its stable (source_event_id, line_no) key —
+# the ledger_event that created the line, never a projection id — and the clearing entry is
+# referenced by its ledger_event_id. Both are stable because ledger_events is never rebuilt
+# (only the projection is), so a full Posting.rebuild! reproduces the cleared state
+# deterministically, and a residual (or a reused assignment) can never be mis-targeted.
 module Posting
   class Clearing
     MODES = %w[full partial residual].freeze

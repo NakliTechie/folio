@@ -137,18 +137,29 @@ class Posting::ClearingTest < ActiveSupport::TestCase
     assert_equal 0, Posting::Clearing.open_amount(residual2), "the residual clearing rebuilds from the log"
   end
 
-  # Guard: an assignment reused across two invoices must never mis-route a clearing — the
-  # target is the exact line, not "some open item with this assignment".
-  test "clearing targets the exact line even when an assignment is reused" do
-    inv_a = post_invoice(assignment: "SHARED")
-    a_line = inv_a.entry_lines.find_by!(assignment: "SHARED")
-    Posting::Clearing.clear!(item: a_line, amount_minor: 100_000, cleared_on: JUN1, mode: :full)
+  # Guard against the exact mis-post the stable-key fix closes: a RESIDUAL open item plus a
+  # NEW invoice that reuses the same assignment. An assignment-based lookup would route a
+  # payment for the residual onto the wrong invoice; the stable (source_event_id, line_no)
+  # key must hit the residual. (This scenario — residual + reuse — is the one that fails on
+  # the pre-fix code; a plain two-invoice reuse does not exercise the bug.)
+  test "a reused assignment never mis-routes a clearing onto the wrong open line" do
+    inv_a = post_invoice(assignment: "RC")
+    a_line = inv_a.entry_lines.find_by!(assignment: "RC")
+    payment = post_payment
+    Posting::Clearing.clear!(item: a_line, amount_minor: 60_000, cleared_on: JUN1,
+                             mode: :residual, clearing_entry: payment)
+    residual = EntryLine.find_by!(residual_of_line_id: a_line.id)
+    assert_equal 40_000, Posting::Clearing.open_amount(residual)
 
-    inv_b = post_invoice(assignment: "SHARED") # same assignment, different invoice
-    b_line = inv_b.entry_lines.find_by!(assignment: "SHARED")
-    # A payment aimed at B's line must clear B, not resurrect/hit A.
-    Posting::Clearing.clear!(item: b_line, amount_minor: 30_000, cleared_on: JUN1, mode: :partial)
-    assert_equal 70_000, Posting::Clearing.open_amount(b_line.reload)
-    assert_equal 0, Posting::Clearing.open_amount(a_line.reload), "A stays fully cleared"
+    inv_b = post_invoice(assignment: "RC") # reuse the assignment; B is fully open
+    b_line = inv_b.entry_lines.find_by!(assignment: "RC")
+
+    # Pay down the RESIDUAL. A lookup by assignment (+ residual_of_line_id NULL, cleared_on
+    # NULL) would resolve to B and mis-post there; targeting by the stable key hits the residual.
+    Posting::Clearing.clear!(item: residual, amount_minor: 40_000, cleared_on: Date.new(2025, 7, 20),
+                             mode: :full, clearing_entry: payment)
+    assert_equal 0, Posting::Clearing.open_amount(residual.reload), "the residual is cleared"
+    assert_equal 100_000, Posting::Clearing.open_amount(b_line.reload),
+      "the reused-assignment invoice B is untouched"
   end
 end
