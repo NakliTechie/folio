@@ -113,6 +113,82 @@ ALTER SEQUENCE public.dimensions_id_seq OWNED BY public.dimensions.id;
 
 
 --
+-- Name: document_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.document_lines (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    document_id bigint NOT NULL,
+    line_no integer NOT NULL,
+    account_code character varying NOT NULL,
+    amount_minor bigint NOT NULL,
+    currency character varying(3) DEFAULT 'INR'::character varying NOT NULL,
+    minor_unit_exponent integer DEFAULT 2 NOT NULL,
+    narration character varying,
+    extra jsonb,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: document_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.document_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: document_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.document_lines_id_seq OWNED BY public.document_lines.id;
+
+
+--
+-- Name: document_types; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.document_types (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    code character varying NOT NULL,
+    label character varying NOT NULL,
+    posting_rule character varying NOT NULL,
+    number_prefix character varying,
+    version integer DEFAULT 1 NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: document_types_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.document_types_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: document_types_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.document_types_id_seq OWNED BY public.document_types.id;
+
+
+--
 -- Name: documents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -126,7 +202,16 @@ CREATE TABLE public.documents (
     document_number character varying,
     external_reference character varying,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    state character varying DEFAULT 'draft'::character varying NOT NULL,
+    narration character varying,
+    posted_entry_id bigint,
+    reverses_document_id bigint,
+    reversed_by_document_id bigint,
+    document_type_id bigint,
+    document_date date,
+    posting_date date,
+    CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[])))
 );
 
 
@@ -672,6 +757,20 @@ ALTER TABLE ONLY public.dimensions ALTER COLUMN id SET DEFAULT nextval('public.d
 
 
 --
+-- Name: document_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_lines ALTER COLUMN id SET DEFAULT nextval('public.document_lines_id_seq'::regclass);
+
+
+--
+-- Name: document_types id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_types ALTER COLUMN id SET DEFAULT nextval('public.document_types_id_seq'::regclass);
+
+
+--
 -- Name: documents id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -784,6 +883,22 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 ALTER TABLE ONLY public.dimensions
     ADD CONSTRAINT dimensions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: document_lines document_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_lines
+    ADD CONSTRAINT document_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: document_types document_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_types
+    ADD CONSTRAINT document_types_pkey PRIMARY KEY (id);
 
 
 --
@@ -913,6 +1028,34 @@ CREATE UNIQUE INDEX index_dimensions_on_tenant_id_and_code ON public.dimensions 
 
 
 --
+-- Name: index_document_lines_on_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_document_lines_on_document_id ON public.document_lines USING btree (document_id);
+
+
+--
+-- Name: index_document_lines_on_document_id_and_line_no; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_document_lines_on_document_id_and_line_no ON public.document_lines USING btree (document_id, line_no);
+
+
+--
+-- Name: index_document_types_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_document_types_on_tenant_id_and_code ON public.document_types USING btree (tenant_id, code);
+
+
+--
+-- Name: index_documents_on_document_type_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_documents_on_document_type_id ON public.documents USING btree (document_type_id);
+
+
+--
 -- Name: index_documents_on_external_reference; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -920,10 +1063,24 @@ CREATE INDEX index_documents_on_external_reference ON public.documents USING btr
 
 
 --
+-- Name: index_documents_on_reverses_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_documents_on_reverses_document_id ON public.documents USING btree (reverses_document_id);
+
+
+--
 -- Name: index_documents_on_series_and_number; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX index_documents_on_series_and_number ON public.documents USING btree (tenant_id, entity_id, office_id, doc_type, fiscal_year, document_number) WHERE (document_number IS NOT NULL);
+
+
+--
+-- Name: index_documents_on_tenant_id_and_state; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_documents_on_tenant_id_and_state ON public.documents USING btree (tenant_id, state);
 
 
 --
@@ -1150,6 +1307,10 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260729150300'),
+('20260729150200'),
+('20260729150100'),
+('20260729150000'),
 ('20260729140000'),
 ('20260729130000'),
 ('20260729120100'),
