@@ -22,18 +22,17 @@ require "test_helper"
 # owner answer that set its shape. Where the SAP parity matrix and the owner's answers
 # of 2026-07-28 differ, the answers win.
 class EntryModelSpecTest < ActiveSupport::TestCase
-  # These tests are the record of what Batch 3 owes, and they are RED until it lands.
-  # They are gated out of the default (and CI) run so a permanently-red suite does not
-  # train everyone to ignore CI — the exact anti-pattern Batch 2.5 removed two jobs to
-  # avoid. Opt in to see the debt:  RUN_SPEC_TESTS=1 bin/rails test test/spec
+  # These tests assert the schema described by plan/spec/entry-model-v1.md. Per the
+  # workplan's CI arc, as each Batch 3 sub-batch lands the tests it satisfies are
+  # re-enabled in CI; the ones still owed carry an explicit `skip` naming the sub-batch
+  # that will satisfy them — so CI stays green while the debt stays visible and NAMED,
+  # not hidden behind an env var. B3.0 + B3.1 have landed, so all but three run here.
+  # The old RUN_SPEC_TESTS gate is gone: there is no permanently-red set left to hide.
+  # At B3.2 the Posting::PostEntry skip lifts; at B3.4 the period_controls skip lifts;
+  # the D13-matrix skip stays until M2. (RUN_SPEC_TESTS is now a no-op if still set.)
   #
   # The D15 GUARD tests are deliberately NOT here — they pass today, guard the Bahi
   # contract, and run in CI. See test/conformance/d15_additive_widening_test.rb.
-  setup do
-    unless ENV["RUN_SPEC_TESTS"]
-      skip "M-lock schema spec — Batch 3 debt (plan/spec/entry-model-v1.md). RUN_SPEC_TESTS=1 to run."
-    end
-  end
 
   def conn = ActiveRecord::Base.connection
 
@@ -139,6 +138,7 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   end
 
   test "D6: period control is a table, not a boolean" do
+    skip "B3.4 — period_controls (D6 period model + control) not built yet"
     assert_columns("period_controls",
       %w[entity_id ledger_id account_class fiscal_year period_no state], "D6")
   end
@@ -183,6 +183,7 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   # --- D13 — recorded authority (rank 12). The payload half is Batch 3. ---
 
   test "D13: RBAC is a matrix, not a role enum" do
+    skip "M2 — role_templates/role_permissions/user_office_roles are M2, not Batch 3 (only the authority COLUMNS on entries are Batch 3)"
     assert_columns("role_templates", %w[tenant_id code], "D13")
     assert_table("role_permissions", "D13")
     assert_table("user_office_roles", "D13")
@@ -203,6 +204,7 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   # --- D1 — the balance invariant is per ledger, never global ---
 
   test "D1: balance is asserted per (entry, ledger), not globally" do
+    skip "B3.2 — Posting::PostEntry (the per-(entry, ledger) balance assertion) not built yet"
     assert conn.table_exists?("entries"), "D1: table `entries` does not exist yet"
     assert Posting.const_defined?(:PostEntry),
       "D1: Posting::PostEntry must assert Dr=Cr per (entry, ledger) — a global check is not a weaker version of this, it is a wrong one"
