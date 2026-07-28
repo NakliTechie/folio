@@ -26,10 +26,10 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   # workplan's CI arc, as each Batch 3 sub-batch lands the tests it satisfies are
   # re-enabled in CI; the ones still owed carry an explicit `skip` naming the sub-batch
   # that will satisfy them — so CI stays green while the debt stays visible and NAMED,
-  # not hidden behind an env var. B3.0 + B3.1 have landed, so all but three run here.
+  # not hidden behind an env var. B3.0 + B3.1 + B3.2 have landed, so all but two run here.
   # The old RUN_SPEC_TESTS gate is gone: there is no permanently-red set left to hide.
-  # At B3.2 the Posting::PostEntry skip lifts; at B3.4 the period_controls skip lifts;
-  # the D13-matrix skip stays until M2. (RUN_SPEC_TESTS is now a no-op if still set.)
+  # At B3.4 the period_controls skip lifts; the D13-matrix skip stays until M2.
+  # (RUN_SPEC_TESTS is now a no-op if still set.)
   #
   # The D15 GUARD tests are deliberately NOT here — they pass today, guard the Bahi
   # contract, and run in CI. See test/conformance/d15_additive_widening_test.rb.
@@ -204,7 +204,6 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   # --- D1 — the balance invariant is per ledger, never global ---
 
   test "D1: balance is asserted per (entry, ledger), not globally" do
-    skip "B3.2 — Posting::PostEntry (the per-(entry, ledger) balance assertion) not built yet"
     assert conn.table_exists?("entries"), "D1: table `entries` does not exist yet"
     assert Posting.const_defined?(:PostEntry),
       "D1: Posting::PostEntry must assert Dr=Cr per (entry, ledger) — a global check is not a weaker version of this, it is a wrong one"
