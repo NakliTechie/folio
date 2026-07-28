@@ -537,6 +537,46 @@ ALTER SEQUENCE public.party_roles_id_seq OWNED BY public.party_roles.id;
 
 
 --
+-- Name: period_controls; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.period_controls (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    ledger_id bigint NOT NULL,
+    account_class character varying DEFAULT 'ALL'::character varying NOT NULL,
+    fiscal_year integer NOT NULL,
+    period_no integer NOT NULL,
+    state character varying DEFAULT 'open'::character varying NOT NULL,
+    capability character varying,
+    domain character varying DEFAULT 'posting'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_period_controls_period_no CHECK (((period_no >= 0) AND (period_no <= 16)))
+);
+
+
+--
+-- Name: period_controls_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.period_controls_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: period_controls_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.period_controls_id_seq OWNED BY public.period_controls.id;
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -668,6 +708,13 @@ ALTER TABLE ONLY public.party_roles ALTER COLUMN id SET DEFAULT nextval('public.
 
 
 --
+-- Name: period_controls id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.period_controls ALTER COLUMN id SET DEFAULT nextval('public.period_controls_id_seq'::regclass);
+
+
+--
 -- Name: tax_registrations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -776,6 +823,14 @@ ALTER TABLE ONLY public.parties
 
 ALTER TABLE ONLY public.party_roles
     ADD CONSTRAINT party_roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: period_controls period_controls_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.period_controls
+    ADD CONSTRAINT period_controls_pkey PRIMARY KEY (id);
 
 
 --
@@ -991,6 +1046,13 @@ CREATE UNIQUE INDEX index_party_roles_on_party_id_and_role ON public.party_roles
 
 
 --
+-- Name: index_period_controls_on_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_period_controls_on_scope ON public.period_controls USING btree (tenant_id, entity_id, ledger_id, fiscal_year, period_no, account_class, domain);
+
+
+--
 -- Name: index_tax_registrations_on_entity_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1032,6 +1094,7 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260729130000'),
 ('20260729120100'),
 ('20260729120000'),
 ('20260729110500'),
