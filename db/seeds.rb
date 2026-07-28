@@ -7,3 +7,6 @@
 #   ["Action", "Comedy", "Drama", "Horror"].each do |genre_name|
 #     MovieGenre.find_or_create_by!(name: genre_name)
 #   end
+
+# Every tenant needs the PRIMARY standard ledger. Seeded per-tenant at provisioning;
+# here we register the shape. (Tenant provisioning is M2; this documents the intent.)
