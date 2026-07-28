@@ -82,6 +82,14 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
   # HERE, where a round-trip comparison would not.
   test "post! projects each field faithfully from the draft (independent oracle)" do
     entry = Posting::PostEntry.post!(rich_draft)
+    # entry header
+    assert_equal Date.new(2025, 6, 1), entry.document_date
+    assert_equal Date.new(2025, 6, 1), entry.posting_date
+    assert_equal 2025, entry.fiscal_year
+    assert_equal 3, entry.period_no
+    assert_equal 7, entry.role_template_id
+    assert_equal 3, entry.posting_limit_id
+    # line 1 — the dimension-rich line
     l1 = entry.entry_lines.find_by!(line_no: 1)
     assert_equal "100100", l1.account_code
     assert_equal PRIMARY, l1.ledger_id
@@ -100,20 +108,35 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
     grp = l1.amounts.find_by!(slot_role: "group")
     assert_equal BigDecimal("83.33"), grp.rate
     assert_equal "posting_date", grp.rate_basis
-    assert_equal 7, entry.role_template_id
-    assert_equal 3, entry.posting_limit_id
+    # line 2 — the balancing line (un-asserted fields slip past a round-trip; assert them)
+    l2 = entry.entry_lines.find_by!(line_no: 2)
+    assert_equal "400000", l2.account_code
+    assert_equal(-100_000, l2.amounts.find_by!(slot_role: "transaction").amount_minor)
+    assert_equal(-1_200, l2.amounts.find_by!(slot_role: "group").amount_minor)
+    refute l2.open_item, "line 2 sets no open_item; it must default false, not inherit line 1"
   end
 
   # (2) Payload-independence: after posting, DELETE every master the projection references,
   # then replay from the event alone. A pure replay needs none of them; any lookup of a
   # ledger/dimension/party/etc. would now return nil and change (or break) the projection.
   test "replay! reconstructs from the event payload alone, with all master data deleted" do
+    # Seed the EXACT masters the payload references (ids matched), so the deletion below
+    # actually removes rows a stray lookup could have used — without this the delete_all is
+    # a silent no-op and the guard is inert. A pure replay needs none of these.
+    Entity.create!(id: 1, tenant_id: 42, code: "E1", legal_name: "Acme", functional_currency: "INR",
+                   fiscal_year_variant: "IN_APR_MAR", jurisdiction_profile: "IN")
+    Office.create!(id: 1, tenant_id: 42, entity_id: 1, code: "O1", name: "HQ")
+    Ledger.create!(id: PRIMARY, tenant_id: 42, code: "PRIMARY", name: "Primary")
+    Party.create!(id: 55, tenant_id: 42, party_number: "C-55", name: "Cust")
+
     entry = Posting::PostEntry.post!(rich_draft)
     before = fingerprint(entry)
     event = LedgerEvent.find(entry.ledger_event_id)
 
     entry.destroy!
-    [ Ledger, Dimension, Party, PartyRole, TaxRegistration, Office, Entity ].each(&:delete_all)
+    deleted = [ Ledger, Dimension, Party, PartyRole, TaxRegistration, Office, Entity ]
+              .sum { |m| m.delete_all }
+    assert_operator deleted, :>=, 4, "the deletion must actually remove the seeded masters"
     assert_equal 0, Entry.where(tenant_id: 42).count
 
     replayed = Posting::PostEntry.replay!(event)
