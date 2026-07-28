@@ -79,6 +79,43 @@ ALTER SEQUENCE public.dimensions_id_seq OWNED BY public.dimensions.id;
 
 
 --
+-- Name: documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.documents (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    doc_type character varying NOT NULL,
+    fiscal_year integer NOT NULL,
+    document_number character varying,
+    external_reference character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: documents_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.documents_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: documents_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.documents_id_seq OWNED BY public.documents.id;
+
+
+--
 -- Name: entities; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -115,6 +152,167 @@ ALTER SEQUENCE public.entities_id_seq OWNED BY public.entities.id;
 
 
 --
+-- Name: entries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.entries (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    document_id bigint,
+    ledger_event_id bigint,
+    document_date date NOT NULL,
+    posting_date date NOT NULL,
+    entered_at timestamp(6) without time zone NOT NULL,
+    fiscal_year integer NOT NULL,
+    period_no integer NOT NULL,
+    reverses_id bigint,
+    reversed_by_id bigint,
+    reversal_reason_id bigint,
+    alternative_posting_date date,
+    role_template_id bigint,
+    posting_limit_id bigint,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_entries_period_no CHECK (((period_no >= 0) AND (period_no <= 16)))
+);
+
+
+--
+-- Name: entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.entries_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: entries_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.entries_id_seq OWNED BY public.entries.id;
+
+
+--
+-- Name: entry_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.entry_lines (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entry_id bigint NOT NULL,
+    line_no integer NOT NULL,
+    account_code character varying NOT NULL,
+    ledger_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    tax_registration_id bigint,
+    cost_object_type character varying,
+    cost_object_id bigint,
+    profit_center_id bigint,
+    segment_id bigint,
+    functional_area_id bigint,
+    line_class character varying DEFAULT 'real'::character varying NOT NULL,
+    posting_layer character varying DEFAULT '00'::character varying NOT NULL,
+    partner_entity_id bigint,
+    partner_profit_center_id bigint,
+    partner_segment_id bigint,
+    partner_cost_object_type character varying,
+    partner_cost_object_id bigint,
+    intercompany_transaction_id character varying,
+    party_id bigint,
+    party_role character varying,
+    item_id bigint,
+    warehouse_id bigint,
+    quantity numeric(20,6),
+    uom character varying,
+    movement_type character varying,
+    open_item boolean DEFAULT false NOT NULL,
+    item_class character varying,
+    assignment character varying,
+    baseline_date date,
+    cleared_by_entry_id bigint,
+    cleared_on date,
+    reconciliation_gl_account_id bigint,
+    due_date date,
+    discount_pct numeric(7,4),
+    discount_date date,
+    value_date date,
+    is_negative_posting boolean DEFAULT false NOT NULL,
+    split_source_line_id bigint,
+    split_kind character varying,
+    liquidity_item_id bigint,
+    cost_component_split jsonb,
+    valuation_view character varying,
+    extra jsonb,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: entry_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.entry_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: entry_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.entry_lines_id_seq OWNED BY public.entry_lines.id;
+
+
+--
+-- Name: journal_entry_line_amounts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.journal_entry_line_amounts (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entry_line_id bigint NOT NULL,
+    slot_role character varying NOT NULL,
+    currency character varying(3) NOT NULL,
+    minor_unit_exponent smallint NOT NULL,
+    amount_minor bigint NOT NULL,
+    rate numeric(20,10),
+    rate_date date,
+    rate_source character varying,
+    rate_basis character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: journal_entry_line_amounts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.journal_entry_line_amounts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: journal_entry_line_amounts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.journal_entry_line_amounts_id_seq OWNED BY public.journal_entry_line_amounts.id;
+
+
+--
 -- Name: ledger_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -135,6 +333,7 @@ CREATE TABLE public.ledger_events (
     ref character varying,
     origin character varying NOT NULL,
     payload text NOT NULL,
+    schema_version integer DEFAULT 1 NOT NULL,
     CONSTRAINT ledger_events_seq_positive CHECK ((seq > 0))
 );
 
@@ -194,6 +393,43 @@ CREATE SEQUENCE public.ledgers_id_seq
 --
 
 ALTER SEQUENCE public.ledgers_id_seq OWNED BY public.ledgers.id;
+
+
+--
+-- Name: number_ranges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.number_ranges (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    doc_type character varying NOT NULL,
+    fiscal_year integer NOT NULL,
+    next_value bigint DEFAULT 1 NOT NULL,
+    prefix character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: number_ranges_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.number_ranges_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: number_ranges_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.number_ranges_id_seq OWNED BY public.number_ranges.id;
 
 
 --
@@ -351,10 +587,38 @@ ALTER TABLE ONLY public.dimensions ALTER COLUMN id SET DEFAULT nextval('public.d
 
 
 --
+-- Name: documents id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents ALTER COLUMN id SET DEFAULT nextval('public.documents_id_seq'::regclass);
+
+
+--
 -- Name: entities id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.entities ALTER COLUMN id SET DEFAULT nextval('public.entities_id_seq'::regclass);
+
+
+--
+-- Name: entries id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entries ALTER COLUMN id SET DEFAULT nextval('public.entries_id_seq'::regclass);
+
+
+--
+-- Name: entry_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entry_lines ALTER COLUMN id SET DEFAULT nextval('public.entry_lines_id_seq'::regclass);
+
+
+--
+-- Name: journal_entry_line_amounts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.journal_entry_line_amounts ALTER COLUMN id SET DEFAULT nextval('public.journal_entry_line_amounts_id_seq'::regclass);
 
 
 --
@@ -369,6 +633,13 @@ ALTER TABLE ONLY public.ledger_events ALTER COLUMN id SET DEFAULT nextval('publi
 --
 
 ALTER TABLE ONLY public.ledgers ALTER COLUMN id SET DEFAULT nextval('public.ledgers_id_seq'::regclass);
+
+
+--
+-- Name: number_ranges id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.number_ranges ALTER COLUMN id SET DEFAULT nextval('public.number_ranges_id_seq'::regclass);
 
 
 --
@@ -416,11 +687,43 @@ ALTER TABLE ONLY public.dimensions
 
 
 --
+-- Name: documents documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT documents_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: entities entities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.entities
     ADD CONSTRAINT entities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: entries entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entries
+    ADD CONSTRAINT entries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: entry_lines entry_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entry_lines
+    ADD CONSTRAINT entry_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: journal_entry_line_amounts journal_entry_line_amounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.journal_entry_line_amounts
+    ADD CONSTRAINT journal_entry_line_amounts_pkey PRIMARY KEY (id);
 
 
 --
@@ -437,6 +740,14 @@ ALTER TABLE ONLY public.ledger_events
 
 ALTER TABLE ONLY public.ledgers
     ADD CONSTRAINT ledgers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: number_ranges number_ranges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.number_ranges
+    ADD CONSTRAINT number_ranges_pkey PRIMARY KEY (id);
 
 
 --
@@ -487,10 +798,108 @@ CREATE UNIQUE INDEX index_dimensions_on_tenant_id_and_code ON public.dimensions 
 
 
 --
+-- Name: index_documents_on_external_reference; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_documents_on_external_reference ON public.documents USING btree (tenant_id, entity_id, external_reference) WHERE (external_reference IS NOT NULL);
+
+
+--
+-- Name: index_documents_on_series_and_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_documents_on_series_and_number ON public.documents USING btree (tenant_id, entity_id, office_id, doc_type, fiscal_year, document_number) WHERE (document_number IS NOT NULL);
+
+
+--
 -- Name: index_entities_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX index_entities_on_tenant_id_and_code ON public.entities USING btree (tenant_id, code);
+
+
+--
+-- Name: index_entries_on_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entries_on_document_id ON public.entries USING btree (document_id);
+
+
+--
+-- Name: index_entries_on_ledger_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entries_on_ledger_event_id ON public.entries USING btree (ledger_event_id);
+
+
+--
+-- Name: index_entries_on_reverses_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entries_on_reverses_id ON public.entries USING btree (reverses_id);
+
+
+--
+-- Name: index_entries_on_tenant_id_and_fiscal_year_and_period_no; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entries_on_tenant_id_and_fiscal_year_and_period_no ON public.entries USING btree (tenant_id, fiscal_year, period_no);
+
+
+--
+-- Name: index_entry_lines_on_clearing_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entry_lines_on_clearing_key ON public.entry_lines USING btree (tenant_id, assignment) WHERE (assignment IS NOT NULL);
+
+
+--
+-- Name: index_entry_lines_on_entry_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entry_lines_on_entry_id ON public.entry_lines USING btree (entry_id);
+
+
+--
+-- Name: index_entry_lines_on_entry_ledger_line_no; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_entry_lines_on_entry_ledger_line_no ON public.entry_lines USING btree (entry_id, ledger_id, line_no);
+
+
+--
+-- Name: index_entry_lines_on_ledger_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entry_lines_on_ledger_id ON public.entry_lines USING btree (ledger_id);
+
+
+--
+-- Name: index_entry_lines_on_party_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entry_lines_on_party_id ON public.entry_lines USING btree (party_id);
+
+
+--
+-- Name: index_entry_lines_on_tenant_id_and_account_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entry_lines_on_tenant_id_and_account_code ON public.entry_lines USING btree (tenant_id, account_code);
+
+
+--
+-- Name: index_jela_on_line_and_slot; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_jela_on_line_and_slot ON public.journal_entry_line_amounts USING btree (entry_line_id, slot_role);
+
+
+--
+-- Name: index_journal_entry_line_amounts_on_entry_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_journal_entry_line_amounts_on_entry_line_id ON public.journal_entry_line_amounts USING btree (entry_line_id);
 
 
 --
@@ -526,6 +935,13 @@ CREATE UNIQUE INDEX index_ledger_events_on_tenant_id_and_seq ON public.ledger_ev
 --
 
 CREATE UNIQUE INDEX index_ledgers_on_tenant_id_and_code ON public.ledgers USING btree (tenant_id, code);
+
+
+--
+-- Name: index_number_ranges_on_series_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_number_ranges_on_series_key ON public.number_ranges USING btree (tenant_id, entity_id, office_id, doc_type, fiscal_year);
 
 
 --
@@ -598,6 +1014,12 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260729110500'),
+('20260729110400'),
+('20260729110300'),
+('20260729110200'),
+('20260729110100'),
+('20260729110000'),
 ('20260729100300'),
 ('20260729100200'),
 ('20260729100100'),
