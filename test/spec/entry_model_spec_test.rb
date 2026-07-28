@@ -8,8 +8,14 @@ require "test_helper"
 # A red suite is the correct outcome of the M-lock run. What matters is that they fail
 # for the RIGHT reason — a named missing table or column — not a syntax error or a nil
 # crash. So every assertion goes through table_exists? / column_exists?, which return
-# false rather than raising: the failure message then names exactly what is absent, and
-# the failing set is directly readable as Batch 3's to-do list.
+# false rather than raising: the failure message then names exactly what is absent.
+#
+# The failing set is a SUBSTANTIAL SUBSET of Batch 3's work, not the whole of it — the
+# spec (plan/spec/entry-model-v1.md) carries fields these tests do not yet assert, listed
+# in the M-lock report's gap section. Do not treat a green run here as Batch 3 complete.
+#
+# Two tests marked D15 GUARD are NOT spec stubs: they pass today and guard behaviour the
+# whole additive-widening argument rests on.
 #
 # Each test cites the decision (D-number) that mandates it and, where relevant, the
 # owner answer that set its shape. Where the SAP parity matrix and the owner's answers
@@ -115,7 +121,7 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   end
 
   test "D6: period identity is STORED, not derived from posting_date" do
-    assert_columns("entries", %w[fiscal_year posting_period], "D6")
+    assert_columns("entries", %w[fiscal_year period_no], "D6")
   end
 
   test "D6: period control is a table, not a boolean" do
@@ -158,5 +164,66 @@ class EntryModelSpecTest < ActiveSupport::TestCase
 
   test "D12: entry_lines references a party and its role, not vendor_id/customer_id" do
     assert_columns("entry_lines", %w[party_id party_role], "D12")
+  end
+
+  # --- D13 — recorded authority (rank 12). The payload half is Batch 3. ---
+
+  test "D13: RBAC is a matrix, not a role enum" do
+    assert_columns("role_templates", %w[tenant_id code], "D13")
+    assert_table("role_permissions", "D13")
+    assert_table("user_office_roles", "D13")
+  end
+
+  test "D13: entries record the authority they were posted under, not just the actor" do
+    assert_columns("entries", %w[role_template_id posting_limit_id], "D13")
+  end
+
+  # --- D2 — the extras bag must never reach a statutory aggregation ---
+
+  test "D2: extra jsonb is excluded from statutory aggregation" do
+    assert conn.table_exists?("dimensions"), "D2: table `dimensions` does not exist yet"
+    assert conn.column_exists?("dimensions", "committed"),
+      "D2: `dimensions.committed` marks which dimensions are real columns; uncommitted ones live in `extra` and must never be aggregated"
+  end
+
+  # --- D1 — the balance invariant is per ledger, never global ---
+
+  test "D1: balance is asserted per (entry, ledger), not globally" do
+    assert conn.table_exists?("entries"), "D1: table `entries` does not exist yet"
+    assert Posting.const_defined?(:PostEntry),
+      "D1: Posting::PostEntry must assert Dr=Cr per (entry, ledger) — a global check is not a weaker version of this, it is a wrong one"
+  rescue NameError
+    flunk "D1: Posting::PostEntry does not exist yet (Batch 3)"
+  end
+
+  # --- D15 — the rule that keeps Bahi's corpus safe. THIS ONE PASSES TODAY. ---
+  #
+  # Not a spec stub: it guards behaviour that already exists, and every field the spec
+  # adds depends on it. If it ever fails, additive widening has stopped being free and
+  # the .khata contract is broken.
+
+  test "D15 GUARD: absent keys are omitted from the preimage, and null is not the same thing" do
+    without_key = Folio::KhataHash.canonical_payload({ "a" => 1 })
+    with_null   = Folio::KhataHash.canonical_payload({ "a" => 1, "b" => nil })
+
+    assert_equal '{"a":1}', without_key, "an absent key must contribute nothing"
+    assert_equal '{"a":1,"b":null}', with_null, "a present nil serialises as null"
+    assert_not_equal without_key, with_null,
+      "omitting a key and setting it null are DIFFERENT preimages — this is why the rule is " \
+      "'omit absent keys, never emit null' and not merely a style preference"
+  end
+
+  test "D15 GUARD: widening a payload with absent optional keys does not move the hash" do
+    base = { "customerId" => 16, "name" => "Health & Glow Pharmacy" }
+    args = { prev_hash: Folio::KhataHash::GENESIS_PREV, ts: "2026-07-28T00:00:00Z",
+             actor: "t", action: "a", ref: nil, origin: "o" }
+
+    narrow = Folio::KhataHash.event_hash(**args, payload_str: Folio::KhataHash.canonical_payload(base))
+    # A widened writer that simply does not set the new optional fields.
+    widened = Folio::KhataHash.event_hash(**args, payload_str: Folio::KhataHash.canonical_payload(base.dup))
+
+    assert_equal narrow, widened,
+      "adding optional fields must be free as long as unset ones are omitted — this is the whole " \
+      "basis of the .khata v1.1 proposal"
   end
 end
