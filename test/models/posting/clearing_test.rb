@@ -114,4 +114,41 @@ class Posting::ClearingTest < ActiveSupport::TestCase
       Posting::Clearing.clear!(item: item_for("INV-X"), amount_minor: 100_001, cleared_on: JUN1, mode: :partial)
     end
   end
+
+  # A residual is itself an open item; the next payment must clear IT, targeted by its own
+  # stable (source_event_id, line_no) key — not silently mis-applied to the original.
+  test "a residual open item can itself be cleared" do
+    post_invoice(assignment: "INV-2")
+    payment = post_payment
+    Posting::Clearing.clear!(item: item_for("INV-2"), amount_minor: 60_000, cleared_on: JUN1,
+                             mode: :residual, clearing_entry: payment)
+    inv2 = item_for("INV-2")
+    residual = EntryLine.find_by!(residual_of_line_id: inv2.id)
+    assert_equal 40_000, Posting::Clearing.open_amount(residual)
+
+    # Pay down the residual in full — must land on the residual, not no-op or hit the original.
+    Posting::Clearing.clear!(item: residual, amount_minor: 40_000, cleared_on: Date.new(2025, 7, 15),
+                             mode: :full, clearing_entry: payment)
+    assert_equal 0, Posting::Clearing.open_amount(residual.reload)
+    assert_equal Date.new(2025, 7, 15), residual.reload.cleared_on
+    # and it survives a rebuild
+    Posting.rebuild!(TENANT)
+    residual2 = EntryLine.find_by!(residual_of_line_id: item_for("INV-2").id)
+    assert_equal 0, Posting::Clearing.open_amount(residual2), "the residual clearing rebuilds from the log"
+  end
+
+  # Guard: an assignment reused across two invoices must never mis-route a clearing — the
+  # target is the exact line, not "some open item with this assignment".
+  test "clearing targets the exact line even when an assignment is reused" do
+    inv_a = post_invoice(assignment: "SHARED")
+    a_line = inv_a.entry_lines.find_by!(assignment: "SHARED")
+    Posting::Clearing.clear!(item: a_line, amount_minor: 100_000, cleared_on: JUN1, mode: :full)
+
+    inv_b = post_invoice(assignment: "SHARED") # same assignment, different invoice
+    b_line = inv_b.entry_lines.find_by!(assignment: "SHARED")
+    # A payment aimed at B's line must clear B, not resurrect/hit A.
+    Posting::Clearing.clear!(item: b_line, amount_minor: 30_000, cleared_on: JUN1, mode: :partial)
+    assert_equal 70_000, Posting::Clearing.open_amount(b_line.reload)
+    assert_equal 0, Posting::Clearing.open_amount(a_line.reload), "A stays fully cleared"
+  end
 end

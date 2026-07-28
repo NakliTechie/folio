@@ -35,11 +35,14 @@ module Posting
 
     # Clear (part of) an open item. `mode` is honoured only for a part-payment; a full-
     # amount application is always "full". Appends an items.cleared event and projects it.
+    # The item may be an original OR a residual — it is targeted by its stable
+    # (source_event_id, line_no) key, so re-clearing a residual works and an assignment
+    # reused across invoices can never mis-target.
     def self.clear!(item:, amount_minor:, cleared_on:, mode:, clearing_entry: nil,
                     actor: "system", reason: nil)
       raise ArgumentError, "mode must be one of #{MODES}" unless MODES.include?(mode.to_s)
       raise ArgumentError, "item is not open" unless item.open_item? && item.cleared_on.nil?
-      raise ArgumentError, "an open item needs an assignment (the clearing key)" if item.assignment.blank?
+      raise ArgumentError, "the item has no stable source_event_id to target" if item.source_event_id.blank?
 
       outstanding = open_amount(item)
       amt = Integer(amount_minor)
@@ -47,10 +50,11 @@ module Posting
       raise ArgumentError, "amount #{amt} exceeds outstanding #{outstanding}" if amt > outstanding
 
       resolved = amt == outstanding ? "full" : mode.to_s
-      raise ArgumentError, "a part-payment must be 'partial' or 'residual'" if resolved == mode.to_s && resolved == "full" && amt != outstanding
 
       payload = PostEntry.deep_compact(
         "clearing" => {
+          # stable target: the exact line, by its creating event + line_no (never a projection id).
+          "target" => { "sourceEventId" => item.source_event_id, "lineNo" => item.line_no },
           "assignment" => item.assignment, "accountCode" => item.account_code,
           "amountMinor" => amt, "mode" => resolved, "clearedOn" => cleared_on.to_s,
           "clearingEventId" => clearing_entry&.ledger_event_id, "reason" => reason,
@@ -68,18 +72,20 @@ module Posting
       end
     end
 
-    # Project an items.cleared event onto the read model. Pure w.r.t. the payload except for
-    # resolving the clearing entry's CURRENT id from its stable ledger_event_id.
+    # Project an items.cleared event onto the read model. Targets the EXACT open item by its
+    # stable (source_event_id, line_no) key. Pure w.r.t. the payload except for resolving the
+    # clearing entry's CURRENT id from its stable ledger_event_id.
     def self.replay!(event)
       data = JSON.parse(event.payload)
       c = data["clearing"]
-      return nil unless c.is_a?(Hash)
+      return nil unless c.is_a?(Hash) && c["target"].is_a?(Hash)
 
-      item = EntryLine
-             .where(tenant_id: event.tenant_id, assignment: c["assignment"], open_item: true, cleared_on: nil)
-             .where(residual_of_line_id: nil) # clear the ORIGINAL open item, not a residual
-             .order(:id).first
-      return nil unless item
+      item = EntryLine.find_by(
+        tenant_id: event.tenant_id,
+        source_event_id: c.dig("target", "sourceEventId"), line_no: c.dig("target", "lineNo")
+      )
+      # Defensive: only an OPEN item can be cleared; a stale/duplicate event is a no-op.
+      return nil unless item&.open_item? && item.cleared_on.nil?
 
       amt = Integer(c["amountMinor"])
       clearing_entry_id =
@@ -103,20 +109,24 @@ module Posting
                      cleared_by_entry_id: clearing_entry_id, cleared_on: c["clearedOn"],
                      clearing_reason: c["reason"])
         open_residual!(item: item, remaining: remaining, sign: sign, txn: txn,
-                       baseline: c["residualBaselineDate"], host_entry_id: clearing_entry_id || item.entry_id)
+                       baseline: c["residualBaselineDate"], source_event_id: event.id,
+                       host_entry_id: clearing_entry_id || item.entry_id)
       end
       item
     end
 
     # The new open item that a residual clearing opens, with a fresh baseline (ageing reset).
-    def self.open_residual!(item:, remaining:, sign:, txn:, baseline:, host_entry_id:)
+    # source_event_id = the clearing event, so the residual has its own stable (event, line_no)
+    # key and can itself be cleared later.
+    def self.open_residual!(item:, remaining:, sign:, txn:, baseline:, source_event_id:, host_entry_id:)
       next_no = EntryLine.where(entry_id: host_entry_id, ledger_id: item.ledger_id).maximum(:line_no).to_i + 1
       residual = EntryLine.create!(
         tenant_id: item.tenant_id, entry_id: host_entry_id, ledger_id: item.ledger_id,
         entity_id: item.entity_id, office_id: item.office_id, account_code: item.account_code,
-        line_no: next_no, party_id: item.party_id, party_role: item.party_role,
-        open_item: true, item_class: item.item_class, assignment: item.assignment,
-        baseline_date: baseline, residual_of_line_id: item.id, line_class: "real", posting_layer: "00"
+        line_no: next_no, source_event_id: source_event_id, party_id: item.party_id,
+        party_role: item.party_role, open_item: true, item_class: item.item_class,
+        assignment: item.assignment, baseline_date: baseline, residual_of_line_id: item.id,
+        line_class: "real", posting_layer: "00"
       )
       return residual unless txn
 
