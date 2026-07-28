@@ -249,7 +249,11 @@ CREATE TABLE public.entry_lines (
     valuation_view character varying,
     extra jsonb,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    cleared_amount_minor bigint DEFAULT 0 NOT NULL,
+    residual_of_line_id bigint,
+    clearing_reason character varying,
+    source_event_id bigint
 );
 
 
@@ -875,10 +879,24 @@ CREATE INDEX index_entry_lines_on_ledger_id ON public.entry_lines USING btree (l
 
 
 --
+-- Name: index_entry_lines_on_open_items; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entry_lines_on_open_items ON public.entry_lines USING btree (tenant_id, assignment) WHERE (open_item AND (cleared_on IS NULL));
+
+
+--
 -- Name: index_entry_lines_on_party_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_entry_lines_on_party_id ON public.entry_lines USING btree (party_id);
+
+
+--
+-- Name: index_entry_lines_on_source_line_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entry_lines_on_source_line_key ON public.entry_lines USING btree (tenant_id, source_event_id, line_no);
 
 
 --
@@ -1014,6 +1032,8 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260729120100'),
+('20260729120000'),
 ('20260729110500'),
 ('20260729110400'),
 ('20260729110300'),

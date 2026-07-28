@@ -87,7 +87,7 @@ module Posting
 
       data["lines"].each do |l|
         line = EntryLine.create!(
-          tenant_id: event.tenant_id, entry_id: entry.id,
+          tenant_id: event.tenant_id, entry_id: entry.id, source_event_id: event.id,
           line_no: l["lineNo"], account_code: l["accountCode"], ledger_id: l["ledgerId"],
           entity_id: l["entityId"], office_id: l["officeId"], tax_registration_id: l["taxRegistrationId"],
           cost_object_type: l["costObjectType"], cost_object_id: l["costObjectId"],

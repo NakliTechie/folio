@@ -7,7 +7,12 @@ class EntryLine < ApplicationRecord
   belongs_to :entry
   belongs_to :ledger, optional: true
   belongs_to :party, optional: true
+  belongs_to :residual_of, class_name: "EntryLine", optional: true
   has_many :amounts, class_name: "JournalEntryLineAmount", dependent: :destroy
+  has_many :residuals, class_name: "EntryLine", foreign_key: :residual_of_line_id, dependent: :nullify
+
+  # Still-outstanding open items (open_item set, not yet fully cleared).
+  scope :open_items, -> { where(open_item: true, cleared_on: nil) }
 
   LINE_CLASSES = %w[real statistical].freeze
   # item_class replaces SAP's entire Special G/L machinery — one field, decided now.
