@@ -21,16 +21,9 @@ require "json"
 # The balance check and payload builders are pure (no DB), so the accounting core is unit-
 # testable against the standard without Rails, per the PORO intent.
 module Posting
-  # Raised when an entry does not balance within some (ledger, slot_role, currency) slice.
-  class UnbalancedError < StandardError
-    attr_reader :offenders
-
-    def initialize(offenders)
-      @offenders = offenders
-      pretty = offenders.map { |(l, s, c), sum| "ledger=#{l} #{s}/#{c} sums to #{sum}" }.join("; ")
-      super("entry does not balance per (ledger, slot, currency): #{pretty}")
-    end
-  end
+  # UnbalancedError lives in its own file (unbalanced_error.rb) so Zeitwerk can autoload it
+  # independently — co-locating it here made `Posting::UnbalancedError` unresolvable unless
+  # `Posting::PostEntry` had already been loaded, an order-dependent CI flake.
 
   class PostEntry
     ENGINE_VERSION = "b3.2"

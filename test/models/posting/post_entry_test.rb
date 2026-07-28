@@ -74,32 +74,51 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
   end
 
   # ---- the fat-events guarantee: replay is a PURE function of the payload ----
-  test "replay! reconstructs the projection identically from the payload alone" do
-    entry = Posting::PostEntry.post!(draft(
-      lines: [
-        { line_no: 1, account_code: "100100", ledger_id: PRIMARY, entity_id: 1, office_id: 1,
-          party_id: 55, party_role: "customer", open_item: true, item_class: "normal",
-          assignment: "INV-1", baseline_date: Date.new(2025, 6, 1), due_date: Date.new(2025, 7, 1),
-          extra: { "campaign" => "diwali" },
-          amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2, amount_minor: 100_000 },
-                     { slot_role: "group", currency: "USD", minor_unit_exponent: 2, amount_minor: 1_200,
-                       rate: "83.33", rate_basis: "posting_date" } ] },
-        { line_no: 2, account_code: "400000", ledger_id: PRIMARY, entity_id: 1, office_id: 1,
-          is_negative_posting: false,
-          amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2, amount_minor: -100_000 },
-                     { slot_role: "group", currency: "USD", minor_unit_exponent: 2, amount_minor: -1_200,
-                       rate: "83.33", rate_basis: "posting_date" } ] }
-      ]
-    ))
+  # Two independent teeth, because post! projects VIA replay! — so comparing a post
+  # projection to a replay projection only proves determinism, not payload-faithfulness.
+
+  # (1) Independent oracle: assert the projected values equal the KNOWN draft directly.
+  # A derivation that hardcodes or computes a field wrongly (but deterministically) fails
+  # HERE, where a round-trip comparison would not.
+  test "post! projects each field faithfully from the draft (independent oracle)" do
+    entry = Posting::PostEntry.post!(rich_draft)
+    l1 = entry.entry_lines.find_by!(line_no: 1)
+    assert_equal "100100", l1.account_code
+    assert_equal PRIMARY, l1.ledger_id
+    assert_equal "real", l1.line_class,   "line_class must come from the payload, not a derivation"
+    assert_equal "00", l1.posting_layer
+    assert_equal 55, l1.party_id
+    assert_equal "customer", l1.party_role
+    assert l1.open_item
+    assert_equal "normal", l1.item_class
+    assert_equal({ "campaign" => "diwali" }, l1.extra)
+    assert_equal Date.new(2025, 7, 1), l1.due_date
+    txn = l1.amounts.find_by!(slot_role: "transaction")
+    assert_equal "INR", txn.currency
+    assert_equal 100_000, txn.amount_minor
+    assert_equal 2, txn.minor_unit_exponent
+    grp = l1.amounts.find_by!(slot_role: "group")
+    assert_equal BigDecimal("83.33"), grp.rate
+    assert_equal "posting_date", grp.rate_basis
+    assert_equal 7, entry.role_template_id
+    assert_equal 3, entry.posting_limit_id
+  end
+
+  # (2) Payload-independence: after posting, DELETE every master the projection references,
+  # then replay from the event alone. A pure replay needs none of them; any lookup of a
+  # ledger/dimension/party/etc. would now return nil and change (or break) the projection.
+  test "replay! reconstructs from the event payload alone, with all master data deleted" do
+    entry = Posting::PostEntry.post!(rich_draft)
     before = fingerprint(entry)
     event = LedgerEvent.find(entry.ledger_event_id)
 
-    entry.destroy! # wipe the projection; the event (source of truth) remains
+    entry.destroy!
+    [ Ledger, Dimension, Party, PartyRole, TaxRegistration, Office, Entity ].each(&:delete_all)
     assert_equal 0, Entry.where(tenant_id: 42).count
 
     replayed = Posting::PostEntry.replay!(event)
     assert_equal before, fingerprint(replayed),
-      "replay from the event alone must reproduce the projection byte-for-byte — no derivation"
+      "replay consulted master data — it must derive the projection from the event payload only"
   end
 
   # ---- D15: the fat payload omits absent keys, never emits null ----
@@ -123,6 +142,26 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
   end
 
   private
+
+  # A draft exercising the full committed dimension set, open-item state and two currency
+  # slots, so the oracle and payload-independence tests have real content to check.
+  def rich_draft
+    draft(
+      lines: [
+        { line_no: 1, account_code: "100100", ledger_id: PRIMARY, entity_id: 1, office_id: 1,
+          party_id: 55, party_role: "customer", open_item: true, item_class: "normal",
+          assignment: "INV-1", baseline_date: Date.new(2025, 6, 1), due_date: Date.new(2025, 7, 1),
+          extra: { "campaign" => "diwali" },
+          amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2, amount_minor: 100_000 },
+                     { slot_role: "group", currency: "USD", minor_unit_exponent: 2, amount_minor: 1_200,
+                       rate: "83.33", rate_basis: "posting_date" } ] },
+        { line_no: 2, account_code: "400000", ledger_id: PRIMARY, entity_id: 1, office_id: 1,
+          amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2, amount_minor: -100_000 },
+                     { slot_role: "group", currency: "USD", minor_unit_exponent: 2, amount_minor: -1_200,
+                       rate: "83.33", rate_basis: "posting_date" } ] }
+      ]
+    )
+  end
 
   # A stable representation of the projection that ignores surrogate ids / timestamps /
   # the event link, so "identical projection" means identical ACCOUNTING content.
