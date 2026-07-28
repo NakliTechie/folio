@@ -47,11 +47,40 @@ module Posting
       balance_offenders(lines).empty?
     end
 
+    # ---- period control (spec §6): enforced here, on the single posting entry point, at
+    # post time only. Replay never re-checks — a historical event reproduces regardless of
+    # the period's CURRENT state. A closed period rejects; a restricted one needs the
+    # capability; a special period (13-16) is just another period_no, open unless controlled.
+    def self.assert_period_open!(draft, lines)
+      fy = draft.fetch(:fiscal_year)
+      pno = draft.fetch(:period_no)
+      caps = Array(draft[:capabilities])
+      lines.each do |l|
+        state, capability = PeriodControl.resolve(
+          tenant_id: draft.fetch(:tenant_id), entity_id: l.fetch(:entity_id), ledger_id: l.fetch(:ledger_id),
+          account_class: account_class_for(l), fiscal_year: fy, period_no: pno
+        )
+        case state
+        when "closed"
+          raise PeriodClosedError, "period #{fy}/#{pno} is closed for ledger #{l[:ledger_id]} (#{account_class_for(l)})"
+        when "restricted"
+          unless capability && caps.include?(capability)
+            raise PeriodRestrictedError, "period #{fy}/#{pno} is restricted; capability '#{capability}' required"
+          end
+        end
+      end
+    end
+
+    def self.account_class_for(line)
+      line[:account_class] || "GL"
+    end
+
     # ---- POST path -------------------------------------------------------------------
     def self.post!(draft)
       lines = normalize_lines(draft)
       offenders = balance_offenders(lines)
       raise UnbalancedError, offenders unless offenders.empty?
+      assert_period_open!(draft, lines)
 
       ActiveRecord::Base.transaction do
         payload_str = Folio::KhataHash.canonical_payload(build_payload(draft, lines))

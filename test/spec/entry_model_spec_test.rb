@@ -26,10 +26,9 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   # workplan's CI arc, as each Batch 3 sub-batch lands the tests it satisfies are
   # re-enabled in CI; the ones still owed carry an explicit `skip` naming the sub-batch
   # that will satisfy them — so CI stays green while the debt stays visible and NAMED,
-  # not hidden behind an env var. B3.0 + B3.1 + B3.2 have landed, so all but two run here.
-  # The old RUN_SPEC_TESTS gate is gone: there is no permanently-red set left to hide.
-  # At B3.4 the period_controls skip lifts; the D13-matrix skip stays until M2.
-  # (RUN_SPEC_TESTS is now a no-op if still set.)
+  # not hidden behind an env var. B3.0–B3.4 have landed, so all schema tests run here
+  # except ONE: the D13 RBAC-matrix tables (role_templates/role_permissions/user_office_roles)
+  # are M2, not Batch 3. The old RUN_SPEC_TESTS gate is gone: nothing red is hidden.
   #
   # The D15 GUARD tests are deliberately NOT here — they pass today, guard the Bahi
   # contract, and run in CI. See test/conformance/d15_additive_widening_test.rb.
@@ -138,7 +137,6 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   end
 
   test "D6: period control is a table, not a boolean" do
-    skip "B3.4 — period_controls (D6 period model + control) not built yet"
     assert_columns("period_controls",
       %w[entity_id ledger_id account_class fiscal_year period_no state], "D6")
   end
