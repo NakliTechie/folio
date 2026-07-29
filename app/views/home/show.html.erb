@@ -1,0 +1,5 @@
+<main>
+  <h1>Folio</h1>
+  <p>Signed in as <%= Current.session&.user&.email_address %>.</p>
+  <%= button_to "Sign out", session_path, method: :delete %>
+</main>

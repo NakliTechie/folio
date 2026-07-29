@@ -1,0 +1,40 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+# M2.1 — the auth gate. Protected actions require a session; login/logout work; the health
+# endpoint stays open for load balancers.
+class AuthenticationFlowTest < ActionDispatch::IntegrationTest
+  test "the root requires authentication — an unauthenticated request is redirected to login" do
+    get root_path
+    assert_redirected_to new_session_path
+  end
+
+  test "an authenticated user reaches the root" do
+    sign_in_as(users(:one))
+    get root_path
+    assert_response :success
+    assert_select "h1", "Folio"
+  end
+
+  test "login with the correct password starts a session; a wrong password is rejected" do
+    post session_path, params: { email_address: "one@example.com", password: "password" }
+    assert_redirected_to root_path
+
+    sign_out
+    post session_path, params: { email_address: "one@example.com", password: "WRONG" }
+    assert_redirected_to new_session_path, "a wrong password must not authenticate"
+  end
+
+  test "logout terminates the session" do
+    sign_in_as(users(:one))
+    delete session_path
+    get root_path
+    assert_redirected_to new_session_path
+  end
+
+  test "the health endpoint is reachable without authentication" do
+    get "/up"
+    assert_response :success
+  end
+end
