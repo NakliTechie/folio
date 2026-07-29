@@ -37,19 +37,21 @@ module Documents
     end
 
     # Reject a post the actor's role/limit does not permit; return the authority to stamp.
+    # The tenant is ALWAYS the document's own tenant_id — never a caller-supplied value — so a
+    # role held in another tenant can never authorize a post here.
     def enforce_and_resolve_authority!(document, authorize)
       return {} unless authorize
 
       user = authorize.fetch(:user)
-      tenant = authorize.fetch(:tenant)
+      tenant_id = document.tenant_id
       office_id = authorize[:office_id] || document.office_id
       amount = document.document_lines.select { |l| l.amount_minor.positive? }.sum(&:amount_minor)
 
-      unless Authorization.permits?(user: user, tenant: tenant, capability: "documents.post",
+      unless Authorization.permits?(user: user, tenant_id: tenant_id, capability: "documents.post",
                                     office_id: office_id, amount_minor: amount)
         raise NotPermitted, "not permitted to post this document (role or posting limit)"
       end
-      Authorization.authority_for(user: user, tenant: tenant, office_id: office_id)
+      Authorization.authority_for(user: user, tenant_id: tenant_id, office_id: office_id)
     end
 
     # Ensure the series row exists (idempotent under concurrency), then allocate gaplessly
