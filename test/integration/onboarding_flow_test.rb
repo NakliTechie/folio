@@ -59,6 +59,15 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_equal [ org.tenant.id ], joiner.tenants.pluck(:id)
   end
 
+  test "accepting an invite with a blank password re-renders, not a 500" do
+    org = Onboarding::SignUp.call(email: "o3@x.com", password: "password123", org_name: "Org3")
+    token = Onboarding::Invite.create!(tenant: org.tenant, email: "j3@x.com", role_code: "viewer",
+      invited_by: org.user).generate_token_for(:invite)
+    post accept_invitation_path(token), params: { password: "" }
+    assert_redirected_to accept_invitation_path(token)
+    assert_nil User.find_by(email_address: "j3@x.com")
+  end
+
   test "the email-verification link marks the user verified" do
     user = User.create!(email_address: "v@x.com", password: "password123")
     get verify_email_path(user.generate_token_for(:email_verification))

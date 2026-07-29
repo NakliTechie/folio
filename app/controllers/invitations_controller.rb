@@ -31,6 +31,8 @@ class InvitationsController < ApplicationController
     redirect_to root_path, notice: "You've joined the team."
   rescue Onboarding::Invite::AlreadyAccepted
     redirect_to new_session_path, alert: "That invitation was already used."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to accept_invitation_path(params[:token]), alert: e.record.errors.full_messages.to_sentence
   end
 
   private
