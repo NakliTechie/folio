@@ -5,6 +5,11 @@ Rails.application.routes.draw do
       get "tenant", to: "tenants#show"
     end
   end
+  resource :registration, only: %i[new create]
+  get "verify/:token", to: "registrations#verify", as: :verify_email
+  resources :invitations, only: :create
+  get "invitations/:token/accept", to: "invitations#accept", as: :accept_invitation
+  post "invitations/:token/accept", to: "invitations#do_accept"
   resource :session
   resources :passwords, param: :token
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

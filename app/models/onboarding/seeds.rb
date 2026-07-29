@@ -1,0 +1,28 @@
+# frozen_string_literal: true
+
+module Onboarding
+  # The starter data a new tenant needs to be usable immediately: a minimal Indian-SMB chart
+  # of accounts and the journal-voucher document type. Idempotent.
+  module Seeds
+    COA = [
+      [ "1000", "Cash", "asset" ], [ "1010", "Bank", "asset" ], [ "1200", "Sundry Debtors", "asset" ],
+      [ "2000", "Sundry Creditors", "liability" ], [ "2100", "GST Payable", "liability" ],
+      [ "3000", "Capital", "equity" ],
+      [ "4000", "Sales", "income" ], [ "5000", "Purchases", "expense" ], [ "5100", "Expenses", "expense" ]
+    ].freeze
+
+    module_function
+
+    def chart_of_accounts!(tenant)
+      COA.each do |code, name, type|
+        Account.find_or_create_by!(tenant_id: tenant.id, code: code) { |a| a.name = name; a.account_type = type }
+      end
+    end
+
+    def document_types!(tenant)
+      DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "JV") do |d|
+        d.label = "Journal Voucher"; d.posting_rule = "journal_voucher"; d.number_prefix = "JV/"
+      end
+    end
+  end
+end

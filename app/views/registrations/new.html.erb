@@ -1,0 +1,10 @@
+<main>
+  <h1>Create your Folio account</h1>
+  <%= form_with url: registration_path, method: :post do |f| %>
+    <%= f.label :org_name, "Company name" %><%= f.text_field :org_name, required: true %>
+    <%= f.label :email_address, "Email" %><%= f.email_field :email_address, required: true, autocomplete: "username" %>
+    <%= f.label :password %><%= f.password_field :password, required: true, autocomplete: "new-password" %>
+    <%= f.submit "Create account" %>
+  <% end %>
+  <p>Already have an account? <%= link_to "Sign in", new_session_path %></p>
+</main>
