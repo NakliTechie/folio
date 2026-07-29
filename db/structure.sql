@@ -519,6 +519,38 @@ ALTER SEQUENCE public.ledgers_id_seq OWNED BY public.ledgers.id;
 
 
 --
+-- Name: memberships; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.memberships (
+    id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: memberships_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.memberships_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: memberships_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.memberships_id_seq OWNED BY public.memberships.id;
+
+
+--
 -- Name: number_ranges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -776,6 +808,39 @@ ALTER SEQUENCE public.tax_registrations_id_seq OWNED BY public.tax_registrations
 
 
 --
+-- Name: tenants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tenants (
+    id bigint NOT NULL,
+    name character varying NOT NULL,
+    slug character varying NOT NULL,
+    functional_currency character varying(3) DEFAULT 'INR'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: tenants_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.tenants_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: tenants_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.tenants_id_seq OWNED BY public.tenants.id;
+
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -885,6 +950,13 @@ ALTER TABLE ONLY public.ledgers ALTER COLUMN id SET DEFAULT nextval('public.ledg
 
 
 --
+-- Name: memberships id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.memberships ALTER COLUMN id SET DEFAULT nextval('public.memberships_id_seq'::regclass);
+
+
+--
 -- Name: number_ranges id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -931,6 +1003,13 @@ ALTER TABLE ONLY public.sessions ALTER COLUMN id SET DEFAULT nextval('public.ses
 --
 
 ALTER TABLE ONLY public.tax_registrations ALTER COLUMN id SET DEFAULT nextval('public.tax_registrations_id_seq'::regclass);
+
+
+--
+-- Name: tenants id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tenants ALTER COLUMN id SET DEFAULT nextval('public.tenants_id_seq'::regclass);
 
 
 --
@@ -1037,6 +1116,14 @@ ALTER TABLE ONLY public.ledgers
 
 
 --
+-- Name: memberships memberships_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.memberships
+    ADD CONSTRAINT memberships_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: number_ranges number_ranges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1098,6 +1185,14 @@ ALTER TABLE ONLY public.sessions
 
 ALTER TABLE ONLY public.tax_registrations
     ADD CONSTRAINT tax_registrations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tenants tenants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tenants
+    ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
 
 
 --
@@ -1319,6 +1414,27 @@ CREATE UNIQUE INDEX index_ledgers_on_tenant_id_and_code ON public.ledgers USING 
 
 
 --
+-- Name: index_memberships_on_tenant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_memberships_on_tenant_id ON public.memberships USING btree (tenant_id);
+
+
+--
+-- Name: index_memberships_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_memberships_on_user_id ON public.memberships USING btree (user_id);
+
+
+--
+-- Name: index_memberships_on_user_id_and_tenant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_memberships_on_user_id_and_tenant_id ON public.memberships USING btree (user_id, tenant_id);
+
+
+--
 -- Name: index_number_ranges_on_series_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1382,6 +1498,13 @@ CREATE INDEX index_tax_registrations_on_tenant_id_and_kind_and_identifier ON pub
 
 
 --
+-- Name: index_tenants_on_slug; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_tenants_on_slug ON public.tenants USING btree (slug);
+
+
+--
 -- Name: index_users_on_email_address; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1418,12 +1541,29 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: memberships fk_rails_99326fb65d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.memberships
+    ADD CONSTRAINT fk_rails_99326fb65d FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: memberships fk_rails_a959f0d1fb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.memberships
+    ADD CONSTRAINT fk_rails_a959f0d1fb FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260729160000'),
 ('20260729150302'),
 ('20260729150301'),
 ('20260729150300'),
