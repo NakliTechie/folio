@@ -728,6 +728,104 @@ ALTER SEQUENCE public.period_controls_id_seq OWNED BY public.period_controls.id;
 
 
 --
+-- Name: posting_limits; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.posting_limits (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    name character varying NOT NULL,
+    amount_minor bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: posting_limits_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.posting_limits_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: posting_limits_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.posting_limits_id_seq OWNED BY public.posting_limits.id;
+
+
+--
+-- Name: role_permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.role_permissions (
+    id bigint NOT NULL,
+    role_template_id bigint NOT NULL,
+    capability character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: role_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.role_permissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: role_permissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.role_permissions_id_seq OWNED BY public.role_permissions.id;
+
+
+--
+-- Name: role_templates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.role_templates (
+    id bigint NOT NULL,
+    tenant_id bigint,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: role_templates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.role_templates_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: role_templates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.role_templates_id_seq OWNED BY public.role_templates.id;
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -838,6 +936,41 @@ CREATE SEQUENCE public.tenants_id_seq
 --
 
 ALTER SEQUENCE public.tenants_id_seq OWNED BY public.tenants.id;
+
+
+--
+-- Name: user_office_roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_office_roles (
+    id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    office_id bigint,
+    role_template_id bigint NOT NULL,
+    posting_limit_id bigint,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: user_office_roles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.user_office_roles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: user_office_roles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.user_office_roles_id_seq OWNED BY public.user_office_roles.id;
 
 
 --
@@ -992,6 +1125,27 @@ ALTER TABLE ONLY public.period_controls ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: posting_limits id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.posting_limits ALTER COLUMN id SET DEFAULT nextval('public.posting_limits_id_seq'::regclass);
+
+
+--
+-- Name: role_permissions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions ALTER COLUMN id SET DEFAULT nextval('public.role_permissions_id_seq'::regclass);
+
+
+--
+-- Name: role_templates id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_templates ALTER COLUMN id SET DEFAULT nextval('public.role_templates_id_seq'::regclass);
+
+
+--
 -- Name: sessions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1010,6 +1164,13 @@ ALTER TABLE ONLY public.tax_registrations ALTER COLUMN id SET DEFAULT nextval('p
 --
 
 ALTER TABLE ONLY public.tenants ALTER COLUMN id SET DEFAULT nextval('public.tenants_id_seq'::regclass);
+
+
+--
+-- Name: user_office_roles id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_office_roles ALTER COLUMN id SET DEFAULT nextval('public.user_office_roles_id_seq'::regclass);
 
 
 --
@@ -1164,6 +1325,30 @@ ALTER TABLE ONLY public.period_controls
 
 
 --
+-- Name: posting_limits posting_limits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.posting_limits
+    ADD CONSTRAINT posting_limits_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: role_permissions role_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: role_templates role_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_templates
+    ADD CONSTRAINT role_templates_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1193,6 +1378,14 @@ ALTER TABLE ONLY public.tax_registrations
 
 ALTER TABLE ONLY public.tenants
     ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_office_roles user_office_roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_office_roles
+    ADD CONSTRAINT user_office_roles_pkey PRIMARY KEY (id);
 
 
 --
@@ -1477,6 +1670,27 @@ CREATE UNIQUE INDEX index_period_controls_on_scope ON public.period_controls USI
 
 
 --
+-- Name: index_role_permissions_on_role_template_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_role_permissions_on_role_template_id ON public.role_permissions USING btree (role_template_id);
+
+
+--
+-- Name: index_role_permissions_on_role_template_id_and_capability; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_role_permissions_on_role_template_id_and_capability ON public.role_permissions USING btree (role_template_id, capability);
+
+
+--
+-- Name: index_role_templates_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_role_templates_on_tenant_id_and_code ON public.role_templates USING btree (tenant_id, code);
+
+
+--
 -- Name: index_sessions_on_user_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1502,6 +1716,27 @@ CREATE INDEX index_tax_registrations_on_tenant_id_and_kind_and_identifier ON pub
 --
 
 CREATE UNIQUE INDEX index_tenants_on_slug ON public.tenants USING btree (slug);
+
+
+--
+-- Name: index_user_office_roles_on_role_template_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_user_office_roles_on_role_template_id ON public.user_office_roles USING btree (role_template_id);
+
+
+--
+-- Name: index_user_office_roles_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_user_office_roles_on_user_id ON public.user_office_roles USING btree (user_id);
+
+
+--
+-- Name: index_user_office_roles_on_user_tenant_office; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_user_office_roles_on_user_tenant_office ON public.user_office_roles USING btree (user_id, tenant_id, office_id);
 
 
 --
@@ -1533,11 +1768,35 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 
 
 --
+-- Name: role_permissions fk_rails_0b72cb6964; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT fk_rails_0b72cb6964 FOREIGN KEY (role_template_id) REFERENCES public.role_templates(id);
+
+
+--
+-- Name: user_office_roles fk_rails_1018c65b31; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_office_roles
+    ADD CONSTRAINT fk_rails_1018c65b31 FOREIGN KEY (role_template_id) REFERENCES public.role_templates(id);
+
+
+--
 -- Name: sessions fk_rails_758836b4f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.sessions
     ADD CONSTRAINT fk_rails_758836b4f0 FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: user_office_roles fk_rails_84f904cce7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_office_roles
+    ADD CONSTRAINT fk_rails_84f904cce7 FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -1563,6 +1822,7 @@ ALTER TABLE ONLY public.memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260729170000'),
 ('20260729160000'),
 ('20260729150302'),
 ('20260729150301'),
