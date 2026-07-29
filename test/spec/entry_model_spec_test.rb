@@ -26,9 +26,8 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   # workplan's CI arc, as each Batch 3 sub-batch lands the tests it satisfies are
   # re-enabled in CI; the ones still owed carry an explicit `skip` naming the sub-batch
   # that will satisfy them — so CI stays green while the debt stays visible and NAMED,
-  # not hidden behind an env var. B3.0–B3.4 have landed, so all schema tests run here
-  # except ONE: the D13 RBAC-matrix tables (role_templates/role_permissions/user_office_roles)
-  # are M2, not Batch 3. The old RUN_SPEC_TESTS gate is gone: nothing red is hidden.
+  # not hidden behind an env var. B3.0–B3.4 built the entry model; M2.3 built the D13 RBAC
+  # matrix. Every schema spec test now runs — ZERO skips. The old RUN_SPEC_TESTS gate is gone.
   #
   # The D15 GUARD tests are deliberately NOT here — they pass today, guard the Bahi
   # contract, and run in CI. See test/conformance/d15_additive_widening_test.rb.
@@ -181,7 +180,6 @@ class EntryModelSpecTest < ActiveSupport::TestCase
   # --- D13 — recorded authority (rank 12). The payload half is Batch 3. ---
 
   test "D13: RBAC is a matrix, not a role enum" do
-    skip "M2 — role_templates/role_permissions/user_office_roles are M2, not Batch 3 (only the authority COLUMNS on entries are Batch 3)"
     assert_columns("role_templates", %w[tenant_id code], "D13")
     assert_table("role_permissions", "D13")
     assert_table("user_office_roles", "D13")

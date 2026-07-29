@@ -7,11 +7,16 @@ module Documents
   # rejected before anything is written.
   module Post
     NotPostable = Class.new(StandardError)
+    NotPermitted = Class.new(StandardError)
 
     module_function
 
-    def call(document, actor:, capabilities: [])
+    # `authorize:` — when given {user:, tenant:, office_id?}, RBAC is enforced (capability +
+    # posting limit) and the resolved authority is stamped on the entry. Omit it for internal /
+    # system posts (existing engine tests). This is defence-in-depth: the API also checks.
+    def call(document, actor:, capabilities: [], authorize: nil)
       raise NotPostable, "document is #{document.state}, not postable" unless document.postable?
+      authority = enforce_and_resolve_authority!(document, authorize)
 
       ActiveRecord::Base.transaction do
         sim = Simulate.call(document)
@@ -24,11 +29,27 @@ module Documents
           actor: actor, origin: "folio",
           document_date: document.document_date || posting, posting_date: posting,
           entered_at: Time.now.utc, fiscal_year: document.fiscal_year, period_no: Documents.period_no(posting),
-          capabilities: capabilities, document: { id: document.id }, lines: sim[:lines]
+          capabilities: capabilities, authority: authority, document: { id: document.id }, lines: sim[:lines]
         )
         document.update!(state: "posted", document_number: number, posted_entry_id: entry.id)
         entry
       end
+    end
+
+    # Reject a post the actor's role/limit does not permit; return the authority to stamp.
+    def enforce_and_resolve_authority!(document, authorize)
+      return {} unless authorize
+
+      user = authorize.fetch(:user)
+      tenant = authorize.fetch(:tenant)
+      office_id = authorize[:office_id] || document.office_id
+      amount = document.document_lines.select { |l| l.amount_minor.positive? }.sum(&:amount_minor)
+
+      unless Authorization.permits?(user: user, tenant: tenant, capability: "documents.post",
+                                    office_id: office_id, amount_minor: amount)
+        raise NotPermitted, "not permitted to post this document (role or posting limit)"
+      end
+      Authorization.authority_for(user: user, tenant: tenant, office_id: office_id)
     end
 
     # Ensure the series row exists (idempotent under concurrency), then allocate gaplessly
