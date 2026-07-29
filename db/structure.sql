@@ -396,6 +396,41 @@ ALTER SEQUENCE public.entry_lines_id_seq OWNED BY public.entry_lines.id;
 
 
 --
+-- Name: invitations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invitations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    email character varying NOT NULL,
+    role_code character varying NOT NULL,
+    invited_by_id bigint,
+    accepted_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: invitations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.invitations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: invitations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.invitations_id_seq OWNED BY public.invitations.id;
+
+
+--
 -- Name: journal_entry_line_amounts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -982,7 +1017,8 @@ CREATE TABLE public.users (
     email_address character varying NOT NULL,
     password_digest character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    verified_at timestamp(6) without time zone
 );
 
 
@@ -1059,6 +1095,13 @@ ALTER TABLE ONLY public.entries ALTER COLUMN id SET DEFAULT nextval('public.entr
 --
 
 ALTER TABLE ONLY public.entry_lines ALTER COLUMN id SET DEFAULT nextval('public.entry_lines_id_seq'::regclass);
+
+
+--
+-- Name: invitations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invitations ALTER COLUMN id SET DEFAULT nextval('public.invitations_id_seq'::regclass);
 
 
 --
@@ -1250,6 +1293,14 @@ ALTER TABLE ONLY public.entries
 
 ALTER TABLE ONLY public.entry_lines
     ADD CONSTRAINT entry_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: invitations invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invitations
+    ADD CONSTRAINT invitations_pkey PRIMARY KEY (id);
 
 
 --
@@ -1558,6 +1609,13 @@ CREATE INDEX index_entry_lines_on_tenant_id_and_account_code ON public.entry_lin
 
 
 --
+-- Name: index_invitations_on_tenant_id_and_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_invitations_on_tenant_id_and_email ON public.invitations USING btree (tenant_id, email);
+
+
+--
 -- Name: index_jela_on_line_and_slot; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1822,6 +1880,8 @@ ALTER TABLE ONLY public.memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260729180100'),
+('20260729180000'),
 ('20260729170000'),
 ('20260729160000'),
 ('20260729150302'),

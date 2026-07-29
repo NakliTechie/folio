@@ -1,0 +1,66 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+# Onboarding (both paths) at the service level.
+class OnboardingTest < ActiveSupport::TestCase
+  test "self-signup creates org + owner + roles + seeded books in one transaction" do
+    r = Onboarding::SignUp.call(email: "founder@acme.com", password: "password123", org_name: "Acme Consulting")
+    assert r.user.persisted?
+    assert_equal "acme-consulting", r.tenant.slug
+    assert_includes r.user.tenants, r.tenant
+    assert_equal "owner", r.user.user_office_roles.first.role_template.code
+    assert_equal 9, Account.where(tenant_id: r.tenant.id).count
+    assert Account.where(tenant_id: r.tenant.id).exists?(code: "1000")
+    assert DocumentType.where(tenant_id: r.tenant.id).exists?(code: "JV")
+    assert_equal 5, RoleTemplate.where(tenant_id: r.tenant.id).count
+    assert Authorization.permits?(user: r.user, tenant_id: r.tenant.id, capability: "documents.post"),
+      "the new owner can post immediately"
+  end
+
+  test "signup slugs de-duplicate across orgs with the same name" do
+    a = Onboarding::SignUp.call(email: "a@x.com", password: "password123", org_name: "Dup Co")
+    b = Onboarding::SignUp.call(email: "b@x.com", password: "password123", org_name: "Dup Co")
+    assert_equal "dup-co", a.tenant.slug
+    assert_equal "dup-co-2", b.tenant.slug
+  end
+
+  test "signup is atomic — a failing signup creates no org" do
+    Onboarding::SignUp.call(email: "taken@x.com", password: "password123", org_name: "First")
+    before = Tenant.count
+    assert_raises(ActiveRecord::RecordInvalid) do
+      Onboarding::SignUp.call(email: "taken@x.com", password: "password123", org_name: "Second")
+    end
+    assert_equal before, Tenant.count, "a failed signup rolls back the whole org"
+  end
+
+  test "invite → accept adds a member with the assigned role, isolated to that tenant" do
+    org = Onboarding::SignUp.call(email: "owner@x.com", password: "password123", org_name: "Org")
+    inv = Onboarding::Invite.create!(tenant: org.tenant, email: "clerk@x.com", role_code: "operator", invited_by: org.user)
+    user = Onboarding::Invite.accept!(token: inv.generate_token_for(:invite), password: "password123")
+
+    assert user.persisted?
+    assert_equal "operator", user.user_office_roles.first.role_template.code
+    assert_equal [ org.tenant.id ], user.tenants.pluck(:id), "the new member sees ONLY the inviting tenant"
+    refute Authorization.permits?(user: user, tenant_id: org.tenant.id, capability: "documents.post"),
+      "an operator cannot post (role enforced)"
+  end
+
+  test "an invitation is single-use and an invalid token yields nil" do
+    org = Onboarding::SignUp.call(email: "o2@x.com", password: "password123", org_name: "Org2")
+    inv = Onboarding::Invite.create!(tenant: org.tenant, email: "c2@x.com", role_code: "viewer", invited_by: org.user)
+    token = inv.generate_token_for(:invite)
+    Onboarding::Invite.accept!(token: token, password: "password123")
+    assert_raises(Onboarding::Invite::AlreadyAccepted) { Onboarding::Invite.accept!(token: token, password: "password123") }
+    assert_nil Onboarding::Invite.accept!(token: "garbage", password: "password123")
+  end
+
+  test "email verification marks the user verified via a signed token" do
+    u = User.create!(email_address: "v@x.com", password: "password123")
+    refute u.verified?
+    found = User.find_by_token_for(:email_verification, u.generate_token_for(:email_verification))
+    assert_equal u, found
+    found.verify!
+    assert u.reload.verified?
+  end
+end

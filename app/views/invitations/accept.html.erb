@@ -1,0 +1,9 @@
+<main>
+  <h1>Join <%= @invitation.tenant.name %> on Folio</h1>
+  <p>You were invited as <strong><%= @invitation.role_code %></strong> (<%= @invitation.email %>).</p>
+  <%= form_with url: accept_invitation_path(@token), method: :post do |f| %>
+    <%= f.label :password, "Choose a password" %>
+    <%= f.password_field :password, required: true, autocomplete: "new-password" %>
+    <%= f.submit "Accept invitation" %>
+  <% end %>
+</main>
