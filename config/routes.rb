@@ -3,6 +3,17 @@ Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
       get "tenant", to: "tenants#show"
+      resources :accounts, only: %i[index show create]
+      resources :document_types, only: :index
+      get "reports/trial_balance", to: "reports#trial_balance"
+      get "reports/account_type_totals", to: "reports#account_type_totals"
+      resources :documents, only: %i[show create] do
+        member do
+          post :simulate
+          post :post
+          post :reverse
+        end
+      end
     end
   end
   resource :registration, only: %i[new create]
