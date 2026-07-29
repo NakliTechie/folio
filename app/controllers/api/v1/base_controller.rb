@@ -20,6 +20,10 @@ module Api
       end
       rescue_from Documents::Post::NotPermitted do |e| render_error(e.message, :forbidden) end
       rescue_from Documents::Post::NotPostable do |e| render_error(e.message, :conflict) end
+      # A JSON API stays JSON even on a CSRF failure (Rails' default is a static HTML page).
+      rescue_from ActionController::InvalidAuthenticityToken do
+        render_error("invalid or missing CSRF token", :unprocessable_entity)
+      end
 
       private
 

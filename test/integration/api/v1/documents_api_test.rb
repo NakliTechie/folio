@@ -102,7 +102,8 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
     sign_in_as(@acme.user)
     ActionController::Base.allow_forgery_protection = true
     post "/api/v1/documents", params: jv_params
-    refute_equal 201, response.status, "a write without a CSRF token must be blocked (Hotwire supplies it)"
+    assert_response :unprocessable_entity, "a write without a CSRF token is blocked"
+    assert_equal "invalid or missing CSRF token", JSON.parse(response.body)["error"], "and stays JSON"
   ensure
     ActionController::Base.allow_forgery_protection = false
   end
