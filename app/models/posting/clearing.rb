@@ -49,6 +49,9 @@ module Posting
       amt = Integer(amount_minor)
       raise ArgumentError, "amount #{amt} must be positive" unless amt.positive?
       raise ArgumentError, "amount #{amt} exceeds outstanding #{outstanding}" if amt > outstanding
+      if mode.to_s == "full" && amt < outstanding
+        raise ArgumentError, "full clearing amount #{amt} must equal outstanding #{outstanding}"
+      end
 
       resolved = amt == outstanding ? "full" : mode.to_s
 

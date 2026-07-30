@@ -115,6 +115,21 @@ class Posting::ClearingTest < ActiveSupport::TestCase
     end
   end
 
+  test "a short full clearing is rejected without losing the remainder" do
+    post_invoice(assignment: "INV-SHORT")
+    item = item_for("INV-SHORT")
+    before = LedgerEvent.for_tenant(TENANT).count
+
+    error = assert_raises(ArgumentError) do
+      Posting::Clearing.clear!(item: item, amount_minor: 60_000, cleared_on: JUN1, mode: :full)
+    end
+
+    assert_equal "full clearing amount 60000 must equal outstanding 100000", error.message
+    assert_equal before, LedgerEvent.for_tenant(TENANT).count, "a rejected clear appends no event"
+    assert_nil item.reload.cleared_on
+    assert_equal 100_000, Posting::Clearing.open_amount(item)
+  end
+
   # A residual is itself an open item; the next payment must clear IT, targeted by its own
   # stable (source_event_id, line_no) key — not silently mis-applied to the original.
   test "a residual open item can itself be cleared" do
