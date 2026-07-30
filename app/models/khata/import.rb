@@ -24,6 +24,7 @@ require "tempfile"
 # would take minutes.
 module Khata
   class Import
+    InvalidLineAmount = Class.new(StandardError)
     INR_EXPONENT = 2
 
     def self.import!(khata_path:, tenant_id:)
@@ -84,11 +85,11 @@ module Khata
       # 2) lines — bulk. Build the source list, insert entry_lines, re-read their ids, then
       #    insert the amounts keyed by (entry_id, line_no).
       line_no_by_entry = Hash.new(0)
-      source = db.execute("SELECT entry_id, account_id, debit, credit FROM entry_lines ORDER BY entry_id, id").map do |l|
+      source = db.execute("SELECT id, entry_id, account_id, debit, credit FROM entry_lines ORDER BY entry_id, id").map do |l|
         eid = folio_id.fetch(l["entry_id"])
         ln = (line_no_by_entry[eid] += 1)
         { entry_id: eid, line_no: ln, account_code: l["account_id"].to_s,
-          amount_minor: Integer(l["debit"]) - Integer(l["credit"]) }
+          amount_minor: signed_amount!(l) }
       end
       return if source.empty?
 
@@ -107,6 +108,18 @@ module Khata
           created_at: now, updated_at: now }
       end
       JournalEntryLineAmount.insert_all!(amounts)
+    end
+
+    def signed_amount!(line)
+      debit = Integer(line["debit"])
+      credit = Integer(line["credit"])
+      valid = (debit.positive? && credit.zero?) || (credit.positive? && debit.zero?)
+      unless valid
+        raise InvalidLineAmount,
+          "invalid debit/credit at entry #{line["entry_id"]} line #{line["id"]}: " \
+          "expected exactly one positive side, got debit=#{debit} credit=#{credit}"
+      end
+      debit - credit
     end
 
     # Indian FY (Apr–Mar): Apr→period 1 … Mar→period 12. Faithful, though the reports don't
