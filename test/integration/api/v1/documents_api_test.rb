@@ -31,6 +31,9 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
     sign_in_as(@acme.user)
     id = create_jv
     assert_response :created
+    document = Document.find(id)
+    assert_equal Entity.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY").id, document.entity_id
+    assert_equal Office.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY").id, document.office_id
 
     post "/api/v1/documents/#{id}/simulate"
     assert_response :success
@@ -39,6 +42,8 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
     post "/api/v1/documents/#{id}/post"
     assert_response :success
     assert_equal "posted", JSON.parse(response.body).dig("document", "state")
+    assert_equal Ledger.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY").id,
+      EntryLine.find_by!(tenant_id: @acme.tenant.id, entry_id: document.reload.posted_entry_id).ledger_id
 
     get "/api/v1/reports/trial_balance"
     tb = JSON.parse(response.body)["trial_balance"]

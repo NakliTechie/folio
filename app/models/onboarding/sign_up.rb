@@ -16,6 +16,7 @@ module Onboarding
         Rbac::Presets.seed_for!(tenant)
         UserOfficeRole.create!(user: user, tenant_id: tenant.id,
           role_template: Rbac::Presets.role_for(tenant, "owner"))
+        Seeds.org_spine!(tenant)
         Seeds.chart_of_accounts!(tenant)
         Seeds.document_types!(tenant)
         Result.new(user: user, tenant: tenant)

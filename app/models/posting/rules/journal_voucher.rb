@@ -6,9 +6,8 @@ module Posting
     # entry line on the PRIMARY ledger, no tax, no split. It exercises the whole
     # document→rule→post loop; richer rules (invoices computing tax/splits) plug in the same way.
     class JournalVoucher
-      PRIMARY_LEDGER = 1
-
       def self.entry_lines(document)
+        ledger = Ledger.find_by!(tenant_id: document.tenant_id, code: "PRIMARY")
         # A reversal keeps the SAME account with a negated amount (a negative posting, not a
         # counter-posting to the opposite side) — and it MUST be flagged is_negative_posting so a
         # turnover report can reduce the original side rather than inflate the opposite one. Per
@@ -16,7 +15,7 @@ module Posting
         negative = document.reverses_document_id.present?
         document.document_lines.map do |dl|
           line = {
-            line_no: dl.line_no, account_code: dl.account_code, ledger_id: PRIMARY_LEDGER,
+            line_no: dl.line_no, account_code: dl.account_code, ledger_id: ledger.id,
             entity_id: document.entity_id, office_id: document.office_id,
             amounts: [ {
               slot_role: "transaction", currency: dl.currency,

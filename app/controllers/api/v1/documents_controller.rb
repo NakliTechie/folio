@@ -46,9 +46,11 @@ module Api
 
       def build_document
         type = DocumentType.where(tenant_id: Current.tenant.id).find_by!(code: params[:doc_type])
+        entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
+        office = Office.find_by!(tenant_id: Current.tenant.id, entity_id: entity.id, code: "PRIMARY")
         ActiveRecord::Base.transaction do
           doc = Document.create!(
-            tenant_id: Current.tenant.id, entity_id: 1, office_id: 1,
+            tenant_id: Current.tenant.id, entity_id: entity.id, office_id: office.id,
             doc_type: type.code, document_type_id: type.id, fiscal_year: params[:fiscal_year],
             document_date: params[:document_date], posting_date: params[:posting_date],
             narration: params[:narration], state: "draft"

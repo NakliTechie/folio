@@ -24,5 +24,24 @@ module Onboarding
         d.label = "Journal Voucher"; d.posting_rule = "journal_voucher"; d.number_prefix = "JV/"
       end
     end
+
+    def org_spine!(tenant)
+      entity = Entity.find_or_create_by!(tenant_id: tenant.id, code: "PRIMARY") do |record|
+        record.legal_name = tenant.name
+        record.functional_currency = tenant.functional_currency
+        record.fiscal_year_variant = "IN_APR_MAR"
+        record.jurisdiction_profile = "IN"
+      end
+      office = Office.find_or_create_by!(tenant_id: tenant.id, code: "PRIMARY") do |record|
+        record.entity = entity
+        record.name = "Head Office"
+      end
+      ledger = Ledger.find_or_create_by!(tenant_id: tenant.id, code: "PRIMARY") do |record|
+        record.name = "Primary Ledger"
+        record.kind = "standard"
+      end
+
+      { entity: entity, office: office, ledger: ledger }
+    end
   end
 end

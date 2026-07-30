@@ -13,6 +13,10 @@ class OnboardingTest < ActiveSupport::TestCase
     assert_equal 9, Account.where(tenant_id: r.tenant.id).count
     assert Account.where(tenant_id: r.tenant.id).exists?(code: "1000")
     assert DocumentType.where(tenant_id: r.tenant.id).exists?(code: "JV")
+    entity = Entity.find_by!(tenant_id: r.tenant.id, code: "PRIMARY")
+    assert_equal r.tenant.name, entity.legal_name
+    assert_equal entity.id, Office.find_by!(tenant_id: r.tenant.id, code: "PRIMARY").entity_id
+    assert Ledger.where(tenant_id: r.tenant.id).exists?(code: "PRIMARY")
     assert_equal 5, RoleTemplate.where(tenant_id: r.tenant.id).count
     assert Authorization.permits?(user: r.user, tenant_id: r.tenant.id, capability: "documents.post"),
       "the new owner can post immediately"
