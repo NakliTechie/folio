@@ -23,6 +23,8 @@
   </head>
 
   <body>
+    <%= tag.div(flash[:alert], role: "alert") if flash[:alert] %>
+    <%= tag.div(flash[:notice], role: "status") if flash[:notice] %>
     <%= yield %>
   </body>
 </html>

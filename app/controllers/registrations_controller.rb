@@ -16,7 +16,8 @@ class RegistrationsController < ApplicationController
     RegistrationsMailer.verify(result.user).deliver_later
     redirect_to root_path, notice: "Welcome to Folio — #{result.tenant.name} is ready."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to new_registration_path, alert: e.record.errors.full_messages.to_sentence.presence || e.message
+    flash.now[:alert] = e.record.errors.full_messages.to_sentence.presence || e.message
+    render :new, status: :unprocessable_entity
   end
 
   # GET /verify/:token — from the verification email.

@@ -21,7 +21,11 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_no_difference "Tenant.count" do
       post registration_path, params: { org_name: "X", email_address: "taken@x.com", password: "password123" }
     end
-    assert_redirected_to new_registration_path
+    assert_response :unprocessable_entity
+    assert_select "[role=alert]", "Email address has already been taken"
+    assert_select "input[name=org_name][value=X]"
+    assert_select "input[name=email_address][value='taken@x.com']"
+    assert_select "input[name=password][value]", count: 0
   end
 
   test "only an owner can send an invitation; a non-owner is forbidden" do
