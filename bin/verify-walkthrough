@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+
+APP_ROOT = File.expand_path("..", __dir__)
+TESTS = %w[
+  test/system/walkthrough_test.rb
+  test/integration/walkthrough_role_matrix_test.rb
+  test/integration/authentication_flow_test.rb
+  test/integration/onboarding_flow_test.rb
+  test/integration/api/v1/documents_api_test.rb
+  test/integration/api/v1/tenant_isolation_test.rb
+  test/models/onboarding_test.rb
+  test/models/rbac_test.rb
+  test/models/posting/period_control_test.rb
+].freeze
+
+Dir.chdir(APP_ROOT)
+exec File.join(APP_ROOT, "bin/rails"), "test", *TESTS
