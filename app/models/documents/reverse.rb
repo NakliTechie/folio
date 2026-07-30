@@ -10,9 +10,12 @@ module Documents
     module_function
 
     def call(document, actor:, on: nil)
-      raise NotReversible, "only a posted, not-yet-reversed document can be reversed" unless document.reversible?
-
       ActiveRecord::Base.transaction do
+        document.lock!
+        unless document.reversible?
+          raise NotReversible, "only a posted, not-yet-reversed document can be reversed"
+        end
+
         date = on || document.posting_date || Date.current
         rev = Document.create!(
           tenant_id: document.tenant_id, entity_id: document.entity_id, office_id: document.office_id,

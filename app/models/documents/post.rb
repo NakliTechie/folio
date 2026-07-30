@@ -15,11 +15,12 @@ module Documents
     # posting limit) and the resolved authority is stamped on the entry. Omit it for internal /
     # system posts (existing engine tests). This is defence-in-depth: the API also checks.
     def call(document, actor:, capabilities: [], authorize: nil)
-      raise NotPostable, "document is #{document.state}, not postable" unless document.postable?
-      authority, role_capabilities = enforce_and_resolve_authority!(document, authorize)
-      effective_capabilities = (Array(capabilities) + role_capabilities).uniq
-
       ActiveRecord::Base.transaction do
+        document.lock!
+        raise NotPostable, "document is #{document.state}, not postable" unless document.postable?
+
+        authority, role_capabilities = enforce_and_resolve_authority!(document, authorize)
+        effective_capabilities = (Array(capabilities) + role_capabilities).uniq
         sim = Simulate.call(document)
         raise Posting::UnbalancedError, sim[:offenders] unless sim[:balanced]
 
