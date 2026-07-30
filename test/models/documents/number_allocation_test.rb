@@ -16,6 +16,7 @@ class Documents::NumberAllocationTest < ActiveSupport::TestCase
   JUN1 = Date.new(2025, 6, 1)
 
   setup do
+    @ledger = Ledger.create!(tenant_id: TENANT, code: "PRIMARY", name: "Primary Ledger")
     @type = DocumentType.create!(tenant_id: TENANT, code: "JV", label: "JV",
       posting_rule: "journal_voucher", number_prefix: "JV/")
     Account.create!(tenant_id: TENANT, code: "1000", name: "Cash", account_type: "asset")
@@ -45,7 +46,7 @@ class Documents::NumberAllocationTest < ActiveSupport::TestCase
     assert_equal 2, range.next_value
 
     # Close the period so PostEntry rejects AFTER the number is allocated inside the transaction.
-    PeriodControl.create!(tenant_id: TENANT, entity_id: 1, ledger_id: 1, account_class: "ALL",
+    PeriodControl.create!(tenant_id: TENANT, entity_id: 1, ledger_id: @ledger.id, account_class: "ALL",
       fiscal_year: 2025, period_no: 3, state: "closed")
     assert_raises(Posting::PeriodClosedError) { Documents::Post.call(build_jv, actor: "u") }
     assert_equal 2, range.reload.next_value,

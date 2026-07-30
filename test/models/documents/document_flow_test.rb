@@ -9,6 +9,7 @@ class Documents::DocumentFlowTest < ActiveSupport::TestCase
   JUN1 = Date.new(2025, 6, 1)
 
   setup do
+    Ledger.create!(tenant_id: TENANT, code: "PRIMARY", name: "Primary Ledger")
     @type = DocumentType.create!(tenant_id: TENANT, code: "JV", label: "Journal Voucher",
       posting_rule: "journal_voucher", number_prefix: "JV/")
     Account.create!(tenant_id: TENANT, code: "1000", name: "Cash", account_type: "asset")
