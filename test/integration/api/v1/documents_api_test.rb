@@ -59,6 +59,44 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "a closed period is a JSON 409 and leaves the document draft" do
+    sign_in_as(@acme.user)
+    id = create_jv
+    entity = Entity.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY")
+    ledger = Ledger.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY")
+    PeriodControl.create!(tenant_id: @acme.tenant.id, entity_id: entity.id, ledger_id: ledger.id,
+      account_class: "ALL", fiscal_year: 2025, period_no: 3, state: "closed", domain: "posting")
+
+    post "/api/v1/documents/#{id}/post"
+
+    assert_response :conflict
+    assert_match(/period 2025\/3 is closed/, JSON.parse(response.body)["error"])
+    assert_equal "draft", Document.find(id).state
+  end
+
+  test "a restricted period is a JSON 403 when the role lacks its capability" do
+    sign_in_as(@acme.user)
+    id = create_jv
+    sign_out
+    accountant = Onboarding::Invite.accept!(
+      token: Onboarding::Invite.create!(tenant: @acme.tenant, email: "accountant@x.com",
+        role_code: "accountant", invited_by: @acme.user).generate_token_for(:invite),
+      password: "password123"
+    )
+    entity = Entity.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY")
+    ledger = Ledger.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY")
+    PeriodControl.create!(tenant_id: @acme.tenant.id, entity_id: entity.id, ledger_id: ledger.id,
+      account_class: "ALL", fiscal_year: 2025, period_no: 3, state: "restricted",
+      capability: "period.lock", domain: "posting")
+    sign_in_as(accountant)
+
+    post "/api/v1/documents/#{id}/post"
+
+    assert_response :forbidden
+    assert_match(/capability 'period.lock' required/, JSON.parse(response.body)["error"])
+    assert_equal "draft", Document.find(id).state
+  end
+
   test "ISOLATION — a user cannot read or post another tenant's document (404)" do
     sign_in_as(@acme.user)
     acme_id = create_jv

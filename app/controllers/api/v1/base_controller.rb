@@ -18,6 +18,12 @@ module Api
       rescue_from Posting::UnbalancedError do |e|
         render_error("entry does not balance: #{e.message}", :unprocessable_entity)
       end
+      rescue_from Posting::PeriodClosedError do |e|
+        render_error(e.message, :conflict)
+      end
+      rescue_from Posting::PeriodRestrictedError do |e|
+        render_error(e.message, :forbidden)
+      end
       rescue_from Documents::Post::NotPermitted do |e| render_error(e.message, :forbidden) end
       rescue_from Documents::Post::NotPostable do |e| render_error(e.message, :conflict) end
       # A JSON API stays JSON even on a CSRF failure (Rails' default is a static HTML page).
