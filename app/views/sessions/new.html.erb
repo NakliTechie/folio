@@ -1,11 +1,18 @@
-<%= tag.div(flash[:alert], style: "color:red") if flash[:alert] %>
-<%= tag.div(flash[:notice], style: "color:green") if flash[:notice] %>
+<main>
+  <%= tag.div(flash[:alert], style: "color:red") if flash[:alert] %>
+  <%= tag.div(flash[:notice], style: "color:green") if flash[:notice] %>
 
-<%= form_with url: session_path do |form| %>
-  <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address", value: params[:email_address] %><br>
-  <%= form.password_field :password, required: true, autocomplete: "current-password", placeholder: "Enter your password", maxlength: 72 %><br>
-  <%= form.submit "Sign in" %>
-<% end %>
-<br>
+  <h1>Sign in to Folio</h1>
+  <p>Keep your company books and accounting records in one place.</p>
 
-<%= link_to "Forgot password?", new_password_path %>
+  <%= form_with url: session_path do |form| %>
+    <%= form.label :email_address, "Email" %>
+    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", value: params[:email_address] %><br>
+    <%= form.label :password %>
+    <%= form.password_field :password, required: true, autocomplete: "current-password", maxlength: 72 %><br>
+    <%= form.submit "Sign in" %>
+  <% end %>
+
+  <p><%= link_to "Forgot password?", new_password_path %></p>
+  <p>New to Folio? <%= link_to "Create an account", new_registration_path %></p>
+</main>

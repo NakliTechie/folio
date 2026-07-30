@@ -8,6 +8,9 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
   test "the root requires authentication — an unauthenticated request is redirected to login" do
     get root_path
     assert_redirected_to new_session_path
+    follow_redirect!
+    assert_select "h1", "Sign in to Folio"
+    assert_select "a[href='#{new_registration_path}']", "Create an account"
   end
 
   test "an authenticated user reaches the root" do
@@ -24,6 +27,8 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     sign_out
     post session_path, params: { email_address: "one@example.com", password: "WRONG" }
     assert_redirected_to new_session_path, "a wrong password must not authenticate"
+    follow_redirect!
+    assert_select "div", "Try another email address or password."
   end
 
   test "logout terminates the session" do
