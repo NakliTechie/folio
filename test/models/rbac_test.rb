@@ -10,6 +10,7 @@ class RbacTest < ActiveSupport::TestCase
   setup do
     @tenant = Tenant.create!(name: "Acme", slug: "acme-rbac")
     Rbac::Presets.seed_for!(@tenant)
+    Onboarding::Seeds.org_spine!(@tenant)
     @jv = DocumentType.create!(tenant_id: @tenant.id, code: "JV", label: "JV",
       posting_rule: "journal_voucher", number_prefix: "JV/")
     Account.create!(tenant_id: @tenant.id, code: "1000", name: "Cash", account_type: "asset")
@@ -28,8 +29,11 @@ class RbacTest < ActiveSupport::TestCase
   end
 
   def build_jv(amount: 100_000, tenant: @tenant)
-    doc = Document.create!(tenant_id: tenant.id, entity_id: 1, office_id: 1, doc_type: "JV",
-      document_type_id: @jv.id, fiscal_year: 2025, document_date: Date.new(2025, 6, 1),
+    entity = Entity.find_by!(tenant_id: tenant.id, code: "PRIMARY")
+    office = Office.find_by!(tenant_id: tenant.id, code: "PRIMARY")
+    document_type = DocumentType.find_by!(tenant_id: tenant.id, code: "JV")
+    doc = Document.create!(tenant_id: tenant.id, entity_id: entity.id, office_id: office.id, doc_type: "JV",
+      document_type_id: document_type.id, fiscal_year: 2025, document_date: Date.new(2025, 6, 1),
       posting_date: Date.new(2025, 6, 1), state: "draft")
     doc.document_lines.create!(tenant_id: tenant.id, line_no: 1, account_code: "1000", amount_minor: amount)
     doc.document_lines.create!(tenant_id: tenant.id, line_no: 2, account_code: "4000", amount_minor: -amount)
@@ -89,11 +93,25 @@ class RbacTest < ActiveSupport::TestCase
       "the posted entry records the authority it was posted under"
   end
 
+  test "a role's capabilities reach restricted-period enforcement" do
+    auditor = user_with("auditor@x.com", "ca_auditor")
+    entity = Entity.find_by!(tenant_id: @tenant.id, code: "PRIMARY")
+    ledger = Ledger.find_by!(tenant_id: @tenant.id, code: "PRIMARY")
+    PeriodControl.create!(tenant_id: @tenant.id, entity_id: entity.id, ledger_id: ledger.id,
+      account_class: "ALL", fiscal_year: 2025, period_no: 3, state: "restricted",
+      capability: "period.lock", domain: "posting")
+
+    assert Documents::Post.call(build_jv, actor: "auditor", authorize: { user: auditor }).persisted?
+    assert Documents::Post.call(build_jv, actor: "owner", authorize: { user: @owner }).persisted?,
+      "the owner wildcard satisfies a named restricted-period capability"
+  end
+
   test "the authority is bound to the DOCUMENT's tenant, not the caller's context" do
     # @owner is owner of @tenant. A document in ANOTHER tenant must not be postable by @owner
     # even if the caller passes @owner as the authorizer.
     other = Tenant.create!(name: "Other", slug: "other-rbac")
     Rbac::Presets.seed_for!(other)
+    Onboarding::Seeds.org_spine!(other)
     DocumentType.create!(tenant_id: other.id, code: "JV", label: "JV", posting_rule: "journal_voucher")
     Account.create!(tenant_id: other.id, code: "1000", name: "Cash", account_type: "asset")
     Account.create!(tenant_id: other.id, code: "4000", name: "Sales", account_type: "income")

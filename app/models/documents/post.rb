@@ -16,7 +16,8 @@ module Documents
     # system posts (existing engine tests). This is defence-in-depth: the API also checks.
     def call(document, actor:, capabilities: [], authorize: nil)
       raise NotPostable, "document is #{document.state}, not postable" unless document.postable?
-      authority = enforce_and_resolve_authority!(document, authorize)
+      authority, role_capabilities = enforce_and_resolve_authority!(document, authorize)
+      effective_capabilities = (Array(capabilities) + role_capabilities).uniq
 
       ActiveRecord::Base.transaction do
         sim = Simulate.call(document)
@@ -29,7 +30,7 @@ module Documents
           actor: actor, origin: "folio",
           document_date: document.document_date || posting, posting_date: posting,
           entered_at: Time.now.utc, fiscal_year: document.fiscal_year, period_no: Documents.period_no(posting),
-          capabilities: capabilities, authority: authority, document: { id: document.id }, lines: sim[:lines]
+          capabilities: effective_capabilities, authority: authority, document: { id: document.id }, lines: sim[:lines]
         )
         document.update!(state: "posted", document_number: number, posted_entry_id: entry.id)
         entry
@@ -40,18 +41,21 @@ module Documents
     # The tenant is ALWAYS the document's own tenant_id — never a caller-supplied value — so a
     # role held in another tenant can never authorize a post here.
     def enforce_and_resolve_authority!(document, authorize)
-      return {} unless authorize
+      return [ {}, [] ] unless authorize
 
       user = authorize.fetch(:user)
       tenant_id = document.tenant_id
       office_id = authorize[:office_id] || document.office_id
       amount = document.document_lines.select { |l| l.amount_minor.positive? }.sum(&:amount_minor)
+      user_role = Authorization.role_for(user: user, tenant_id: tenant_id, office_id: office_id)
 
-      unless Authorization.permits?(user: user, tenant_id: tenant_id, capability: "documents.post",
-                                    office_id: office_id, amount_minor: amount)
+      unless user_role && Authorization.permits?(user: user, tenant_id: tenant_id, capability: "documents.post",
+                                                 office_id: office_id, amount_minor: amount)
         raise NotPermitted, "not permitted to post this document (role or posting limit)"
       end
-      Authorization.authority_for(user: user, tenant_id: tenant_id, office_id: office_id)
+      authority = { role_template_id: user_role.role_template_id, posting_limit_id: user_role.posting_limit_id }
+      capabilities = user_role.role_template.role_permissions.pluck(:capability)
+      [ authority, capabilities ]
     end
 
     # Ensure the series row exists (idempotent under concurrency), then allocate gaplessly

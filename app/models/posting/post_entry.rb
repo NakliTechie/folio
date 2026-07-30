@@ -64,7 +64,7 @@ module Posting
         when "closed"
           raise PeriodClosedError, "period #{fy}/#{pno} is closed for ledger #{l[:ledger_id]} (#{account_class_for(l)})"
         when "restricted"
-          unless capability && caps.include?(capability)
+          unless capability && (caps.include?("*") || caps.include?(capability))
             raise PeriodRestrictedError, "period #{fy}/#{pno} is restricted; capability '#{capability}' required"
           end
         end
