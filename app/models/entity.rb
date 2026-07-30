@@ -10,5 +10,6 @@ class Entity < ApplicationRecord
   validates :tenant_id, :code, :legal_name, :functional_currency, :fiscal_year_variant,
             :jurisdiction_profile, presence: true
   validates :functional_currency, length: { is: 3 }
+  validates :fiscal_year_variant, inclusion: { in: Onboarding::AccountingProfile::FISCAL_YEARS.keys }
   validates :jurisdiction_profile, inclusion: { in: %w[IN DE UK US MY] }
 end

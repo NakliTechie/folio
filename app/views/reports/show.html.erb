@@ -1,0 +1,71 @@
+<% content_for :title, "Trial balance · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Reports</p>
+      <h1>Trial balance</h1>
+      <p>Posted ledger activity for <%= Current.tenant.name %>, shown in <%= Current.tenant.functional_currency %>.</p>
+    </div>
+    <% if permitted?("documents.post") %>
+      <%= link_to "Record transaction", new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
+    <% end %>
+  </header>
+
+  <% if @trial_balance.any? %>
+    <section class="summary-strip" aria-label="Account type totals">
+      <% @account_type_totals.each do |row| %>
+        <div>
+          <span><%= row["type"].humanize %></span>
+          <strong><%= money_amount(row["debit"] - row["credit"]) %></strong>
+          <small>Net balance</small>
+        </div>
+      <% end %>
+    </section>
+
+    <section class="panel panel--table">
+      <% if @highlight_codes.any? %>
+        <div class="report-callout" role="status">
+          <span aria-hidden="true">✓</span>
+          <p><strong>Voucher posted.</strong> The affected accounts are highlighted below.</p>
+        </div>
+      <% end %>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Trial balance for <%= Current.tenant.name %></caption>
+          <thead>
+            <tr><th scope="col">Account</th><th scope="col">Type</th><th scope="col">Debit</th><th scope="col">Credit</th></tr>
+          </thead>
+          <tbody>
+            <% @trial_balance.each do |row| %>
+              <tr class="<%= "table-row--highlight" if @highlight_codes.include?(row["account_id"].to_s) %>">
+                <td><span class="account-code"><%= row["account_id"] %></span> <strong><%= row["name"] %></strong></td>
+                <td><%= row["type"].humanize %></td>
+                <td class="money"><%= money_amount(row["debit"]) %></td>
+                <td class="money"><%= money_amount(row["credit"]) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row" colspan="2">Total</th>
+              <td class="money"><%= money_amount(@trial_balance.sum { |row| row["debit"] }) %></td>
+              <td class="money"><%= money_amount(@trial_balance.sum { |row| row["credit"] }) %></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="table-note">A balanced trial balance has equal debit and credit totals. Reversals remain visible through compensating entries.</p>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">∑</span>
+      <h2>Your trial balance is ready for its first entry</h2>
+      <p>The starter chart is set up. Post a balanced journal voucher to see account balances here.</p>
+      <% if permitted?("documents.post") %>
+        <%= link_to "Record your first transaction", new_journal_voucher_path(tenant_route_options),
+          class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% end %>
+</main>

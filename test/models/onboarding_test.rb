@@ -67,4 +67,39 @@ class OnboardingTest < ActiveSupport::TestCase
     found.verify!
     assert u.reload.verified?
   end
+
+  test "an accepted invite explicitly updates an existing tenant role" do
+    org = Onboarding::SignUp.call(email: "role-owner@x.com", password: "password123", org_name: "Org")
+    existing = Onboarding::Invite.accept!(
+      token: Onboarding::Invite.create!(
+        tenant: org.tenant, email: "role-member@x.com", role_code: "viewer", invited_by: org.user
+      ).generate_token_for(:invite),
+      password: "password123"
+    )
+    invitation = Onboarding::Invite.create!(
+      tenant: org.tenant, email: existing.email_address, role_code: "accountant", invited_by: org.user
+    )
+
+    Onboarding::Invite.accept!(
+      token: invitation.generate_token_for(:invite),
+      password: "password123"
+    )
+
+    assignment = UserOfficeRole.find_by!(user: existing, tenant_id: org.tenant.id, office_id: nil)
+    assert_equal "accountant", assignment.role_template.code
+  end
+
+  test "only one pending invitation can exist for an email in a tenant" do
+    org = Onboarding::SignUp.call(email: "unique-owner@x.com", password: "password123", org_name: "Org")
+    Onboarding::Invite.create!(
+      tenant: org.tenant, email: "pending@x.com", role_code: "viewer", invited_by: org.user
+    )
+
+    error = assert_raises(ActiveRecord::RecordInvalid) do
+      Onboarding::Invite.create!(
+        tenant: org.tenant, email: "PENDING@x.com", role_code: "accountant", invited_by: org.user
+      )
+    end
+    assert_includes error.record.errors.full_messages, "Email already has a pending invitation"
+  end
 end

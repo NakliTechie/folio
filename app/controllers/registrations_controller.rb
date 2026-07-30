@@ -4,19 +4,33 @@
 # email (soft — it marks trust; nothing is gated on it yet).
 class RegistrationsController < ApplicationController
   allow_unauthenticated_access only: %i[new create verify]
+  rate_limit to: 5, within: 1.hour, only: :create,
+    with: -> { redirect_to new_registration_path, alert: "Too many signup attempts. Please try again later." }
 
   def new
   end
 
   def create
     result = Onboarding::SignUp.call(
-      email: params[:email_address], password: params[:password], org_name: params[:org_name]
+      email: params[:email_address],
+      password: params[:password],
+      org_name: params[:org_name],
+      jurisdiction_profile: params[:jurisdiction_profile],
+      functional_currency: params[:functional_currency],
+      fiscal_year_variant: params[:fiscal_year_variant]
     )
     start_new_session_for result.user
-    RegistrationsMailer.verify(result.user).deliver_later
+    result.user.queue_verification_delivery!
     redirect_to root_path, notice: "Welcome to Folio — #{result.tenant.name} is ready."
-  rescue ActiveRecord::RecordInvalid => e
-    flash.now[:alert] = e.record.errors.full_messages.to_sentence.presence || e.message
+  rescue ActiveRecord::RecordInvalid, Onboarding::AccountingProfile::InvalidChoice => e
+    flash.now[:alert] = if e.respond_to?(:record)
+      e.record.errors.full_messages.to_sentence.presence || e.message
+    else
+      e.message
+    end
+    render :new, status: :unprocessable_entity
+  rescue ActiveRecord::RecordNotUnique
+    flash.now[:alert] = "That email or company was registered moments ago. Sign in or choose another."
     render :new, status: :unprocessable_entity
   end
 

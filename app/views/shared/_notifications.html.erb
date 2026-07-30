@@ -1,0 +1,22 @@
+<% if flash[:alert] || flash[:notice] %>
+  <section class="notification-stack" aria-label="Notifications">
+    <% if flash[:alert] %>
+      <div class="notification notification--error">
+        <span class="notification__icon" aria-hidden="true">!</span>
+        <div>
+          <strong>Something needs attention</strong>
+          <p role="alert" tabindex="-1"><%= flash[:alert] %></p>
+        </div>
+      </div>
+    <% end %>
+    <% if flash[:notice] %>
+      <div class="notification notification--success">
+        <span class="notification__icon" aria-hidden="true">✓</span>
+        <div>
+          <strong>Done</strong>
+          <p role="status"><%= flash[:notice] %></p>
+        </div>
+      </div>
+    <% end %>
+  </section>
+<% end %>

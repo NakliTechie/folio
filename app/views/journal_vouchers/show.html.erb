@@ -1,0 +1,71 @@
+<% content_for :title, "#{@document.document_number || "Draft voucher"} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to transactions", journal_vouchers_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Journal voucher</p>
+      <h1><%= @document.document_number || "Draft voucher" %></h1>
+      <p><%= @document.narration.presence || "No narration" %></p>
+    </div>
+    <span class="<%= status_class(@document.state) %>"><%= @document.state.humanize %></span>
+  </header>
+
+  <section class="panel voucher-card">
+    <dl class="metadata-grid">
+      <div><dt>Posting date</dt><dd><%= @document.posting_date.to_fs(:long) %></dd></div>
+      <div><dt>Fiscal year</dt><dd><%= @document.fiscal_year %></dd></div>
+      <div><dt>Currency</dt><dd><%= Current.tenant.functional_currency %></dd></div>
+      <div><dt>Office</dt><dd>Head Office</dd></div>
+    </dl>
+
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Debit and credit lines for this journal voucher</caption>
+        <thead><tr><th scope="col">Account</th><th scope="col">Debit</th><th scope="col">Credit</th></tr></thead>
+        <tbody>
+          <% @document.document_lines.each do |line| %>
+            <% account = Account.find_by(tenant_id: Current.tenant.id, code: line.account_code) %>
+            <tr>
+              <td><span class="account-code"><%= line.account_code %></span> <strong><%= account&.name %></strong></td>
+              <td class="money"><%= money_amount(line.amount_minor) if line.amount_minor.positive? %></td>
+              <td class="money"><%= money_amount(-line.amount_minor) if line.amount_minor.negative? %></td>
+            </tr>
+          <% end %>
+        </tbody>
+        <tfoot>
+          <tr>
+            <th scope="row">Total</th>
+            <td class="money"><%= money_amount(@document.document_lines.sum { |line| [line.amount_minor, 0].max }) %></td>
+            <td class="money"><%= money_amount(@document.document_lines.sum { |line| [-line.amount_minor, 0].max }) %></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+
+  <% if @document.postable? %>
+    <section class="panel posting-panel">
+      <div>
+        <p class="eyebrow">Simulation</p>
+        <h2><%= @simulation[:balanced] ? "Balanced and ready to post" : "This voucher does not balance" %></h2>
+        <p>Posting allocates the next voucher number and writes an append-only ledger event. It cannot be edited afterward; corrections use a reversal.</p>
+      </div>
+      <% if @simulation[:balanced] && permitted?("documents.post") %>
+        <%= button_to "Post voucher", post_journal_voucher_path(@document, tenant_route_options),
+          method: :post, class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% else %>
+    <div class="action-row">
+      <% if permitted?("reports.read") %>
+        <%= link_to "View trial balance", reports_path(tenant_route_options), class: "button button--primary" %>
+      <% end %>
+      <% if @document.reversible? && permitted?("documents.reverse") %>
+        <%= button_to "Reverse voucher", reverse_journal_voucher_path(@document, tenant_route_options),
+          method: :post, class: "button button--danger",
+          form: { data: { turbo_confirm: "Reverse this voucher with a compensating entry?" } } %>
+      <% end %>
+    </div>
+  <% end %>
+</main>

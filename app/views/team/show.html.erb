@@ -1,0 +1,75 @@
+<% content_for :title, "Team · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Team & access</p>
+      <h1>People and invitations</h1>
+      <p>Invite teammates with a role matched to the work they need to do.</p>
+    </div>
+  </header>
+
+  <div class="content-grid content-grid--team">
+    <section class="panel">
+      <div class="panel__header"><h2>Members</h2><span class="count-pill"><%= @memberships.size %></span></div>
+      <ul class="member-list">
+        <% @memberships.each do |membership| %>
+          <% assignment = @role_by_user_id[membership.user_id] %>
+          <li>
+            <span class="avatar" aria-hidden="true"><%= membership.user.email_address.first.upcase %></span>
+            <span><strong><%= membership.user.email_address %></strong><small><%= assignment&.role_template&.name || "Member" %></small></span>
+            <% if membership.user.verified? %><span class="status-badge status-badge--success">Verified</span><% end %>
+          </li>
+        <% end %>
+      </ul>
+    </section>
+
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Add teammate</p><h2>Send an invitation</h2></div></div>
+      <%= form_with url: invitations_path(tenant_route_options), class: "stacked-form" do |form| %>
+        <div class="form-group">
+          <%= form.label :email, "Work email" %>
+          <%= form.email_field :email, required: true, autocomplete: "email" %>
+        </div>
+        <div class="form-group">
+          <%= form.label :role_code, "Role" %>
+          <%= form.select :role_code,
+            Rbac::Presets::MATRIX.map { |code, spec| [spec[:name], code] },
+            { selected: "viewer" }, required: true %>
+          <small>The invite shows this role before acceptance.</small>
+        </div>
+        <%= form.submit "Queue invitation", class: "button button--primary" %>
+      <% end %>
+    </section>
+  </div>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><h2>Invitation delivery</h2><span class="count-pill"><%= @invitations.size %></span></div>
+    <% if @invitations.any? %>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Invitations for <%= Current.tenant.name %></caption>
+          <thead><tr><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Delivery</th><th scope="col">Acceptance</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+          <tbody>
+            <% @invitations.each do |invitation| %>
+              <tr>
+                <td><strong><%= invitation.email %></strong></td>
+                <td><%= invitation.role_code.humanize %></td>
+                <td><span class="<%= status_class(invitation.delivery_state) %>"><%= delivery_state_label(invitation.delivery_state) %></span></td>
+                <td><%= invitation.pending? ? "Pending" : "Accepted #{time_ago_in_words(invitation.accepted_at)} ago" %></td>
+                <td>
+                  <% if invitation.pending? && %w[sent failed not_sent].include?(invitation.delivery_state) %>
+                    <%= button_to "Resend", resend_invitation_path(invitation, tenant_route_options),
+                      method: :post, class: "button button--compact button--quiet" %>
+                  <% end %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="empty-state empty-state--compact"><p>No invitations yet.</p></div>
+    <% end %>
+  </section>
+</main>

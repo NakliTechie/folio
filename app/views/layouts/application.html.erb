@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <title><%= content_for(:title) || "Folio" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="description" content="<%= content_for(:description) || "Folio is clear, collaborative accounting for growing teams." %>">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="application-name" content="Folio">
     <meta name="mobile-web-app-capable" content="yes">
@@ -22,9 +23,86 @@
     <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
   </head>
 
-  <body>
-    <%= tag.div(flash[:alert], role: "alert") if flash[:alert] %>
-    <%= tag.div(flash[:notice], role: "status") if flash[:notice] %>
-    <%= yield %>
+  <body class="<%= authenticated? && Current.tenant ? "app-body" : "public-body" %>">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <% if authenticated? && Current.tenant %>
+      <header class="app-header">
+        <div class="app-header__bar">
+          <%= link_to root_path(tenant_route_options), class: "brand brand--app", aria: { label: "Folio overview" } do %>
+            <span class="brand__mark" aria-hidden="true">F</span>
+            <span>Folio</span>
+          <% end %>
+
+          <div class="tenant-context">
+            <% if Current.user.tenants.size > 1 %>
+              <%= form_with url: root_path, method: :get, class: "tenant-switcher" do |form| %>
+                <%= form.label :tenant_id, "Company", class: "sr-only" %>
+                <%= form.select :tenant_id,
+                  Current.user.tenants.order(:name).map { |tenant| [tenant.name, tenant.id] },
+                  { selected: Current.tenant.id },
+                  aria: { label: "Current company" } %>
+                <%= form.submit "Switch", class: "button button--compact button--quiet" %>
+              <% end %>
+            <% else %>
+              <span class="tenant-context__label">Company</span>
+              <strong><%= Current.tenant.name %></strong>
+            <% end %>
+          </div>
+
+          <div class="user-context">
+            <span><%= Current.user.email_address %></span>
+            <span class="user-context__role"><%= role_name %></span>
+            <%= button_to "Sign out", session_path, method: :delete,
+              class: "button button--compact button--quiet" %>
+          </div>
+
+          <details class="mobile-user-menu">
+            <summary aria-label="Account menu"><%= Current.user.email_address.first.upcase %></summary>
+            <div class="mobile-user-menu__panel">
+              <strong><%= Current.user.email_address %></strong>
+              <span><%= role_name %></span>
+              <%= button_to "Sign out", session_path, method: :delete,
+                class: "button button--compact button--quiet" %>
+            </div>
+          </details>
+        </div>
+
+        <nav class="app-nav" aria-label="Primary navigation">
+          <%= link_to "Overview", root_path(tenant_route_options), class: navigation_class("home") %>
+          <%= link_to "Transactions", journal_vouchers_path(tenant_route_options),
+            class: navigation_class("journal_vouchers") %>
+          <%= link_to "Chart of accounts", accounts_path(tenant_route_options),
+            class: navigation_class("accounts") %>
+          <% if permitted?("reports.read") %>
+            <%= link_to "Reports", reports_path(tenant_route_options), class: navigation_class("reports") %>
+          <% end %>
+          <% if permitted?("users.manage") %>
+            <%= link_to "Team", team_path(tenant_route_options), class: navigation_class("team") %>
+          <% end %>
+        </nav>
+      </header>
+    <% else %>
+      <header class="public-header">
+        <%= link_to new_session_path, class: "brand", aria: { label: "Folio sign in" } do %>
+          <span class="brand__mark" aria-hidden="true">F</span>
+          <span>Folio</span>
+        <% end %>
+        <nav class="public-nav" aria-label="Account navigation">
+          <%= link_to "Sign in", new_session_path %>
+          <%= link_to "Create account", new_registration_path, class: "button button--compact" %>
+        </nav>
+      </header>
+    <% end %>
+
+    <div class="page-frame">
+      <%= render "shared/notifications" %>
+      <%= yield %>
+    </div>
+
+    <footer class="site-footer">
+      <span>Folio</span>
+      <span>Clear books. Confident decisions.</span>
+    </footer>
   </body>
 </html>

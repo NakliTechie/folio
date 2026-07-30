@@ -14,23 +14,52 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Company name", with: "Walkthrough Books"
     fill_in "Email", with: "walkthrough-owner@folio.invalid"
     fill_in "Password", with: PASSWORD
-    click_button "Create account"
+    click_button "Create company books"
 
     assert_current_path root_path
     assert_selector "[role=status]", text: "Welcome to Folio — Walkthrough Books is ready."
     assert_text "Signed in as walkthrough-owner@folio.invalid."
+    assert_selector "h1", text: "Your books, at a glance"
 
     click_button "Sign out"
     click_link "Create an account"
     fill_in "Company name", with: "Preserved Company"
     fill_in "Email", with: "walkthrough-owner@folio.invalid"
     fill_in "Password", with: PASSWORD
-    click_button "Create account"
+    click_button "Create company books"
 
     assert_selector "[role=alert]", text: "Email address has already been taken"
     assert_field "Company name", with: "Preserved Company"
     assert_field "Email", with: "walkthrough-owner@folio.invalid"
     assert_field "Password", with: ""
+  end
+
+  test "new owner records a balanced voucher and reaches first value" do
+    visit new_registration_path
+    fill_in "Company name", with: "First Value Books"
+    fill_in "Email", with: "first-value@folio.invalid"
+    fill_in "Password", with: PASSWORD
+    select "India", from: "Country or jurisdiction"
+    select "INR — Indian rupee", from: "Functional currency"
+    select "April–March", from: "Fiscal year"
+    click_button "Create company books"
+
+    click_link "Record your first transaction"
+    fill_in "Posting date", with: "2026-07-30"
+    fill_in "What is this transaction for?", with: "Owner capital introduced"
+    fill_in "Amount (INR)", with: "1250.50"
+    select "1000 · Cash", from: "Debit account"
+    select "3000 · Capital", from: "Credit account"
+    click_button "Review voucher"
+
+    assert_selector "h2", text: "Balanced and ready to post"
+    assert_text "INR 1,250.50"
+    click_button "Post voucher"
+
+    assert_current_path reports_path, ignore_query: true
+    assert_selector "h1", text: "Trial balance"
+    assert_selector "[role=status]", text: /posted.*trial balance/i
+    assert_selector "tr.table-row--highlight", count: 2
   end
 
   test "every RBAC preset can enter and leave its authenticated landing" do

@@ -407,7 +407,9 @@ CREATE TABLE public.invitations (
     invited_by_id bigint,
     accepted_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    delivery_state character varying DEFAULT 'not_sent'::character varying NOT NULL,
+    delivery_attempted_at timestamp(6) without time zone
 );
 
 
@@ -1018,7 +1020,9 @@ CREATE TABLE public.users (
     password_digest character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    verified_at timestamp(6) without time zone
+    verified_at timestamp(6) without time zone,
+    verification_delivery_state character varying DEFAULT 'not_sent'::character varying NOT NULL,
+    verification_delivery_attempted_at timestamp(6) without time zone
 );
 
 
@@ -1609,10 +1613,10 @@ CREATE INDEX index_entry_lines_on_tenant_id_and_account_code ON public.entry_lin
 
 
 --
--- Name: index_invitations_on_tenant_id_and_email; Type: INDEX; Schema: public; Owner: -
+-- Name: index_invitations_on_one_pending_email; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX index_invitations_on_tenant_id_and_email ON public.invitations USING btree (tenant_id, email);
+CREATE UNIQUE INDEX index_invitations_on_one_pending_email ON public.invitations USING btree (tenant_id, email) WHERE (accepted_at IS NULL);
 
 
 --
@@ -1880,6 +1884,7 @@ ALTER TABLE ONLY public.memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260730230000'),
 ('20260729180100'),
 ('20260729180000'),
 ('20260729170000'),

@@ -1,10 +1,62 @@
-<main>
-  <h1>Create your Folio account</h1>
-  <%= form_with url: registration_path, method: :post do |f| %>
-    <%= f.label :org_name, "Company name" %><%= f.text_field :org_name, required: true, value: params[:org_name] %>
-    <%= f.label :email_address, "Email" %><%= f.email_field :email_address, required: true, autocomplete: "username", value: params[:email_address] %>
-    <%= f.label :password %><%= f.password_field :password, required: true, autocomplete: "new-password" %>
-    <%= f.submit "Create account" %>
-  <% end %>
-  <p>Already have an account? <%= link_to "Sign in", new_session_path %></p>
+<% content_for :title, "Create account · Folio" %>
+<% content_for :description, "Create company books in Folio with an explicit jurisdiction, currency, and fiscal year." %>
+
+<main id="main-content" class="public-form-shell">
+  <section class="public-form-intro">
+    <p class="eyebrow">Start with honest defaults</p>
+    <h1>Create your Folio account</h1>
+    <p>We’ll create your company books, a starter chart of accounts, and a journal voucher workflow.</p>
+    <ol class="mini-steps">
+      <li><span>1</span><p><strong>Create your company</strong><small>Identity and accounting profile</small></p></li>
+      <li><span>2</span><p><strong>Review your starter chart</strong><small>Nine accounts, ready to use</small></p></li>
+      <li><span>3</span><p><strong>Post your first voucher</strong><small>See it in the trial balance</small></p></li>
+    </ol>
+  </section>
+
+  <section class="panel form-panel public-form-card">
+    <%= form_with url: registration_path, method: :post, class: "stacked-form" do |f| %>
+      <div class="form-group">
+        <%= f.label :org_name, "Company name" %>
+        <%= f.text_field :org_name, required: true, autofocus: true, value: params[:org_name],
+          placeholder: "For example, Acme Consulting" %>
+      </div>
+      <div class="form-group">
+        <%= f.label :email_address, "Email" %>
+        <%= f.email_field :email_address, required: true, autocomplete: "username", value: params[:email_address] %>
+      </div>
+      <div class="form-group">
+        <%= f.label :password %>
+        <%= f.password_field :password, required: true, autocomplete: "new-password", maxlength: 72 %>
+        <small>Use a unique password of up to 72 characters.</small>
+      </div>
+
+      <fieldset class="profile-fieldset">
+        <legend>Accounting defaults</legend>
+        <p>Confirm these before Folio creates your books. You can configure offices and advanced settings later.</p>
+        <div class="form-group">
+          <%= f.label :jurisdiction_profile, "Country or jurisdiction" %>
+          <%= f.select :jurisdiction_profile,
+            Onboarding::AccountingProfile::JURISDICTIONS.map { |code, label| [label, code] },
+            { selected: params[:jurisdiction_profile].presence || Onboarding::AccountingProfile::DEFAULT_JURISDICTION } %>
+        </div>
+        <div class="form-grid form-grid--two">
+          <div class="form-group">
+            <%= f.label :functional_currency, "Functional currency" %>
+            <%= f.select :functional_currency,
+              Onboarding::AccountingProfile::CURRENCIES.map { |code, label| [label, code] },
+              { selected: params[:functional_currency].presence || Onboarding::AccountingProfile::DEFAULT_CURRENCY } %>
+          </div>
+          <div class="form-group">
+            <%= f.label :fiscal_year_variant, "Fiscal year" %>
+            <%= f.select :fiscal_year_variant,
+              Onboarding::AccountingProfile::FISCAL_YEARS.map { |code, label| [label, code] },
+              { selected: params[:fiscal_year_variant].presence || Onboarding::AccountingProfile::DEFAULT_FISCAL_YEAR } %>
+          </div>
+        </div>
+      </fieldset>
+
+      <%= f.submit "Create company books", class: "button button--primary button--full" %>
+    <% end %>
+    <p class="auth-card__footer">Already have an account? <%= link_to "Sign in", new_session_path %></p>
+  </section>
 </main>

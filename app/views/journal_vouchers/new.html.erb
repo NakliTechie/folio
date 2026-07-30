@@ -1,0 +1,69 @@
+<% content_for :title, "New journal voucher · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to transactions", journal_vouchers_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">New transaction</p>
+    <h1>Record a journal voucher</h1>
+    <p>Choose one account to debit and one to credit. You’ll review a balanced preview before posting.</p>
+  </header>
+
+  <section class="panel form-panel">
+    <%= form_with scope: :journal_voucher, url: journal_vouchers_path(tenant_route_options),
+      class: "stacked-form" do |form| %>
+      <div class="form-grid form-grid--two">
+        <div class="form-group">
+          <%= form.label :posting_date, "Posting date" %>
+          <%= form.date_field :posting_date, required: true,
+            value: params.dig(:journal_voucher, :posting_date).presence || Date.current.iso8601 %>
+        </div>
+        <div class="form-group">
+          <%= form.label :amount, "Amount (#{Current.tenant.functional_currency})" %>
+          <%= form.number_field :amount, required: true, min: "0.01", step: "0.01",
+            inputmode: "decimal", value: params.dig(:journal_voucher, :amount) %>
+        </div>
+      </div>
+      <div class="form-group">
+        <%= form.label :narration, "What is this transaction for?" %>
+        <%= form.text_field :narration, required: true, maxlength: 200,
+          placeholder: "For example, owner capital introduced",
+          value: params.dig(:journal_voucher, :narration) %>
+      </div>
+
+      <fieldset class="entry-fieldset">
+        <legend>Entry lines</legend>
+        <div class="entry-line entry-line--debit">
+          <span class="entry-line__side">Debit</span>
+          <div class="form-group">
+            <%= form.label :debit_account_code, "Debit account" %>
+            <%= form.select :debit_account_code,
+              @accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
+              { prompt: "Choose the account receiving value",
+                selected: params.dig(:journal_voucher, :debit_account_code) },
+              required: true %>
+          </div>
+        </div>
+        <div class="entry-line entry-line--credit">
+          <span class="entry-line__side">Credit</span>
+          <div class="form-group">
+            <%= form.label :credit_account_code, "Credit account" %>
+            <%= form.select :credit_account_code,
+              @accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
+              { prompt: "Choose the account giving value",
+                selected: params.dig(:journal_voucher, :credit_account_code) },
+              required: true %>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="balance-note">
+        <span aria-hidden="true">=</span>
+        <p><strong>Folio will keep this balanced.</strong> The same amount is debited and credited; nothing posts until you confirm the preview.</p>
+      </div>
+      <div class="form-actions">
+        <%= form.submit "Review voucher", class: "button button--primary" %>
+        <%= link_to "Cancel", journal_vouchers_path(tenant_route_options), class: "button button--quiet" %>
+      </div>
+    <% end %>
+  </section>
+</main>

@@ -14,10 +14,14 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "an authenticated user reaches the root" do
-    sign_in_as(users(:one))
+    org = Onboarding::SignUp.call(
+      email: "authenticated@x.com", password: "password123", org_name: "Authenticated Books"
+    )
+    sign_in_as(org.user)
     get root_path
     assert_response :success
-    assert_select "h1", "Folio"
+    assert_select "h1", "Your books, at a glance"
+    assert_select "nav[aria-label='Primary navigation']"
   end
 
   test "login with the correct password starts a session; a wrong password is rejected" do
@@ -41,5 +45,17 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
   test "the health endpoint is reachable without authentication" do
     get "/up"
     assert_response :success
+  end
+
+  test "public pages declare language, description, landmark, CSP, and a conventional favicon" do
+    get new_session_path
+    assert_response :success
+    assert_select "html[lang=en]"
+    assert_select "meta[name=description][content]"
+    assert_select "main#main-content"
+    assert_match "default-src 'self'", response.headers.fetch("Content-Security-Policy")
+
+    get "/favicon.ico"
+    assert_redirected_to "/icon.png"
   end
 end

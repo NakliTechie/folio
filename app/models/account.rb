@@ -5,5 +5,6 @@
 class Account < ApplicationRecord
   TYPES = %w[asset liability equity income expense].freeze
   validates :tenant_id, :code, :name, :account_type, presence: true
+  validates :code, uniqueness: { scope: :tenant_id }
   validates :account_type, inclusion: { in: TYPES }
 end

@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
-# The authenticated landing. Minimal for now — the app UI (Phase C) replaces it; it exists so
-# there is a `root_url` for the auth flow to return to after login.
-class HomeController < ApplicationController
+# The authenticated overview: company context, setup progress, and the next useful action.
+class HomeController < BrowserController
   def show
+    @entity = Entity.find_by(tenant_id: Current.tenant.id, code: "PRIMARY")
+    @accounts_count = Account.where(tenant_id: Current.tenant.id).count
+    @documents = Document.where(tenant_id: Current.tenant.id).order(created_at: :desc).limit(5)
+    @posted_count = Document.where(tenant_id: Current.tenant.id, state: %w[posted reversed]).count
   end
 end

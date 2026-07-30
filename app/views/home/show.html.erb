@@ -1,5 +1,138 @@
-<main>
-  <h1>Folio</h1>
-  <p>Signed in as <%= Current.session&.user&.email_address %>.</p>
-  <%= button_to "Sign out", session_path, method: :delete %>
+<% content_for :title, "Overview · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <section class="overview-hero">
+    <div>
+      <p class="eyebrow"><%= Current.tenant.name %> · <%= role_name %></p>
+      <h1>Your books, at a glance</h1>
+      <p class="lede">Signed in as <%= Current.user.email_address %>. Keep the setup moving or pick up where your team left off.</p>
+      <div class="action-row">
+        <% if permitted?("documents.post") %>
+          <%= link_to @posted_count.zero? ? "Record your first transaction" : "Record a transaction",
+            new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
+        <% end %>
+        <% if permitted?("reports.read") %>
+          <%= link_to "View trial balance", reports_path(tenant_route_options), class: "button button--secondary" %>
+        <% end %>
+      </div>
+    </div>
+    <div class="hero-summary" aria-label="Accounting profile">
+      <span class="hero-summary__label">Accounting profile</span>
+      <strong><%= Onboarding::AccountingProfile::JURISDICTIONS.fetch(@entity.jurisdiction_profile) %></strong>
+      <span><%= Current.tenant.functional_currency %> · <%= Onboarding::AccountingProfile::FISCAL_YEARS.fetch(@entity.fiscal_year_variant) %></span>
+    </div>
+  </section>
+
+  <section class="metric-grid" aria-label="Company summary">
+    <article class="metric-card">
+      <span class="metric-card__label">Accounts</span>
+      <strong><%= @accounts_count %></strong>
+      <%= link_to "Open chart", accounts_path(tenant_route_options) %>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Posted vouchers</span>
+      <strong><%= @posted_count %></strong>
+      <%= link_to "View transactions", journal_vouchers_path(tenant_route_options) %>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Email</span>
+      <strong><%= Current.user.verified? ? "Verified" : delivery_state_label(Current.user.verification_delivery_state) %></strong>
+      <span class="metric-card__hint"><%= Current.user.verified? ? "Account recovery is ready" : "Verification remains optional" %></span>
+    </article>
+  </section>
+
+  <div class="content-grid">
+    <section class="panel">
+      <div class="panel__header">
+        <div>
+          <p class="eyebrow">First run</p>
+          <h2>Setup checklist</h2>
+        </div>
+        <span class="progress-count"><%= @posted_count.positive? && Current.user.verified? ? "4" : @posted_count.positive? || Current.user.verified? ? "3" : "2" %>/4</span>
+      </div>
+      <ol class="checklist">
+        <li class="checklist__item checklist__item--done">
+          <span aria-hidden="true">✓</span>
+          <div><strong>Company created</strong><small><%= @entity.legal_name %></small></div>
+        </li>
+        <li class="checklist__item checklist__item--done">
+          <span aria-hidden="true">✓</span>
+          <div><strong>Chart ready</strong><small><%= @accounts_count %> starter accounts</small></div>
+        </li>
+        <li class="checklist__item <%= "checklist__item--done" if @posted_count.positive? %>">
+          <span aria-hidden="true"><%= @posted_count.positive? ? "✓" : "3" %></span>
+          <div>
+            <strong>Post a journal voucher</strong>
+            <small><%= @posted_count.positive? ? "Your ledger is active" : "Preview the balance before anything posts" %></small>
+          </div>
+        </li>
+        <li class="checklist__item <%= "checklist__item--done" if Current.user.verified? %>">
+          <span aria-hidden="true"><%= Current.user.verified? ? "✓" : "4" %></span>
+          <div><strong>Verify your email</strong><small>Keep account recovery dependable</small></div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="panel">
+      <div class="panel__header">
+        <div>
+          <p class="eyebrow">Activity</p>
+          <h2>Recent vouchers</h2>
+        </div>
+        <%= link_to "View all", journal_vouchers_path(tenant_route_options), class: "text-link" %>
+      </div>
+      <% if @documents.any? %>
+        <ul class="activity-list">
+          <% @documents.each do |document| %>
+            <li>
+              <%= link_to journal_voucher_path(document, tenant_route_options) do %>
+                <span>
+                  <strong><%= document.document_number || "Draft voucher" %></strong>
+                  <small><%= document.narration.presence || "No narration" %></small>
+                </span>
+                <span class="<%= status_class(document.state) %>"><%= document.state.humanize %></span>
+              <% end %>
+            </li>
+          <% end %>
+        </ul>
+      <% else %>
+        <div class="empty-state empty-state--compact">
+          <span class="empty-state__icon" aria-hidden="true">↗</span>
+          <h3>No vouchers yet</h3>
+          <p>Your first posted voucher will appear here and feed the trial balance.</p>
+        </div>
+      <% end %>
+    </section>
+  </div>
+
+  <% unless Current.user.verified? %>
+    <section class="panel verification-panel">
+      <div>
+        <p class="eyebrow">Account recovery</p>
+        <h2>Verify <%= Current.user.email_address %></h2>
+        <p>
+          <% case Current.user.verification_delivery_state %>
+          <% when "failed" %>
+            Delivery failed. Check the address and try again; you can continue using Folio meanwhile.
+          <% when "queued", "sending" %>
+            The verification email is queued. This page will show when delivery succeeds or fails.
+          <% when "sent" %>
+            The verification email was sent. Open its link within two days.
+          <% else %>
+            Send a verification email so password recovery stays dependable.
+          <% end %>
+        </p>
+      </div>
+      <div class="verification-panel__action">
+        <span class="<%= status_class(Current.user.verification_delivery_state) %>">
+          <%= delivery_state_label(Current.user.verification_delivery_state) %>
+        </span>
+        <%= button_to Current.user.verification_delivery_state == "not_sent" ? "Send verification" : "Resend verification",
+          verification_delivery_path,
+          method: :post,
+          params: tenant_route_options,
+          class: "button button--secondary" %>
+      </div>
+    </section>
+  <% end %>
 </main>

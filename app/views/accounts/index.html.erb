@@ -1,0 +1,34 @@
+<% content_for :title, "Chart of accounts · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Masters</p>
+      <h1>Chart of accounts</h1>
+      <p>Stable account codes used by vouchers and reports for <%= Current.tenant.name %>.</p>
+    </div>
+    <% if permitted?("accounts.manage") %>
+      <%= link_to "Add account", new_account_path(tenant_route_options), class: "button button--primary" %>
+    <% end %>
+  </header>
+
+  <section class="panel panel--table">
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Accounts for <%= Current.tenant.name %></caption>
+        <thead>
+          <tr><th scope="col">Code</th><th scope="col">Account</th><th scope="col">Type</th></tr>
+        </thead>
+        <tbody>
+          <% @accounts.each do |account| %>
+            <tr>
+              <td><span class="account-code"><%= account.code %></span></td>
+              <td><strong><%= account.name %></strong></td>
+              <td><span class="status-badge"><%= account.account_type.humanize %></span></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>

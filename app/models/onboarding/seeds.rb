@@ -13,8 +13,9 @@ module Onboarding
 
     module_function
 
-    def chart_of_accounts!(tenant)
+    def chart_of_accounts!(tenant, jurisdiction_profile: "IN")
       COA.each do |code, name, type|
+        name = "Tax Payable" if code == "2100" && jurisdiction_profile != "IN"
         Account.find_or_create_by!(tenant_id: tenant.id, code: code) { |a| a.name = name; a.account_type = type }
       end
     end
@@ -25,12 +26,12 @@ module Onboarding
       end
     end
 
-    def org_spine!(tenant)
+    def org_spine!(tenant, jurisdiction_profile: "IN", fiscal_year_variant: "IN_APR_MAR")
       entity = Entity.find_or_create_by!(tenant_id: tenant.id, code: "PRIMARY") do |record|
         record.legal_name = tenant.name
         record.functional_currency = tenant.functional_currency
-        record.fiscal_year_variant = "IN_APR_MAR"
-        record.jurisdiction_profile = "IN"
+        record.fiscal_year_variant = fiscal_year_variant
+        record.jurisdiction_profile = jurisdiction_profile
       end
       office = Office.find_or_create_by!(tenant_id: tenant.id, code: "PRIMARY") do |record|
         record.entity = entity

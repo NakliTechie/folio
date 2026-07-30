@@ -1,5 +1,14 @@
 Rails.application.routes.draw do
   root "home#show"
+  resources :accounts, only: %i[index new create]
+  resources :journal_vouchers, path: "transactions", only: %i[index show new create] do
+    member do
+      post :post
+      post :reverse
+    end
+  end
+  resource :reports, only: :show, controller: :reports
+  resource :team, only: :show, controller: :team
   namespace :api do
     namespace :v1 do
       get "tenant", to: "tenants#show"
@@ -18,7 +27,10 @@ Rails.application.routes.draw do
   end
   resource :registration, only: %i[new create]
   get "verify/:token", to: "registrations#verify", as: :verify_email
-  resources :invitations, only: :create
+  resource :verification_delivery, only: :create
+  resources :invitations, only: :create do
+    post :resend, on: :member
+  end
   get "invitations/:token/accept", to: "invitations#accept", as: :accept_invitation
   post "invitations/:token/accept", to: "invitations#do_accept"
   resource :session
@@ -28,6 +40,7 @@ Rails.application.routes.draw do
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
+  get "favicon.ico", to: redirect("/icon.png")
 
   # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
   # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
