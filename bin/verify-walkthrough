@@ -1,8 +1,10 @@
 #!/usr/bin/env ruby
 
 APP_ROOT = File.expand_path("..", __dir__)
-TESTS = %w[
+SYSTEM_TESTS = %w[
   test/system/walkthrough_test.rb
+].freeze
+FAST_TESTS = %w[
   test/integration/walkthrough_role_matrix_test.rb
   test/integration/authentication_flow_test.rb
   test/integration/onboarding_flow_test.rb
@@ -17,4 +19,7 @@ TESTS = %w[
 ].freeze
 
 Dir.chdir(APP_ROOT)
-exec File.join(APP_ROOT, "bin/rails"), "test", *TESTS
+rails = File.join(APP_ROOT, "bin/rails")
+abort "Browser walkthrough failed" unless system({ "PARALLEL_WORKERS" => "1" }, rails, "test", *SYSTEM_TESTS)
+
+exec rails, "test", *FAST_TESTS
