@@ -77,11 +77,9 @@ jobs:
       
       - name: Scan for known security vulnerabilities in gems used
         run: bin/bundler-audit
-      
-  # scan_js REMOVED 2026-07-28: it ran `bin/importmap audit`, but the importmap
-  # binstub was never generated (rails new --skip-bundle skipped the install
-  # generators), so the job exited 127 on every run. There is no JavaScript in
-  # this app yet. Restore it — with `bin/rails importmap:install` — when there is.
+
+      - name: Scan importmap packages for known vulnerabilities
+        run: bin/importmap audit
 
   lint:
     runs-on: ubuntu-latest
@@ -148,8 +146,8 @@ jobs:
           # REDIS_URL: redis://localhost:6379/0
         run: bin/rails db:test:prepare test
 
-  # system-test REMOVED 2026-07-28: it ran `bin/rails test:system` against a
-  # test/system/ directory that does not exist, failing with LoadError every
-  # run. There are zero application routes, so there is nothing to drive. This
-  # comes back with the entry system (Batch 4), which is the first thing a
-  # human can actually click through.
+      - name: Run browser journeys
+        env:
+          RAILS_ENV: test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432
+        run: bin/rails test:system
