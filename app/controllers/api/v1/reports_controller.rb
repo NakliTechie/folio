@@ -48,6 +48,31 @@ module Api
         }
       end
 
+      def day_book
+        to_date = report_date(:to, Date.current)
+        from_date = report_date(:from, to_date.beginning_of_month)
+        render json: {
+          day_book: Reports.day_book(Current.tenant.id, from_date: from_date, to_date: to_date)
+        }
+      rescue Date::Error, ArgumentError => e
+        render_error(e.message, :unprocessable_entity)
+      end
+
+      def gst_summary
+        to_date = report_date(:to, Date.current)
+        from_date = report_date(:from, to_date.beginning_of_month)
+        raise ArgumentError, "tax_registration_id is required" if params[:tax_registration_id].blank?
+
+        render json: {
+          gst_summary: Reports.gst_returns(
+            Current.tenant.id, tax_registration_id: params[:tax_registration_id],
+            from_date: from_date, to_date: to_date
+          )
+        }
+      rescue Date::Error, ArgumentError => e
+        render_error(e.message, :unprocessable_entity)
+      end
+
       private
 
       def fiscal_year_start(date)
@@ -55,6 +80,10 @@ module Api
         return Date.new(date.year, 1, 1) unless entity.fiscal_year_variant == "IN_APR_MAR"
 
         Date.new(date.month >= 4 ? date.year : date.year - 1, 4, 1)
+      end
+
+      def report_date(key, fallback)
+        params[key].present? ? Date.iso8601(params[key]) : fallback
       end
 
       def render_aged_open_items(role)

@@ -1054,6 +1054,13 @@ tfoot td {
   color: inherit;
 }
 
+.report-warning {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #efd79b;
+  background: #fff8df;
+  color: #6d4c0d;
+}
+
 .summary-strip {
   display: grid;
   overflow: hidden;

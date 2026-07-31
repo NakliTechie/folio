@@ -43,6 +43,34 @@ class ReportsController < BrowserController
     @ledger = Reports.party_ledger(Current.tenant.id, party_id: @selected_party.id) if @selected_party
   end
 
+  def day_book
+    @to_date = report_date(:to, Date.current)
+    @from_date = report_date(:from, @to_date.beginning_of_month)
+    @day_book = Reports.day_book(Current.tenant.id, from_date: @from_date, to_date: @to_date)
+  rescue ArgumentError => e
+    redirect_to day_book_report_path(tenant_route_options), alert: e.message unless params[:from].blank? && params[:to].blank?
+  end
+
+  def gst_summary
+    @to_date = report_date(:to, Date.current)
+    @from_date = report_date(:from, @to_date.beginning_of_month)
+    @gst_registrations = TaxRegistration.where(tenant_id: Current.tenant.id, kind: "GSTIN")
+      .order(:identifier, valid_from: :desc)
+    @selected_registration = if params[:tax_registration_id].present?
+      @gst_registrations.find(params[:tax_registration_id])
+    else
+      @gst_registrations.first
+    end
+    if @selected_registration
+      @gst_summary = Reports.gst_returns(
+        Current.tenant.id, tax_registration_id: @selected_registration.id,
+        from_date: @from_date, to_date: @to_date
+      )
+    end
+  rescue ArgumentError => e
+    redirect_to gst_summary_report_path(tenant_route_options), alert: e.message unless params[:from].blank? && params[:to].blank?
+  end
+
   private
 
   def report_date(key, fallback)

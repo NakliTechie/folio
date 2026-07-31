@@ -1,4 +1,4 @@
-<nav class="report-nav" aria-label="Financial reports">
+<nav class="report-nav" aria-label="Accounting reports">
   <%= link_to "Trial balance", reports_path(tenant_route_options),
     class: action_name == "show" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
   <%= link_to "Profit & loss", profit_and_loss_report_path(tenant_route_options),
@@ -11,4 +11,8 @@
     class: action_name == "aged_payables" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
   <%= link_to "Party ledger", party_ledger_report_path(tenant_route_options),
     class: action_name == "party_ledger" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
+  <%= link_to "Day book", day_book_report_path(tenant_route_options),
+    class: action_name == "day_book" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
+  <%= link_to "GST summary", gst_summary_report_path(tenant_route_options),
+    class: action_name == "gst_summary" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
 </nav>

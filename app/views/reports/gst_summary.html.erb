@@ -1,0 +1,128 @@
+<% content_for :title, "GST return summary · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= render "navigation" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">India GST</p>
+      <h1>GSTR-1 and GSTR-3B preparation</h1>
+      <p>Book-derived return-period totals for review. This page does not file a return or claim that purchase-book tax is eligible ITC.</p>
+    </div>
+  </header>
+
+  <% if @selected_registration %>
+    <section class="panel report-filter">
+      <%= form_with url: gst_summary_report_path, method: :get, class: "filter-form" do |form| %>
+        <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+        <div class="form-group"><%= form.label :tax_registration_id, "GST registration" %>
+          <%= form.select :tax_registration_id,
+            @gst_registrations.map { |registration| ["#{registration.identifier} · State #{registration.state_code}", registration.id] },
+            { selected: @selected_registration.id }, required: true %></div>
+        <div class="form-group"><%= form.label :from, "From" %><%= form.date_field :from, value: @from_date, required: true %></div>
+        <div class="form-group"><%= form.label :to, "To" %><%= form.date_field :to, value: @to_date, required: true %></div>
+        <%= form.submit "Prepare summary", class: "button button--secondary" %>
+      <% end %>
+    </section>
+
+    <% gstr1 = @gst_summary.fetch(:gstr_1) %>
+    <% gstr3b = @gst_summary.fetch(:gstr_3b) %>
+    <% outward = gstr3b.fetch(:table_3_1_a_outward_taxable) %>
+    <% input_tax = gstr3b.fetch(:table_4_a_5_book_input_tax_reference) %>
+
+    <section class="summary-strip" aria-label="GST period summary">
+      <div><span>GSTIN</span><strong><%= @selected_registration.identifier %></strong><small>State <%= @selected_registration.state_code %></small></div>
+      <div><span>Book-adjusted outward taxable</span><strong><%= money_amount(outward[:taxable_value_minor]) %></strong><small>GSTR-3B 3.1(a) preparation</small></div>
+      <div><span>Book-adjusted output tax</span><strong><%= money_amount(outward[:tax].values.sum) %></strong><small>Before filing review</small></div>
+      <div><span>Purchase-book input tax</span><strong><%= money_amount(input_tax[:tax].values.sum) %></strong><small>Not yet eligible ITC</small></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-heading"><div><p class="eyebrow">GSTR-1</p><h2>Outward-supply preparation</h2></div></div>
+      <p class="table-note">Folio currently emits governed regular B2B service invoices in table 4A and registered credit notes in table 9B. Internal reversals are isolated for operator review because their GST-portal treatment is not inferred.</p>
+    </section>
+
+    <% [
+      ["Table 4A · B2B regular invoices", gstr1.fetch(:table_4a_b2b_regular), false],
+      ["Table 9B · Registered credit notes", gstr1.fetch(:table_9b_credit_notes_registered), true]
+    ].each do |title, table, credit| %>
+      <section class="panel panel--table">
+        <div class="section-heading"><div><h2><%= title %></h2><p><%= table[:document_count] %> document<%= "s" unless table[:document_count] == 1 %></p></div></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th scope="col">Date</th><th scope="col">Document</th><th scope="col">Recipient</th><th scope="col">Place</th>
+            <th scope="col">Taxable value</th><th scope="col">IGST</th><th scope="col">CGST</th><th scope="col">SGST/UTGST</th><th scope="col">Cess</th></tr></thead>
+          <tbody>
+            <% table[:rows].each do |row| %>
+              <tr><td><%= row[:document_date] %></td><td><strong><%= row[:document_number] %></strong>
+                <% if row[:source_document_number] %><br><small>Against <%= row[:source_document_number] %></small><% end %></td>
+                <td><%= row[:recipient_name] %><br><small><%= row[:recipient_gstin] %></small></td>
+                <td><%= row[:place_of_supply_state_code] %></td>
+                <td class="money"><%= money_amount(row[:taxable_value_minor]) %></td>
+                <td class="money"><%= money_amount(row.dig(:tax, :igst)) %></td>
+                <td class="money"><%= money_amount(row.dig(:tax, :cgst)) %></td>
+                <td class="money"><%= money_amount(row.dig(:tax, :sgst) + row.dig(:tax, :utgst)) %></td>
+                <td class="money"><%= money_amount(row.dig(:tax, :cess)) %></td></tr>
+            <% end %>
+          </tbody>
+          <tfoot><tr><th scope="row" colspan="4"><%= credit ? "Credit-note total" : "Invoice total" %></th>
+            <td class="money"><%= money_amount(table.dig(:totals, :taxable_value_minor)) %></td>
+            <td class="money"><%= money_amount(table.dig(:totals, :tax, :igst)) %></td>
+            <td class="money"><%= money_amount(table.dig(:totals, :tax, :cgst)) %></td>
+            <td class="money"><%= money_amount(table.dig(:totals, :tax, :sgst) + table.dig(:totals, :tax, :utgst)) %></td>
+            <td class="money"><%= money_amount(table.dig(:totals, :tax, :cess)) %></td></tr></tfoot>
+        </table></div>
+      </section>
+    <% end %>
+
+    <% reversal_review = gstr1.fetch(:internal_reversal_review) %>
+    <% if reversal_review[:document_count].positive? %>
+      <section class="panel panel--table">
+        <div class="report-warning" role="note"><strong>Internal reversal review required.</strong>
+          These compensating entries reduce the books, but must be matched to the appropriate GST-portal correction before filing.</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th scope="col">Date</th><th scope="col">Reversal</th><th scope="col">Original</th><th scope="col">Taxable reduction</th><th scope="col">Tax reduction</th></tr></thead>
+          <tbody><% reversal_review[:rows].each do |row| %><tr>
+            <td><%= row[:document_date] %></td><td><%= row[:document_number] %></td><td><%= row[:source_document_number] %></td>
+            <td class="money"><%= money_amount(row[:taxable_value_minor].abs) %></td><td class="money"><%= money_amount(row[:tax].values.sum.abs) %></td>
+          </tr><% end %></tbody>
+        </table></div>
+      </section>
+    <% end %>
+
+    <section class="panel panel--table">
+      <div class="section-heading"><div><h2>HSN/SAC summary</h2><p>Invoices net of registered credit notes</p></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">HSN/SAC</th><th scope="col">UQC</th><th scope="col">Rate</th><th scope="col">Quantity</th><th scope="col">Taxable value</th><th scope="col">Tax</th></tr></thead>
+        <tbody><% gstr1.fetch(:hsn_summary).each do |row| %><tr>
+          <td><%= row[:hsn_sac_code] %></td><td><%= row[:uom] %></td><td><%= number_with_precision(row[:tax_rate_basis_points] / 100.0, precision: 2) %>%</td>
+          <td><%= row[:quantity].to_s("F") %></td><td class="money"><%= money_amount(row[:taxable_value_minor]) %></td>
+          <td class="money"><%= money_amount(row[:tax].values.sum) %></td>
+        </tr><% end %></tbody>
+      </table></div>
+    </section>
+
+    <section class="panel panel--table">
+      <div class="section-heading"><div><p class="eyebrow">GSTR-3B</p><h2>Return preparation</h2></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Table</th><th scope="col">Basis</th><th scope="col">Taxable value</th><th scope="col">IGST</th><th scope="col">CGST</th><th scope="col">SGST/UTGST</th><th scope="col">Cess</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">3.1(a) Outward taxable supplies</th><td>Book-adjusted invoices, credit notes and flagged reversals</td>
+            <td class="money"><%= money_amount(outward[:taxable_value_minor]) %></td><td class="money"><%= money_amount(outward.dig(:tax, :igst)) %></td>
+            <td class="money"><%= money_amount(outward.dig(:tax, :cgst)) %></td><td class="money"><%= money_amount(outward.dig(:tax, :sgst) + outward.dig(:tax, :utgst)) %></td>
+            <td class="money"><%= money_amount(outward.dig(:tax, :cess)) %></td></tr>
+          <tr><th scope="row">4(A)(5) All other ITC</th><td><strong>Reference only:</strong> purchase books require GSTR-2B and eligibility review</td>
+            <td class="money"><%= money_amount(input_tax[:taxable_value_minor]) %></td><td class="money"><%= money_amount(input_tax.dig(:tax, :igst)) %></td>
+            <td class="money"><%= money_amount(input_tax.dig(:tax, :cgst)) %></td><td class="money"><%= money_amount(input_tax.dig(:tax, :sgst) + input_tax.dig(:tax, :utgst)) %></td>
+            <td class="money"><%= money_amount(input_tax.dig(:tax, :cess)) %></td></tr>
+        </tbody>
+      </table></div>
+      <p class="table-note"><strong>Preparation only.</strong> Reconcile outward values to the GST portal and input-tax values to GSTR-2B, eligibility, reversals and reclaims before filing.</p>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">GST</span>
+      <h2>Add a GST registration first</h2>
+      <p>Return preparation is registration-specific. Add the company GSTIN and its effective dates before running this report.</p>
+      <% if permitted?("tax.setup") %><%= link_to "Open tax setup", tax_registrations_path(tenant_route_options), class: "button button--primary" %><% end %>
+    </section>
+  <% end %>
+</main>

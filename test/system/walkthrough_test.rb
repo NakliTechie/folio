@@ -99,7 +99,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     )
     entity = Entity.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
     office = Office.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
-    TaxRegistrations::Manage.create!(
+    registration = TaxRegistrations::Manage.create!(
       tenant: org.tenant, entity: entity,
       attributes: {
         kind: "GSTIN", identifier: "27AAPFU0939F1ZV", jurisdiction: "IN-MH",
@@ -173,6 +173,15 @@ class WalkthroughTest < ApplicationSystemTestCase
 
     assert_selector "[role=status]", text: /reversed.*open receivable cleared/i
     assert_selector ".status-badge--danger", text: "Reversed"
+
+    visit gst_summary_report_path(
+      tenant_id: org.tenant.id, tax_registration_id: registration.id,
+      from: "2026-07-01", to: "2026-07-31"
+    )
+    assert_selector "h1", text: "GSTR-1 and GSTR-3B preparation"
+    assert_text "Internal reversal review required"
+    click_link "Day book"
+    assert_selector "h1", text: "Day book"
   end
 
   test "owner issues and prints a partial credit note" do

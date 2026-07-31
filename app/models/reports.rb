@@ -62,6 +62,17 @@ module Reports
     PartyLedger.call(tenant_id: tenant_id, party_id: party_id)
   end
 
+  def day_book(tenant_id, from_date:, to_date:)
+    DayBook.call(tenant_id: tenant_id, from_date: from_date, to_date: to_date)
+  end
+
+  def gst_returns(tenant_id, tax_registration_id:, from_date:, to_date:)
+    GstReturns.call(
+      tenant_id: tenant_id, tax_registration_id: tax_registration_id,
+      from_date: from_date, to_date: to_date
+    )
+  end
+
   def base(tenant_id)
     EntryLine.where(tenant_id: tenant_id).joins(ACCOUNT_JOIN).joins(AMOUNT_JOIN)
   end

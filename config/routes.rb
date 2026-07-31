@@ -70,6 +70,8 @@ Rails.application.routes.draw do
   get "reports/aged-receivables", to: "reports#aged_receivables", as: :aged_receivables_report
   get "reports/aged-payables", to: "reports#aged_payables", as: :aged_payables_report
   get "reports/party-ledger", to: "reports#party_ledger", as: :party_ledger_report
+  get "reports/day-book", to: "reports#day_book", as: :day_book_report
+  get "reports/gst-summary", to: "reports#gst_summary", as: :gst_summary_report
   resource :reports, only: :show, controller: :reports
   resource :team, only: :show, controller: :team
   namespace :api do
@@ -88,6 +90,8 @@ Rails.application.routes.draw do
       get "reports/aged_receivables", to: "reports#aged_receivables"
       get "reports/aged_payables", to: "reports#aged_payables"
       get "reports/party_ledger", to: "reports#party_ledger"
+      get "reports/day_book", to: "reports#day_book"
+      get "reports/gst_summary", to: "reports#gst_summary"
       resources :documents, only: %i[show create] do
         member do
           post :simulate

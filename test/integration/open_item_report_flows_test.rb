@@ -15,7 +15,7 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
       address_line1: "1 Ledger Lane", city: "Mumbai", postal_code: "400001",
       state_code: "27", country_code: "IN"
     )
-    registration = TaxRegistrations::Manage.create!(
+    @registration = TaxRegistrations::Manage.create!(
       tenant: @org.tenant, entity: entity,
       attributes: {
         kind: "GSTIN", identifier: "27AAPFU0939F1ZV", jurisdiction: "IN-MH",
@@ -24,8 +24,8 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
       office_ids: [ office.id ], actor: @org.user
     )
     @customer = create_party("C-001", "Acme Customer", "customer", "27AAPFU0939F1ZV", "27")
-    vendor = create_party("V-001", "Acme Vendor", "vendor", "29AAAAA0300L1Z8", "29")
-    service = Items::Manage.create!(
+    @vendor = create_party("V-001", "Acme Vendor", "vendor", "29AAAAA0300L1Z8", "29")
+    @service = Items::Manage.create!(
       tenant: @org.tenant,
       attributes: {
         code: "CONSULT", name: "Consulting services", item_type: "service",
@@ -34,22 +34,22 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
       },
       actor: @org.user
     )
-    invoice = SalesInvoices::BuildDraft.call(
-      tenant: @org.tenant, party_id: @customer.id, tax_registration_id: registration.id,
+    @invoice = SalesInvoices::BuildDraft.call(
+      tenant: @org.tenant, party_id: @customer.id, tax_registration_id: @registration.id,
       document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
       place_of_supply_state_code: "27",
-      lines: [ { item_id: service.id, quantity: "2", unit_price: "50.00" } ]
+      lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
     )
-    Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+    Documents::Post.call(@invoice, actor: "u:#{@org.user.id}")
     bill = PurchaseBills::BuildDraft.call(
-      tenant: @org.tenant, party_id: vendor.id, tax_registration_id: registration.id,
+      tenant: @org.tenant, party_id: @vendor.id, tax_registration_id: @registration.id,
       document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
       place_of_supply_state_code: "27", external_reference: "V-INV-001",
-      lines: [ { item_id: service.id, quantity: "2", unit_price: "50.00" } ]
+      lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
     )
     Documents::Post.call(bill, actor: "u:#{@org.user.id}")
     receivable = EntryLine.joins(:entry).find_by!(
-      entries: { document_id: invoice.id }, account_code: "1200"
+      entries: { document_id: @invoice.id }, account_code: "1200"
     )
     receipt = Settlements::BuildDraft.call(
       tenant: @org.tenant, doc_type: "RC", document_date: Date.new(2026, 8, 15),
@@ -106,6 +106,88 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
     sign_out
     sign_in_as(other.user)
     get "/api/v1/reports/party_ledger", params: { party_id: @customer.id }
+    assert_response :not_found
+  end
+
+  test "browser and API expose a balanced day book and registration-scoped GST preparation" do
+    get day_book_report_path, params: { from: "2026-07-01", to: "2026-08-31" }
+    assert_response :success
+    assert_select "h1", "Day book"
+    assert_select ".summary-strip", text: /3.*INR 276\.00.*INR 276\.00/m
+    assert_select "tbody tr", count: 3
+
+    get "/api/v1/reports/day_book", params: { from: "2026-07-01", to: "2026-08-31" }
+    assert_response :success
+    day_book = JSON.parse(response.body).fetch("day_book")
+    assert_equal 3, day_book.fetch("rows").size
+    assert_equal day_book.fetch("debit_minor"), day_book.fetch("credit_minor")
+
+    get gst_summary_report_path, params: {
+      tax_registration_id: @registration.id, from: "2026-07-01", to: "2026-07-31"
+    }
+    assert_response :success
+    assert_select "h1", "GSTR-1 and GSTR-3B preparation"
+    assert_select "h2", text: /Table 4A/
+    assert_select "th", text: /3\.1\(a\) Outward taxable supplies/
+    assert_select ".table-note", text: /Reconcile.*GSTR-2B.*before filing/i
+
+    get "/api/v1/reports/gst_summary", params: {
+      tax_registration_id: @registration.id, from: "2026-07-01", to: "2026-07-31"
+    }
+    assert_response :success
+    summary = JSON.parse(response.body).fetch("gst_summary")
+    assert_equal 10_000, summary.dig("gstr_1", "table_4a_b2b_regular", "totals", "taxable_value_minor")
+    assert_equal 900, summary.dig("gstr_3b", "table_3_1_a_outward_taxable", "tax", "cgst")
+    assert_equal 1_800,
+      summary.dig("gstr_3b", "table_4_a_5_book_input_tax_reference", "tax", "igst")
+    assert_equal "requires_gstr_2b_and_eligibility_review", summary.dig("gstr_3b", "input_tax_status")
+  end
+
+  test "GST preparation nets credit notes and negative postings while isolating reversal review" do
+    credit_note = CreditNotes::BuildDraft.call(
+      tenant: @org.tenant, invoice_id: @invoice.id,
+      document_date: Date.new(2026, 7, 31), reason_code: "service_deficiency",
+      lines: [ { document_line_id: @invoice.document_lines.first.id, quantity: "0.5" } ]
+    )
+    Documents::Post.call(credit_note, actor: "u:#{@org.user.id}")
+
+    reversed_invoice = SalesInvoices::BuildDraft.call(
+      tenant: @org.tenant, party_id: @customer.id, tax_registration_id: @registration.id,
+      document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
+      place_of_supply_state_code: "27",
+      lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
+    )
+    Documents::Post.call(reversed_invoice, actor: "u:#{@org.user.id}")
+    Documents::Reverse.call(reversed_invoice, actor: "u:#{@org.user.id}", on: Date.new(2026, 7, 31))
+
+    report = Reports.gst_returns(
+      @org.tenant.id, tax_registration_id: @registration.id,
+      from_date: Date.new(2026, 7, 1), to_date: Date.new(2026, 7, 31)
+    )
+    assert_equal 2, report.dig(:gstr_1, :table_4a_b2b_regular, :document_count)
+    assert_equal 1, report.dig(:gstr_1, :table_9b_credit_notes_registered, :document_count)
+    assert_equal 1, report.dig(:gstr_1, :internal_reversal_review, :document_count)
+    assert_equal(-10_000, report.dig(:gstr_1, :internal_reversal_review, :totals, :taxable_value_minor))
+    assert_equal 7_500, report.dig(:gstr_1, :book_adjusted_outward, :taxable_value_minor)
+    assert_equal 675, report.dig(:gstr_3b, :table_3_1_a_outward_taxable, :tax, :cgst)
+    assert_equal 3.5.to_d, report.dig(:gstr_1, :hsn_summary, 0, :quantity)
+  end
+
+  test "statutory reports reject invalid periods and cross-tenant registrations" do
+    get "/api/v1/reports/day_book", params: { from: "2026-08-01", to: "2026-07-01" }
+    assert_response :unprocessable_entity
+    assert_match(/from date/, JSON.parse(response.body).fetch("error"))
+
+    other = Onboarding::SignUp.call(
+      email: "gst-report-other@folio.invalid",
+      password: "correct-horse-battery",
+      org_name: "GST Report Other"
+    )
+    sign_out
+    sign_in_as(other.user)
+    get "/api/v1/reports/gst_summary", params: {
+      tax_registration_id: @registration.id, from: "2026-07-01", to: "2026-07-31"
+    }
     assert_response :not_found
   end
 
