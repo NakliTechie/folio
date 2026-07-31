@@ -4,6 +4,7 @@ class User < ApplicationRecord
     passwordpassword password1234567 qwertyuiopasdfg
   ].freeze
   VERIFICATION_DELIVERY_STATES = %w[not_sent queued sending sent failed].freeze
+  DELIVERY_COOLDOWN = 1.minute
 
   has_secure_password
   has_many :sessions, dependent: :destroy
@@ -23,8 +24,14 @@ class User < ApplicationRecord
   def verified? = verified_at.present?
 
   def queue_verification_delivery!
-    update!(verification_delivery_state: "queued")
-    VerificationDeliveryJob.perform_later(id)
+    queued = with_lock do
+      next false if verified? || delivery_in_flight? || delivery_cooling_down?
+
+      update!(verification_delivery_state: "queued", verification_delivery_attempted_at: Time.current)
+      true
+    end
+    VerificationDeliveryJob.perform_later(id) if queued
+    queued
   end
 
   private
@@ -34,5 +41,13 @@ class User < ApplicationRecord
     return unless TRIVIAL_PASSWORDS.include?(normalized) || normalized.chars.uniq.one?
 
     errors.add(:password, "is too easy to guess")
+  end
+
+  def delivery_in_flight?
+    %w[queued sending].include?(verification_delivery_state)
+  end
+
+  def delivery_cooling_down?
+    verification_delivery_attempted_at && verification_delivery_attempted_at > DELIVERY_COOLDOWN.ago
   end
 end

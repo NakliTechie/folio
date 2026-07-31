@@ -668,6 +668,18 @@ input[type="submit"]:hover {
   padding: 1.35rem;
 }
 
+.lifecycle-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+.lifecycle-panel h2,
+.lifecycle-panel p:last-child {
+  margin-bottom: 0;
+}
+
 .panel--table {
   padding: 0;
   overflow: hidden;
@@ -871,6 +883,78 @@ input[type="submit"]:hover {
 .table-wrap {
   width: 100%;
   overflow-x: auto;
+}
+
+.opening-balance-grid input[type="number"] {
+  min-width: 8.5rem;
+}
+
+.report-nav {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.3rem;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  gap: 0.2rem;
+}
+
+.report-nav__link {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.report-nav__link:hover,
+.report-nav__link--active {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+
+.report-filter,
+.filter-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.report-filter {
+  justify-content: space-between;
+}
+
+.filter-form .form-group {
+  min-width: 11rem;
+  margin: 0;
+}
+
+.statement-label--depth-1 {
+  padding-left: 2.4rem;
+}
+
+.statement-label--depth-2 {
+  padding-left: 3.8rem;
+}
+
+.statement-row--total td {
+  background: #f7f8f5;
+  font-weight: 800;
+}
+
+.statement-result th,
+.statement-result td {
+  border-top: 2px solid var(--ink);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1rem;
 }
 
 table {
@@ -1457,9 +1541,16 @@ fieldset {
 
   .page-heading,
   .verification-panel,
-  .posting-panel {
+  .posting-panel,
+  .lifecycle-panel,
+  .report-filter,
+  .filter-form {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .report-filter small {
+    align-self: flex-start;
   }
 
   .verification-panel__action {

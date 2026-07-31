@@ -1,21 +1,36 @@
 Rails.application.routes.draw do
   root "home#show"
-  resources :accounts, only: %i[index new create]
+  resources :accounts, only: %i[index new create edit update] do
+    member do
+      patch :deactivate
+      patch :reactivate
+    end
+  end
   resources :journal_vouchers, path: "transactions", only: %i[index show new create] do
     member do
       post :post
       post :reverse
     end
   end
+  resources :opening_balances, path: "opening-balances", only: %i[index show new create] do
+    member do
+      post :post
+      post :reverse
+    end
+  end
+  get "reports/profit-and-loss", to: "reports#profit_and_loss", as: :profit_and_loss_report
+  get "reports/balance-sheet", to: "reports#balance_sheet", as: :balance_sheet_report
   resource :reports, only: :show, controller: :reports
   resource :team, only: :show, controller: :team
   namespace :api do
     namespace :v1 do
       get "tenant", to: "tenants#show"
-      resources :accounts, only: %i[index show create]
+      resources :accounts, only: %i[index show create update]
       resources :document_types, only: :index
       get "reports/trial_balance", to: "reports#trial_balance"
       get "reports/account_type_totals", to: "reports#account_type_totals"
+      get "reports/profit_and_loss", to: "reports#profit_and_loss"
+      get "reports/balance_sheet", to: "reports#balance_sheet"
       resources :documents, only: %i[show create] do
         member do
           post :simulate
@@ -43,10 +58,6 @@ Rails.application.routes.draw do
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
   get "favicon.ico", to: redirect("/icon.png")
-
-  # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
-  # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
-  # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
   # Defines the root path route ("/")
   # root "posts#index"

@@ -29,4 +29,12 @@ module ApplicationHelper
   def navigation_class(controller)
     controller_name == controller ? "app-nav__link app-nav__link--active" : "app-nav__link"
   end
+
+  def browser_document_path(document)
+    if document.doc_type == "OB"
+      opening_balance_path(document, tenant_route_options)
+    else
+      journal_voucher_path(document, tenant_route_options)
+    end
+  end
 end

@@ -59,6 +59,66 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "draft creation rejects empty zero invalid and fiscally inconsistent documents" do
+    sign_in_as(@acme.user)
+
+    assert_no_difference "Document.count" do
+      post "/api/v1/documents", params: jv_params.merge(lines: [])
+    end
+    assert_response :unprocessable_entity
+    assert_match(/at least two non-zero lines/, JSON.parse(response.body)["error"])
+
+    assert_no_difference "Document.count" do
+      post "/api/v1/documents", params: jv_params.merge(
+        lines: [ { account_code: "1000", amount_minor: "not-a-number" },
+                 { account_code: "4000", amount_minor: 0 } ]
+      )
+    end
+    assert_response :unprocessable_entity
+    assert_match(/must be an integer/, JSON.parse(response.body)["error"])
+
+    assert_no_difference "Document.count" do
+      post "/api/v1/documents", params: jv_params.merge(fiscal_year: 1999)
+    end
+    assert_response :unprocessable_entity
+    assert_match(/does not match posting date/, JSON.parse(response.body)["error"])
+
+    assert_no_difference "Document.count" do
+      post "/api/v1/documents", params: jv_params.except(:posting_date)
+    end
+    assert_response :unprocessable_entity
+    assert_match(/posting date must be a valid ISO date/, JSON.parse(response.body)["error"])
+  end
+
+  test "draft currency defaults to the tenant profile and rejects incompatible currency metadata" do
+    usd = Onboarding::SignUp.call(
+      email: "usd-books@x.com", password: "correct-horse-battery", org_name: "USD Books",
+      jurisdiction_profile: "US", functional_currency: "USD", fiscal_year_variant: "CAL"
+    )
+    sign_out
+    sign_in_as(usd.user)
+    params = {
+      doc_type: "JV", fiscal_year: 2026, document_date: "2026-06-01", posting_date: "2026-06-01",
+      lines: [ { account_code: "1000", amount_minor: 100_000 },
+               { account_code: "4000", amount_minor: -100_000 } ]
+    }
+
+    post "/api/v1/documents", params: params
+    assert_response :created
+    document = Document.find(JSON.parse(response.body).dig("document", "id"))
+    assert_equal [ [ "USD", 2 ] ],
+      document.document_lines.reorder(nil).distinct.pluck(:currency, :minor_unit_exponent)
+
+    assert_no_difference "Document.count" do
+      post "/api/v1/documents", params: params.merge(
+        lines: [ { account_code: "1000", amount_minor: 100_000, currency: "INR", minor_unit_exponent: 0 },
+                 { account_code: "4000", amount_minor: -100_000, currency: "INR", minor_unit_exponent: 0 } ]
+      )
+    end
+    assert_response :unprocessable_entity
+    assert_match(/must use USD with minor-unit exponent 2/, JSON.parse(response.body)["error"])
+  end
+
   test "a closed period is a JSON 409 and leaves the document draft" do
     sign_in_as(@acme.user)
     id = create_jv
@@ -139,6 +199,67 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
       post "/api/v1/accounts", params: { code: "6000", name: "Rent", account_type: "expense" }
     end
     assert_response :created
+    account = Account.find_by!(tenant_id: @acme.tenant.id, code: "6000")
+    patch "/api/v1/accounts/#{account.id}", params: { name: "Premises rent", active: false }
+    assert_response :success
+    assert_equal false, JSON.parse(response.body).dig("account", "active")
+
+    %w[2 10 AR].each do |code|
+      post "/api/v1/accounts", params: { code: code, name: "Account #{code}", account_type: "asset" }
+      assert_response :created
+    end
+    get "/api/v1/accounts"
+    ordered_codes = JSON.parse(response.body)["accounts"].filter_map do |item|
+      item["code"] if %w[2 10 AR].include?(item["code"])
+    end
+    assert_equal %w[2 10 AR], ordered_codes
+
+    DocumentType.find_by!(tenant_id: @acme.tenant.id, code: "OB").update!(active: false)
+    get "/api/v1/document_types"
+    refute_includes JSON.parse(response.body)["document_types"].pluck("code"), "OB"
+  end
+
+  test "financial statement endpoints use dated versioned layouts" do
+    sign_in_as(@acme.user)
+    id = create_jv
+    post "/api/v1/documents/#{id}/post"
+
+    get "/api/v1/reports/profit_and_loss", params: { from: "2025-04-01", to: "2026-03-31" }
+    assert_response :success
+    profit = JSON.parse(response.body)["profit_and_loss"]
+    assert_equal 100_000, profit["net_income_minor"]
+    assert_equal 1, profit.dig("version", "version")
+
+    get "/api/v1/reports/balance_sheet", params: { as_of: "2025-06-01" }
+    assert_response :success
+    balance = JSON.parse(response.body)["balance_sheet"]
+    assert_equal 0, balance["difference_minor"]
+  end
+
+  test "a deactivated account cannot be posted through the generic document API" do
+    sign_in_as(@acme.user)
+    Account.find_by!(tenant_id: @acme.tenant.id, code: "1000").update!(active: false)
+
+    post "/api/v1/documents", params: jv_params
+
+    assert_response :unprocessable_entity
+    assert_match(/account 1000 is unavailable/, JSON.parse(response.body)["error"])
+  end
+
+  test "reversal remains available after deactivation and preserves resolved authority" do
+    sign_in_as(@acme.user)
+    id = create_jv
+    post "/api/v1/documents/#{id}/post"
+    original = Document.find(id)
+    Account.find_by!(tenant_id: @acme.tenant.id, code: "1000").update!(active: false)
+
+    post "/api/v1/documents/#{id}/reverse"
+
+    assert_response :success
+    reversal = original.reload.reversed_by
+    entry = Entry.find(reversal.posted_entry_id)
+    assert_equal Rbac::Presets.role_for(@acme.tenant, "owner").id, entry.role_template_id
+    assert entry.entry_lines.all?(&:is_negative_posting)
   end
 
   test "state-changing API writes are CSRF-protected" do

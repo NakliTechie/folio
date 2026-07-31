@@ -7,9 +7,14 @@
       <h1>Chart of accounts</h1>
       <p>Stable account codes used by vouchers and reports for <%= Current.tenant.name %>.</p>
     </div>
-    <% if permitted?("accounts.manage") %>
-      <%= link_to "Add account", new_account_path(tenant_route_options), class: "button button--primary" %>
-    <% end %>
+    <div class="action-row">
+      <% if permitted?("accounts.manage") && permitted?("documents.post") %>
+        <%= link_to "Opening balances", opening_balances_path(tenant_route_options), class: "button button--secondary" %>
+      <% end %>
+      <% if permitted?("accounts.manage") %>
+        <%= link_to "Add account", new_account_path(tenant_route_options), class: "button button--primary" %>
+      <% end %>
+    </div>
   </header>
 
   <section class="panel panel--table">
@@ -17,7 +22,8 @@
       <table>
         <caption class="sr-only">Accounts for <%= Current.tenant.name %></caption>
         <thead>
-          <tr><th scope="col">Code</th><th scope="col">Account</th><th scope="col">Type</th></tr>
+          <tr><th scope="col">Code</th><th scope="col">Account</th><th scope="col">Type</th>
+            <th scope="col">Status</th><th scope="col"><span class="sr-only">Action</span></th></tr>
         </thead>
         <tbody>
           <% @accounts.each do |account| %>
@@ -25,6 +31,11 @@
               <td><span class="account-code"><%= account.code %></span></td>
               <td><strong><%= account.name %></strong></td>
               <td><span class="status-badge"><%= account.account_type.humanize %></span></td>
+              <td><span class="<%= account.active? ? "status-badge status-badge--success" : "status-badge" %>">
+                <%= account.active? ? "Active" : "Inactive" %></span></td>
+              <td><% if permitted?("accounts.manage") %>
+                <%= link_to "Edit", edit_account_path(account, tenant_route_options), class: "text-link" %>
+              <% end %></td>
             </tr>
           <% end %>
         </tbody>

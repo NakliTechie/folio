@@ -32,7 +32,9 @@ module Api
       end
 
       def reverse
-        Documents::Reverse.call(@document, actor: "u:#{current_user.id}")
+        Documents::Reverse.call(
+          @document, actor: "u:#{current_user.id}", authorize: { user: current_user }
+        )
         render json: { document: document_json(@document.reload) }
       rescue Documents::Reverse::NotReversible => e
         render_error(e.message, :conflict)
@@ -45,31 +47,37 @@ module Api
       end
 
       def build_document
-        type = DocumentType.where(tenant_id: Current.tenant.id).find_by!(code: params[:doc_type])
-        entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
-        office = Office.find_by!(tenant_id: Current.tenant.id, entity_id: entity.id, code: "PRIMARY")
-        ActiveRecord::Base.transaction do
-          doc = Document.create!(
-            tenant_id: Current.tenant.id, entity_id: entity.id, office_id: office.id,
-            doc_type: type.code, document_type_id: type.id, fiscal_year: params[:fiscal_year],
-            document_date: params[:document_date], posting_date: params[:posting_date],
-            narration: params[:narration], state: "draft"
-          )
-          Array(params[:lines]).each_with_index do |l, i|
-            doc.document_lines.create!(
-              tenant_id: Current.tenant.id, line_no: i + 1, account_code: l[:account_code],
-              amount_minor: l[:amount_minor], currency: l[:currency] || "INR",
-              minor_unit_exponent: l[:minor_unit_exponent] || 2, narration: l[:narration]
-            )
-          end
-          doc
+        Documents::BuildDraft.call(
+          tenant: Current.tenant,
+          doc_type: params[:doc_type],
+          fiscal_year: params[:fiscal_year],
+          document_date: params[:document_date],
+          posting_date: params[:posting_date],
+          narration: params[:narration],
+          lines: document_lines_params
+        )
+      end
+
+      def document_lines_params
+        raw_lines = params[:lines]
+        return [] if raw_lines.nil?
+        raise Documents::InvalidDocument, "lines must be an array" unless raw_lines.is_a?(Array)
+
+        raw_lines.reject(&:blank?).map do |line|
+          raise Documents::InvalidDocument, "each line must be an object" unless line.respond_to?(:permit)
+
+          line.permit(:account_code, :amount_minor, :currency, :minor_unit_exponent, :narration, extra: {}).to_h
         end
       end
 
       def document_json(d)
         { id: d.id, doc_type: d.doc_type, state: d.state, document_number: d.document_number,
           posted_entry_id: d.posted_entry_id, reversed_by_document_id: d.reversed_by_document_id,
-          lines: d.document_lines.map { |l| { line_no: l.line_no, account_code: l.account_code, amount_minor: l.amount_minor } } }
+          fiscal_year: d.fiscal_year, document_date: d.document_date, posting_date: d.posting_date,
+          lines: d.document_lines.map do |line|
+            { line_no: line.line_no, account_code: line.account_code, amount_minor: line.amount_minor,
+              currency: line.currency, minor_unit_exponent: line.minor_unit_exponent }
+          end }
       end
     end
   end

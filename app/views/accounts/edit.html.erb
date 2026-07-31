@@ -1,0 +1,33 @@
+<% content_for :title, "Edit #{@account.code} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to chart of accounts", accounts_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">Masters</p>
+    <h1>Edit <%= @account.code %></h1>
+    <p>Changes are recorded in the append-only audit chain. Deactivation preserves every historical posting.</p>
+  </header>
+
+  <section class="panel form-panel">
+    <%= render "form", account: @account,
+      form_url: account_path(@account, tenant_route_options), submit_label: "Save account" %>
+  </section>
+
+  <section class="panel lifecycle-panel">
+    <div>
+      <p class="eyebrow">Lifecycle</p>
+      <h2><%= @account.active? ? "Available for new entries" : "Inactive" %></h2>
+      <p><%= @account.active? ?
+        "Deactivate this account to remove it from new voucher and opening-balance forms." :
+        "Historical postings remain visible. Reactivate it when it should accept new entries again." %></p>
+    </div>
+    <% if @account.active? %>
+      <%= button_to "Deactivate account", deactivate_account_path(@account, tenant_route_options),
+        method: :patch, class: "button button--danger",
+        form: { data: { turbo_confirm: "Deactivate #{@account.code}? Existing postings will be preserved." } } %>
+    <% else %>
+      <%= button_to "Reactivate account", reactivate_account_path(@account, tenant_route_options),
+        method: :patch, class: "button button--secondary" %>
+    <% end %>
+  </section>
+</main>

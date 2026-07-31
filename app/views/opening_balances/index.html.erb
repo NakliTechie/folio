@@ -1,0 +1,45 @@
+<% content_for :title, "Opening balances · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Setup</p>
+      <h1>Opening balances</h1>
+      <p>Bring existing books into Folio through balanced, numbered, reversible period-0 documents.</p>
+    </div>
+    <% if permitted?("accounts.manage") && permitted?("documents.post") %>
+      <%= link_to "Enter opening balances", new_opening_balance_path(tenant_route_options),
+        class: "button button--primary" %>
+    <% end %>
+  </header>
+
+  <% if @documents.any? %>
+    <section class="panel panel--table">
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Opening-balance documents for <%= Current.tenant.name %></caption>
+          <thead><tr><th scope="col">Document</th><th scope="col">Date</th><th scope="col">Narration</th>
+            <th scope="col">Debits</th><th scope="col">State</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+          <tbody>
+            <% @documents.each do |document| %>
+              <tr>
+                <td><strong><%= document.document_number || "Draft ##{document.id}" %></strong></td>
+                <td><%= document.posting_date.to_fs(:long) %></td>
+                <td><%= document.narration %></td>
+                <td class="money"><%= money_amount(document.document_lines.sum { |line| [line.amount_minor, 0].max }) %></td>
+                <td><span class="<%= status_class(document.state) %>"><%= document.state.humanize %></span></td>
+                <td><%= link_to "Open", opening_balance_path(document, tenant_route_options), class: "text-link" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">0</span>
+      <h2>No opening balances posted</h2>
+      <p>If you are starting fresh, there is nothing to do. If you are migrating existing books, enter a balanced cutover snapshot.</p>
+    </section>
+  <% end %>
+</main>

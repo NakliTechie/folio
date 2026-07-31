@@ -7,16 +7,28 @@
 class Document < ApplicationRecord
   STATES = %w[draft parked posted reversed].freeze
 
-  belongs_to :document_type, optional: true
+  belongs_to :document_type
   belongs_to :reverses, class_name: "Document", foreign_key: :reverses_document_id, optional: true
   belongs_to :reversed_by, class_name: "Document", foreign_key: :reversed_by_document_id, optional: true
   has_many :document_lines, -> { order(:line_no) }, dependent: :destroy
   has_many :entries, dependent: :nullify
 
-  validates :tenant_id, :entity_id, :office_id, :doc_type, :fiscal_year, presence: true
+  validates :tenant_id, :entity_id, :office_id, :doc_type, :fiscal_year,
+    :document_date, :posting_date, presence: true
   validates :state, inclusion: { in: STATES }
+  validate :document_type_matches_document
 
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
   def reversible? = posted? && reversed_by_document_id.nil?
+
+  private
+
+  def document_type_matches_document
+    return unless document_type
+
+    unless document_type.tenant_id == tenant_id && document_type.code == doc_type
+      errors.add(:document_type, "must belong to the same tenant and match doc_type")
+    end
+  end
 end

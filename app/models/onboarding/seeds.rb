@@ -2,7 +2,7 @@
 
 module Onboarding
   # The starter data a new tenant needs to be usable immediately: a minimal Indian-SMB chart
-  # of accounts and the journal-voucher document type. Idempotent.
+  # of accounts, document types, and a versioned statement layout. Idempotent.
   module Seeds
     COA = [
       [ "1000", "Cash", "asset" ], [ "1010", "Bank", "asset" ], [ "1200", "Sundry Debtors", "asset" ],
@@ -24,6 +24,13 @@ module Onboarding
       DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "JV") do |d|
         d.label = "Journal Voucher"; d.posting_rule = "journal_voucher"; d.number_prefix = "JV/"
       end
+      DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "OB") do |d|
+        d.label = "Opening Balance"; d.posting_rule = "opening_balance"; d.number_prefix = "OB/"
+      end
+    end
+
+    def financial_statements!(tenant)
+      FinancialStatements::DefaultLayout.ensure!(tenant)
     end
 
     def org_spine!(tenant, jurisdiction_profile: "IN", fiscal_year_variant: "IN_APR_MAR")

@@ -9,7 +9,7 @@ module Documents
 
     module_function
 
-    def call(document, actor:, on: nil)
+    def call(document, actor:, on: nil, authorize: nil, capabilities: [])
       ActiveRecord::Base.transaction do
         document.lock!
         unless document.reversible?
@@ -17,10 +17,12 @@ module Documents
         end
 
         date = on || document.posting_date || Date.current
+        entity = Entity.find_by!(tenant_id: document.tenant_id, id: document.entity_id)
         rev = Document.create!(
           tenant_id: document.tenant_id, entity_id: document.entity_id, office_id: document.office_id,
           doc_type: document.doc_type, document_type_id: document.document_type_id,
-          fiscal_year: document.fiscal_year, state: "draft", reverses_document_id: document.id,
+          fiscal_year: Documents.fiscal_year(date, variant: entity.fiscal_year_variant),
+          state: "draft", reverses_document_id: document.id,
           document_date: date, posting_date: date,
           narration: "Reversal of #{document.document_number}"
         )
@@ -31,7 +33,10 @@ module Documents
             minor_unit_exponent: dl.minor_unit_exponent, narration: dl.narration
           )
         end
-        entry = Documents::Post.call(rev, actor: actor)
+        entry = Documents::Post.call(
+          rev, actor: actor, authorize: authorize, capabilities: capabilities,
+          required_capability: "documents.reverse"
+        )
         document.update!(state: "reversed", reversed_by_document_id: rev.id)
         entry
       end

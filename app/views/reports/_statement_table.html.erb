@@ -1,0 +1,28 @@
+<section class="panel panel--table statement-panel">
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only"><%= caption %></caption>
+      <thead><tr><th scope="col">Section</th><th scope="col">Amount</th></tr></thead>
+      <tbody>
+        <% statement[:rows].each do |row| %>
+          <tr class="<%= "statement-row--total" if row[:total] %>">
+            <td class="statement-label statement-label--depth-<%= row[:depth] %>"><%= row[:label] %></td>
+            <td class="money"><%= money_amount(row[:amount_minor]) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+      <tfoot>
+        <%= yield %>
+      </tfoot>
+    </table>
+  </div>
+</section>
+
+<% if statement[:unmapped_accounts].any? %>
+  <section class="notification notification--error" role="alert">
+    <span class="notification__icon" aria-hidden="true">!</span>
+    <p><strong>Statement mapping required.</strong>
+      Posted accounts are missing from presentation version <%= statement.dig(:version, :version) %>:
+      <%= statement[:unmapped_accounts].map { |account| "#{account[:code]} · #{account[:name]}" }.to_sentence %>.</p>
+  </section>
+<% end %>

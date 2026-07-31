@@ -7,10 +7,15 @@
       <h1>Journal vouchers</h1>
       <p>Draft, review, post, and reverse balanced entries without losing their audit trail.</p>
     </div>
-    <% if permitted?("documents.post") %>
-      <%= link_to "New journal voucher", new_journal_voucher_path(tenant_route_options),
-        class: "button button--primary" %>
-    <% end %>
+    <div class="action-row">
+      <% if permitted?("accounts.manage") && permitted?("documents.post") %>
+        <%= link_to "Opening balances", opening_balances_path(tenant_route_options), class: "button button--secondary" %>
+      <% end %>
+      <% if permitted?("documents.post") %>
+        <%= link_to "New journal voucher", new_journal_voucher_path(tenant_route_options),
+          class: "button button--primary" %>
+      <% end %>
+    </div>
   </header>
 
   <% if @documents.any? %>

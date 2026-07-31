@@ -60,13 +60,65 @@ class BrowserProductFlowTest < ActionDispatch::IntegrationTest
     assert_equal "queued", invitation.delivery_state
     assert_redirected_to team_path(tenant_id: @org.tenant.id)
 
-    invitation.update!(delivery_state: "failed")
+    invitation.update!(delivery_state: "failed", delivery_attempted_at: 2.minutes.ago)
     get team_path
     assert_response :success
     assert_select ".status-badge--danger", "Delivery failed"
     post resend_invitation_path(invitation)
     assert_redirected_to team_path(tenant_id: @org.tenant.id)
     assert_equal "queued", invitation.reload.delivery_state
+  end
+
+  test "owner edits and deactivates an account with an audit trail" do
+    account = Account.find_by!(tenant_id: @org.tenant.id, code: "5100")
+
+    assert_difference -> { LedgerEvent.for_tenant(@org.tenant.id).count }, 1 do
+      patch account_path(account), params: {
+        account: { code: "5100", name: "Operating expenses", account_type: "expense" }
+      }
+    end
+    assert_redirected_to accounts_path(tenant_id: @org.tenant.id)
+    assert_equal "Operating expenses", account.reload.name
+
+    patch deactivate_account_path(account)
+    assert_redirected_to accounts_path(tenant_id: @org.tenant.id)
+    refute account.reload.active?
+
+    get new_journal_voucher_path
+    assert_response :success
+    assert_select "option[value='5100']", count: 0
+    assert LedgerEvent.verify_chain(@org.tenant.id)[:ok]
+  end
+
+  test "owner posts opening balances and reaches a balanced balance sheet" do
+    cash = Account.find_by!(tenant_id: @org.tenant.id, code: "1000")
+    capital = Account.find_by!(tenant_id: @org.tenant.id, code: "3000")
+
+    assert_difference "Document.count", 1 do
+      post opening_balances_path, params: {
+        opening_balance: {
+          posting_date: "2026-04-01",
+          narration: "Migration cutover",
+          lines: {
+            cash.id.to_s => { debit: "2500.00", credit: "" },
+            capital.id.to_s => { debit: "", credit: "2500.00" }
+          }
+        }
+      }
+    end
+    document = Document.order(:id).last
+    assert_redirected_to opening_balance_path(document, tenant_id: @org.tenant.id)
+
+    follow_redirect!
+    assert_select "h2", "Balanced and ready to post"
+    post post_opening_balance_path(document)
+    assert_redirected_to balance_sheet_report_path(
+      tenant_id: @org.tenant.id, as_of: "2026-04-01"
+    )
+    follow_redirect!
+    assert_select "h1", "Balance sheet"
+    assert_select "tfoot", text: /Balanced/
+    assert_equal 0, Entry.find(document.reload.posted_entry_id).period_no
   end
 
   test "verification failure is visible and can be re-queued" do

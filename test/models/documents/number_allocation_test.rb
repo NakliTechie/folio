@@ -16,7 +16,11 @@ class Documents::NumberAllocationTest < ActiveSupport::TestCase
   JUN1 = Date.new(2025, 6, 1)
 
   setup do
-    @ledger = Ledger.create!(tenant_id: TENANT, code: "PRIMARY", name: "Primary Ledger")
+    @tenant = Tenant.create!(id: TENANT, name: "Number Allocation", slug: "number-allocation")
+    spine = Onboarding::Seeds.org_spine!(@tenant)
+    @entity = spine.fetch(:entity)
+    @office = spine.fetch(:office)
+    @ledger = spine.fetch(:ledger)
     @type = DocumentType.create!(tenant_id: TENANT, code: "JV", label: "JV",
       posting_rule: "journal_voucher", number_prefix: "JV/")
     Account.create!(tenant_id: TENANT, code: "1000", name: "Cash", account_type: "asset")
@@ -24,7 +28,7 @@ class Documents::NumberAllocationTest < ActiveSupport::TestCase
   end
 
   def build_jv
-    doc = Document.create!(tenant_id: TENANT, entity_id: 1, office_id: 1, doc_type: "JV",
+    doc = Document.create!(tenant_id: TENANT, entity_id: @entity.id, office_id: @office.id, doc_type: "JV",
       document_type_id: @type.id, fiscal_year: 2025, document_date: JUN1, posting_date: JUN1, state: "draft")
     doc.document_lines.create!(tenant_id: TENANT, line_no: 1, account_code: "1000", amount_minor: 100_000)
     doc.document_lines.create!(tenant_id: TENANT, line_no: 2, account_code: "4000", amount_minor: -100_000)
@@ -46,7 +50,7 @@ class Documents::NumberAllocationTest < ActiveSupport::TestCase
     assert_equal 2, range.next_value
 
     # Close the period so PostEntry rejects AFTER the number is allocated inside the transaction.
-    PeriodControl.create!(tenant_id: TENANT, entity_id: 1, ledger_id: @ledger.id, account_class: "ALL",
+    PeriodControl.create!(tenant_id: TENANT, entity_id: @entity.id, ledger_id: @ledger.id, account_class: "ALL",
       fiscal_year: 2025, period_no: 3, state: "closed")
     assert_raises(Posting::PeriodClosedError) { Documents::Post.call(build_jv, actor: "u") }
     assert_equal 2, range.reload.next_value,

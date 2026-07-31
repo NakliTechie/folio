@@ -12,6 +12,34 @@ module Api
       def account_type_totals
         render json: { account_type_totals: Reports.account_type_totals(Current.tenant.id) }
       end
+
+      def profit_and_loss
+        to_date = params[:to].present? ? Date.iso8601(params[:to]) : Date.current
+        from_date = params[:from].present? ? Date.iso8601(params[:from]) : fiscal_year_start(to_date)
+        raise ArgumentError, "from must be on or before to" if from_date > to_date
+
+        render json: { profit_and_loss: Reports.profit_and_loss(
+          Current.tenant.id, from_date: from_date, to_date: to_date
+        ) }
+      rescue Date::Error, ArgumentError => e
+        render_error(e.message, :unprocessable_entity)
+      end
+
+      def balance_sheet
+        as_of = params[:as_of].present? ? Date.iso8601(params[:as_of]) : Date.current
+        render json: { balance_sheet: Reports.balance_sheet(Current.tenant.id, as_of: as_of) }
+      rescue Date::Error => e
+        render_error(e.message, :unprocessable_entity)
+      end
+
+      private
+
+      def fiscal_year_start(date)
+        entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
+        return Date.new(date.year, 1, 1) unless entity.fiscal_year_variant == "IN_APR_MAR"
+
+        Date.new(date.month >= 4 ? date.year : date.year - 1, 4, 1)
+      end
     end
   end
 end

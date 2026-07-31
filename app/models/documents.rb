@@ -5,7 +5,7 @@
 # statutory number atomically), Reverse compensates. The posting core (Posting::PostEntry)
 # stays generic — a document type's posting rule is the only thing that knows its semantics.
 module Documents
-  # Shared: the rule a document posts under, and the (fiscal_year, period_no) for its date.
+  # Shared: the rule a document posts under, and its fiscal-calendar identity.
   module_function
 
   def rule_for(document)
@@ -14,8 +14,19 @@ module Documents
     Posting::Rules.for(id)
   end
 
-  # Indian FY period from a posting date (Apr→1 … Mar→12). Kept here so Post/Reverse agree.
-  def period_no(date)
-    date.month >= 4 ? date.month - 3 : date.month + 9
+  def fiscal_year(date, variant:)
+    variant == "IN_APR_MAR" && date.month < 4 ? date.year - 1 : date.year
+  end
+
+  def period_no(date, variant: "IN_APR_MAR")
+    variant == "IN_APR_MAR" ? (date.month >= 4 ? date.month - 3 : date.month + 9) : date.month
+  end
+
+  def period_no_for(document)
+    return 0 if document.doc_type == "OB"
+
+    entity = Entity.find_by(tenant_id: document.tenant_id, id: document.entity_id)
+    period_no(document.posting_date || document.document_date || Date.current,
+      variant: entity&.fiscal_year_variant || "IN_APR_MAR")
   end
 end

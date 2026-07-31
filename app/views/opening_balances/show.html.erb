@@ -1,0 +1,61 @@
+<% content_for :title, "#{@document.document_number || "Opening-balance draft"} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to opening balances", opening_balances_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Opening balance</p>
+      <h1><%= @document.document_number || "Draft opening balances" %></h1>
+      <p><%= @document.narration %></p>
+    </div>
+    <span class="<%= status_class(@document.state) %>"><%= @document.state.humanize %></span>
+  </header>
+
+  <section class="panel voucher-card">
+    <dl class="metadata-grid">
+      <div><dt>Cutover date</dt><dd><%= @document.posting_date.to_fs(:long) %></dd></div>
+      <div><dt>Fiscal year</dt><dd><%= @document.fiscal_year %></dd></div>
+      <div><dt>Special period</dt><dd>0 · Opening</dd></div>
+      <div><dt>Currency</dt><dd><%= Current.tenant.functional_currency %></dd></div>
+    </dl>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Opening-balance debit and credit lines</caption>
+        <thead><tr><th scope="col">Account</th><th scope="col">Debit</th><th scope="col">Credit</th></tr></thead>
+        <tbody>
+          <% @document.document_lines.each do |line| %>
+            <% account = @accounts_by_code[line.account_code] %>
+            <tr><td><span class="account-code"><%= line.account_code %></span> <strong><%= account&.name %></strong></td>
+              <td class="money"><%= money_amount(line.amount_minor) if line.amount_minor.positive? %></td>
+              <td class="money"><%= money_amount(-line.amount_minor) if line.amount_minor.negative? %></td></tr>
+          <% end %>
+        </tbody>
+        <tfoot><tr><th scope="row">Total</th>
+          <td class="money"><%= money_amount(@document.document_lines.sum { |line| [line.amount_minor, 0].max }) %></td>
+          <td class="money"><%= money_amount(@document.document_lines.sum { |line| [-line.amount_minor, 0].max }) %></td></tr></tfoot>
+      </table>
+    </div>
+  </section>
+
+  <% if @document.postable? %>
+    <section class="panel posting-panel">
+      <div><p class="eyebrow">Simulation</p>
+        <h2><%= @simulation[:balanced] ? "Balanced and ready to post" : "Opening balances do not balance" %></h2>
+        <p>Posting allocates an OB number and writes a period-0 event to the append-only ledger.</p></div>
+      <% if @simulation[:balanced] && permitted?("documents.post") %>
+        <%= button_to "Post opening balances", post_opening_balance_path(@document, tenant_route_options),
+          method: :post, class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% else %>
+    <div class="action-row">
+      <%= link_to "View balance sheet", balance_sheet_report_path(tenant_route_options.merge(as_of: @document.posting_date)),
+        class: "button button--primary" if permitted?("reports.read") %>
+      <% if @document.reversible? && permitted?("documents.reverse") %>
+        <%= button_to "Reverse opening balances", reverse_opening_balance_path(@document, tenant_route_options),
+          method: :post, class: "button button--danger",
+          form: { data: { turbo_confirm: "Reverse this opening-balance document?" } } %>
+      <% end %>
+    </div>
+  <% end %>
+</main>

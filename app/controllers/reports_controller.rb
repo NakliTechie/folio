@@ -9,7 +9,39 @@ class ReportsController < BrowserController
     @highlight_codes = highlighted_account_codes
   end
 
+  def profit_and_loss
+    @to_date = report_date(:to, Date.current)
+    @from_date = report_date(:from, fiscal_year_start(@to_date))
+    raise ArgumentError, "From date must be on or before the to date" if @from_date > @to_date
+
+    @statement = Reports.profit_and_loss(
+      Current.tenant.id, from_date: @from_date, to_date: @to_date
+    )
+  rescue ArgumentError => e
+    redirect_to profit_and_loss_report_path(tenant_route_options), alert: e.message unless params[:from].blank? && params[:to].blank?
+  end
+
+  def balance_sheet
+    @as_of = report_date(:as_of, Date.current)
+    @statement = Reports.balance_sheet(Current.tenant.id, as_of: @as_of)
+  rescue ArgumentError => e
+    redirect_to balance_sheet_report_path(tenant_route_options), alert: e.message unless params[:as_of].blank?
+  end
+
   private
+
+  def report_date(key, fallback)
+    params[key].present? ? Date.iso8601(params[key]) : fallback
+  rescue Date::Error
+    raise ArgumentError, "#{key.to_s.humanize} must be a valid date"
+  end
+
+  def fiscal_year_start(date)
+    entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
+    return Date.new(date.year, 1, 1) unless entity.fiscal_year_variant == "IN_APR_MAR"
+
+    Date.new(date.month >= 4 ? date.year : date.year - 1, 4, 1)
+  end
 
   def highlighted_account_codes
     return [] unless params[:posted_document_id].present?

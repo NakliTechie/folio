@@ -1,0 +1,30 @@
+<%= form_with model: account, url: form_url, class: "stacked-form" do |form| %>
+  <div class="form-group">
+    <%= form.label :code, "Account code" %>
+    <% if account.persisted? && account.code_locked? %>
+      <%= form.text_field :code, disabled: true %>
+      <small>The code is locked because this account is referenced by a document or posting.</small>
+    <% else %>
+      <%= form.text_field :code, required: true, autofocus: true, autocomplete: "off" %>
+      <small>Use a durable code, such as 5200 or AR-20. It locks when first referenced.</small>
+    <% end %>
+  </div>
+  <div class="form-group">
+    <%= form.label :name, "Account name" %>
+    <%= form.text_field :name, required: true, autocomplete: "off" %>
+  </div>
+  <div class="form-group">
+    <%= form.label :account_type, "Account type" %>
+    <% if account.persisted? && account.posted? %>
+      <%= form.select :account_type, Account::TYPES.map { |type| [type.humanize, type] }, {}, disabled: true %>
+      <small>The accounting type is locked after posting so historical statements do not move.</small>
+    <% else %>
+      <%= form.select :account_type, Account::TYPES.map { |type| [type.humanize, type] },
+        { prompt: "Choose a type" }, required: true %>
+    <% end %>
+  </div>
+  <div class="form-actions">
+    <%= form.submit submit_label, class: "button button--primary" %>
+    <%= link_to "Cancel", accounts_path(tenant_route_options), class: "button button--quiet" %>
+  </div>
+<% end %>

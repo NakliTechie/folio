@@ -67,6 +67,47 @@ class OnboardingDeliveryJobsTest < ActiveJob::TestCase
     assert_equal "failed", invitation.reload.delivery_state
   end
 
+  test "verification queue suppresses duplicate deliveries and permits a cooled-down retry" do
+    user = User.create!(email_address: "verification-queue@x.com", password: "correct-horse-battery")
+
+    assert_enqueued_jobs 1, only: VerificationDeliveryJob do
+      assert user.queue_verification_delivery!
+      refute user.queue_verification_delivery!
+    end
+
+    user.update!(verification_delivery_state: "failed", verification_delivery_attempted_at: 2.minutes.ago)
+    assert_enqueued_jobs 1, only: VerificationDeliveryJob do
+      assert user.queue_verification_delivery!
+    end
+  end
+
+  test "invitation queue suppresses duplicate deliveries and stops after acceptance" do
+    org = Onboarding::SignUp.call(
+      email: "invitation-queue-owner@x.com", password: "correct-horse-battery", org_name: "Queue Books"
+    )
+    invitation = Onboarding::Invite.create!(
+      tenant: org.tenant,
+      email: "invitation-queue@x.com",
+      role_code: "viewer",
+      invited_by: org.user
+    )
+
+    assert_enqueued_jobs 1, only: InvitationDeliveryJob do
+      assert invitation.queue_delivery!
+      refute invitation.queue_delivery!
+    end
+
+    invitation.update!(delivery_state: "failed", delivery_attempted_at: 2.minutes.ago)
+    assert_enqueued_jobs 1, only: InvitationDeliveryJob do
+      assert invitation.queue_delivery!
+    end
+
+    invitation.update!(accepted_at: Time.current, delivery_state: "sent")
+    assert_no_enqueued_jobs only: InvitationDeliveryJob do
+      refute invitation.queue_delivery!
+    end
+  end
+
   private
 
   def with_failing_delivery

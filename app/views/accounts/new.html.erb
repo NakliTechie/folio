@@ -5,29 +5,11 @@
   <header class="page-heading page-heading--stacked">
     <p class="eyebrow">Masters</p>
     <h1>Add an account</h1>
-    <p>Use a stable numeric code. Posted ledger lines continue to reference this code.</p>
+    <p>Give the account a stable code and accounting type. Folio places it in the current statement layout.</p>
   </header>
 
   <section class="panel form-panel">
-    <%= form_with model: @account, url: accounts_path(tenant_route_options), class: "stacked-form" do |form| %>
-      <div class="form-group">
-        <%= form.label :code, "Account code" %>
-        <%= form.text_field :code, required: true, autofocus: true, inputmode: "numeric", autocomplete: "off" %>
-        <small>For example, 5200.</small>
-      </div>
-      <div class="form-group">
-        <%= form.label :name, "Account name" %>
-        <%= form.text_field :name, required: true, autocomplete: "off" %>
-      </div>
-      <div class="form-group">
-        <%= form.label :account_type, "Account type" %>
-        <%= form.select :account_type, Account::TYPES.map { |type| [type.humanize, type] },
-          { prompt: "Choose a type" }, required: true %>
-      </div>
-      <div class="form-actions">
-        <%= form.submit "Add account", class: "button button--primary" %>
-        <%= link_to "Cancel", accounts_path(tenant_route_options), class: "button button--quiet" %>
-      </div>
-    <% end %>
+    <%= render "form", account: @account, form_url: accounts_path(tenant_route_options),
+      submit_label: "Add account" %>
   </section>
 </main>

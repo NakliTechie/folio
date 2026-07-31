@@ -8,7 +8,7 @@
       <p class="lede">Signed in as <%= Current.user.email_address %>. Keep the setup moving or pick up where your team left off.</p>
       <div class="action-row">
         <% if permitted?("documents.post") %>
-          <%= link_to @posted_count.zero? ? "Record your first transaction" : "Record a transaction",
+          <%= link_to @journal_posted_count.zero? ? "Record your first transaction" : "Record a transaction",
             new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
         <% end %>
         <% if permitted?("reports.read") %>
@@ -30,7 +30,7 @@
       <%= link_to "Open chart", accounts_path(tenant_route_options) %>
     </article>
     <article class="metric-card">
-      <span class="metric-card__label">Posted vouchers</span>
+      <span class="metric-card__label">Posted documents</span>
       <strong><%= @posted_count %></strong>
       <%= link_to "View transactions", journal_vouchers_path(tenant_route_options) %>
     </article>
@@ -48,7 +48,7 @@
           <p class="eyebrow">First run</p>
           <h2>Setup checklist</h2>
         </div>
-        <span class="progress-count"><%= @posted_count.positive? && Current.user.verified? ? "4" : @posted_count.positive? || Current.user.verified? ? "3" : "2" %>/4</span>
+        <span class="progress-count"><%= @journal_posted_count.positive? && Current.user.verified? ? "4" : @journal_posted_count.positive? || Current.user.verified? ? "3" : "2" %>/4</span>
       </div>
       <ol class="checklist">
         <li class="checklist__item checklist__item--done">
@@ -59,11 +59,11 @@
           <span aria-hidden="true">✓</span>
           <div><strong>Chart ready</strong><small><%= @accounts_count %> starter accounts</small></div>
         </li>
-        <li class="checklist__item <%= "checklist__item--done" if @posted_count.positive? %>">
-          <span aria-hidden="true"><%= @posted_count.positive? ? "✓" : "3" %></span>
+        <li class="checklist__item <%= "checklist__item--done" if @journal_posted_count.positive? %>">
+          <span aria-hidden="true"><%= @journal_posted_count.positive? ? "✓" : "3" %></span>
           <div>
             <strong>Post a journal voucher</strong>
-            <small><%= @posted_count.positive? ? "Your ledger is active" : "Preview the balance before anything posts" %></small>
+            <small><%= @journal_posted_count.positive? ? "Your ledger is active" : "Preview the balance before anything posts" %></small>
           </div>
         </li>
         <li class="checklist__item <%= "checklist__item--done" if Current.user.verified? %>">
@@ -77,7 +77,7 @@
       <div class="panel__header">
         <div>
           <p class="eyebrow">Activity</p>
-          <h2>Recent vouchers</h2>
+          <h2>Recent accounting documents</h2>
         </div>
         <%= link_to "View all", journal_vouchers_path(tenant_route_options), class: "text-link" %>
       </div>
@@ -85,9 +85,9 @@
         <ul class="activity-list">
           <% @documents.each do |document| %>
             <li>
-              <%= link_to journal_voucher_path(document, tenant_route_options) do %>
+              <%= link_to browser_document_path(document) do %>
                 <span>
-                  <strong><%= document.document_number || "Draft voucher" %></strong>
+                  <strong><%= document.document_number || "Draft #{document.doc_type}" %></strong>
                   <small><%= document.narration.presence || "No narration" %></small>
                 </span>
                 <span class="<%= status_class(document.state) %>"><%= document.state.humanize %></span>
@@ -98,8 +98,8 @@
       <% else %>
         <div class="empty-state empty-state--compact">
           <span class="empty-state__icon" aria-hidden="true">↗</span>
-          <h3>No vouchers yet</h3>
-          <p>Your first posted voucher will appear here and feed the trial balance.</p>
+          <h3>No accounting documents yet</h3>
+          <p>Your first journal or opening-balance document will appear here and feed the reports.</p>
         </div>
       <% end %>
     </section>

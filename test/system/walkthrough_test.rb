@@ -62,6 +62,37 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_selector "tr.table-row--highlight", count: 2
   end
 
+  test "owner migrates opening balances and reads versioned financial statements" do
+    visit new_registration_path
+    fill_in "Company name", with: "Migration Books"
+    fill_in "Email", with: "migration@folio.invalid"
+    fill_in "Password", with: PASSWORD
+    click_button "Create company books"
+
+    click_link "Chart of accounts"
+    click_link "Opening balances"
+    click_link "Enter opening balances"
+    fill_in "Cutover date", with: "2026-04-01"
+    fill_in "Description", with: "Legacy books cutover"
+    fill_in "Debit for 1000", with: "5000.00"
+    fill_in "Credit for 3000", with: "5000.00"
+    click_button "Review opening balances"
+
+    assert_selector "h2", text: "Balanced and ready to post"
+    assert_text "INR 5,000.00"
+    click_button "Post opening balances"
+
+    assert_current_path balance_sheet_report_path, ignore_query: true
+    assert_selector "h1", text: "Balance sheet"
+    assert_selector "tfoot", text: "Balanced"
+    assert_text "Default financial statements · version 1"
+
+    click_link "Profit & loss"
+    assert_current_path profit_and_loss_report_path, ignore_query: true
+    assert_selector "h1", text: "Profit & loss"
+    assert_selector "tfoot", text: "Net profit"
+  end
+
   test "every RBAC preset can enter and leave its authenticated landing" do
     org = Onboarding::SignUp.call(
       email: "role-owner@folio.invalid", password: PASSWORD, org_name: "Role Walkthrough"

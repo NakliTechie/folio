@@ -44,6 +44,16 @@ module Reports
       .map { |type, debit, credit| { "type" => type, "debit" => debit.to_i, "credit" => credit.to_i } }
   end
 
+  def profit_and_loss(tenant_id, from_date:, to_date:)
+    FinancialStatements::Report.profit_and_loss(
+      tenant_id: tenant_id, from_date: from_date, to_date: to_date
+    )
+  end
+
+  def balance_sheet(tenant_id, as_of:)
+    FinancialStatements::Report.balance_sheet(tenant_id: tenant_id, as_of: as_of)
+  end
+
   def base(tenant_id)
     EntryLine.where(tenant_id: tenant_id).joins(ACCOUNT_JOIN).joins(AMOUNT_JOIN)
   end

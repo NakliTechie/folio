@@ -4,6 +4,7 @@
 # controls the invited email; accepted_at makes it single-use.
 class Invitation < ApplicationRecord
   DELIVERY_STATES = %w[not_sent queued sending sent failed].freeze
+  DELIVERY_COOLDOWN = 1.minute
 
   belongs_to :tenant
   belongs_to :invited_by, class_name: "User", optional: true
@@ -25,7 +26,15 @@ class Invitation < ApplicationRecord
   def pending? = accepted_at.nil?
 
   def queue_delivery!
-    update!(delivery_state: "queued")
-    InvitationDeliveryJob.perform_later(id)
+    queued = with_lock do
+      next false unless pending?
+      next false if %w[queued sending].include?(delivery_state)
+      next false if delivery_attempted_at && delivery_attempted_at > DELIVERY_COOLDOWN.ago
+
+      update!(delivery_state: "queued", delivery_attempted_at: Time.current)
+      true
+    end
+    InvitationDeliveryJob.perform_later(id) if queued
+    queued
   end
 end

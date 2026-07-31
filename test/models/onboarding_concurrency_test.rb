@@ -17,6 +17,9 @@ class OnboardingConcurrencyTest < ActiveSupport::TestCase
     RolePermission.where(role_template_id: role_ids).delete_all
     RoleTemplate.where(id: role_ids).delete_all
     Membership.where(tenant_id: tenant_ids).delete_all
+    FinancialStatementAssignment.where(tenant_id: tenant_ids).delete_all
+    FinancialStatementSection.where(tenant_id: tenant_ids).delete_all
+    FinancialStatementVersion.where(tenant_id: tenant_ids).delete_all
     Account.where(tenant_id: tenant_ids).delete_all
     DocumentType.where(tenant_id: tenant_ids).delete_all
     Office.where(tenant_id: tenant_ids).delete_all

@@ -7,7 +7,10 @@ module Posting
   module Rules
     UnknownRule = Class.new(StandardError)
 
-    REGISTRY = { "journal_voucher" => "Posting::Rules::JournalVoucher" }.freeze
+    REGISTRY = {
+      "journal_voucher" => "Posting::Rules::JournalVoucher",
+      "opening_balance" => "Posting::Rules::OpeningBalance"
+    }.freeze
 
     def self.for(identifier)
       name = REGISTRY.fetch(identifier) { raise UnknownRule, "no posting rule '#{identifier}'" }

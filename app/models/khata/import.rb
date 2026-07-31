@@ -50,6 +50,7 @@ module Khata
           wipe!
           import_accounts(db)
           import_entries_and_lines(db)
+          seed_statement_mappings
         end
       end
       { accounts: Account.where(tenant_id: @tenant_id).count,
@@ -62,7 +63,13 @@ module Khata
     # Idempotent: a re-import replaces this tenant's projection wholesale.
     def wipe!
       Entry.where(tenant_id: @tenant_id).destroy_all
+      FinancialStatementAssignment.where(tenant_id: @tenant_id).delete_all
       Account.where(tenant_id: @tenant_id).delete_all
+    end
+
+    def seed_statement_mappings
+      tenant = Tenant.find_by(id: @tenant_id)
+      FinancialStatements::DefaultLayout.ensure!(tenant) if tenant
     end
 
     def import_accounts(db)

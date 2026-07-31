@@ -40,7 +40,8 @@ CREATE TABLE public.accounts (
     name character varying NOT NULL,
     account_type character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    active boolean DEFAULT true NOT NULL
 );
 
 
@@ -393,6 +394,118 @@ CREATE SEQUENCE public.entry_lines_id_seq
 --
 
 ALTER SEQUENCE public.entry_lines_id_seq OWNED BY public.entry_lines.id;
+
+
+--
+-- Name: financial_statement_assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.financial_statement_assignments (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    financial_statement_version_id bigint NOT NULL,
+    financial_statement_section_id bigint NOT NULL,
+    account_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: financial_statement_assignments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.financial_statement_assignments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: financial_statement_assignments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.financial_statement_assignments_id_seq OWNED BY public.financial_statement_assignments.id;
+
+
+--
+-- Name: financial_statement_sections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.financial_statement_sections (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    financial_statement_version_id bigint NOT NULL,
+    parent_id bigint,
+    statement_type character varying NOT NULL,
+    code character varying NOT NULL,
+    label character varying NOT NULL,
+    normal_balance character varying NOT NULL,
+    sort_order integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_statement_sections_normal_balance CHECK (((normal_balance)::text = ANY ((ARRAY['debit'::character varying, 'credit'::character varying])::text[]))),
+    CONSTRAINT chk_statement_sections_type CHECK (((statement_type)::text = ANY ((ARRAY['balance_sheet'::character varying, 'profit_and_loss'::character varying])::text[])))
+);
+
+
+--
+-- Name: financial_statement_sections_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.financial_statement_sections_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: financial_statement_sections_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.financial_statement_sections_id_seq OWNED BY public.financial_statement_sections.id;
+
+
+--
+-- Name: financial_statement_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.financial_statement_versions (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    name character varying NOT NULL,
+    version integer NOT NULL,
+    effective_from date NOT NULL,
+    effective_to date,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_statement_versions_dates CHECK (((effective_to IS NULL) OR (effective_to >= effective_from))),
+    CONSTRAINT chk_statement_versions_status CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'active'::character varying, 'retired'::character varying])::text[])))
+);
+
+
+--
+-- Name: financial_statement_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.financial_statement_versions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: financial_statement_versions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.financial_statement_versions_id_seq OWNED BY public.financial_statement_versions.id;
 
 
 --
@@ -1104,6 +1217,27 @@ ALTER TABLE ONLY public.entry_lines ALTER COLUMN id SET DEFAULT nextval('public.
 
 
 --
+-- Name: financial_statement_assignments id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_assignments ALTER COLUMN id SET DEFAULT nextval('public.financial_statement_assignments_id_seq'::regclass);
+
+
+--
+-- Name: financial_statement_sections id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_sections ALTER COLUMN id SET DEFAULT nextval('public.financial_statement_sections_id_seq'::regclass);
+
+
+--
+-- Name: financial_statement_versions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_versions ALTER COLUMN id SET DEFAULT nextval('public.financial_statement_versions_id_seq'::regclass);
+
+
+--
 -- Name: invitations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1302,6 +1436,30 @@ ALTER TABLE ONLY public.entry_lines
 
 
 --
+-- Name: financial_statement_assignments financial_statement_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_assignments
+    ADD CONSTRAINT financial_statement_assignments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: financial_statement_sections financial_statement_sections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_sections
+    ADD CONSTRAINT financial_statement_sections_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: financial_statement_versions financial_statement_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_versions
+    ADD CONSTRAINT financial_statement_versions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: invitations invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1451,6 +1609,83 @@ ALTER TABLE ONLY public.user_office_roles
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_statement_assignments_section; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_statement_assignments_section ON public.financial_statement_assignments USING btree (financial_statement_section_id);
+
+
+--
+-- Name: idx_statement_assignments_tenant_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_statement_assignments_tenant_account ON public.financial_statement_assignments USING btree (tenant_id, account_id);
+
+
+--
+-- Name: idx_statement_assignments_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_statement_assignments_version ON public.financial_statement_assignments USING btree (financial_statement_version_id);
+
+
+--
+-- Name: idx_statement_assignments_version_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_statement_assignments_version_account ON public.financial_statement_assignments USING btree (financial_statement_version_id, account_id);
+
+
+--
+-- Name: idx_statement_sections_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_statement_sections_order ON public.financial_statement_sections USING btree (financial_statement_version_id, statement_type, sort_order);
+
+
+--
+-- Name: idx_statement_sections_parent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_statement_sections_parent ON public.financial_statement_sections USING btree (parent_id);
+
+
+--
+-- Name: idx_statement_sections_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_statement_sections_version ON public.financial_statement_sections USING btree (financial_statement_version_id);
+
+
+--
+-- Name: idx_statement_sections_version_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_statement_sections_version_code ON public.financial_statement_sections USING btree (financial_statement_version_id, code);
+
+
+--
+-- Name: idx_statement_versions_effective; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_statement_versions_effective ON public.financial_statement_versions USING btree (tenant_id, effective_from);
+
+
+--
+-- Name: idx_statement_versions_tenant_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_statement_versions_tenant_version ON public.financial_statement_versions USING btree (tenant_id, version);
+
+
+--
+-- Name: index_accounts_on_tenant_id_and_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_accounts_on_tenant_id_and_active ON public.accounts USING btree (tenant_id, active);
 
 
 --
@@ -1612,6 +1847,13 @@ CREATE INDEX index_entry_lines_on_source_line_key ON public.entry_lines USING bt
 --
 
 CREATE INDEX index_entry_lines_on_tenant_id_and_account_code ON public.entry_lines USING btree (tenant_id, account_code);
+
+
+--
+-- Name: index_financial_statement_assignments_on_account_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_financial_statement_assignments_on_account_id ON public.financial_statement_assignments USING btree (account_id);
 
 
 --
@@ -1862,6 +2104,22 @@ ALTER TABLE ONLY public.user_office_roles
 
 
 --
+-- Name: financial_statement_assignments fk_rails_260071ca82; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_assignments
+    ADD CONSTRAINT fk_rails_260071ca82 FOREIGN KEY (financial_statement_version_id) REFERENCES public.financial_statement_versions(id);
+
+
+--
+-- Name: financial_statement_assignments fk_rails_2e41516b26; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_assignments
+    ADD CONSTRAINT fk_rails_2e41516b26 FOREIGN KEY (financial_statement_section_id) REFERENCES public.financial_statement_sections(id);
+
+
+--
 -- Name: sessions fk_rails_758836b4f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1886,11 +2144,35 @@ ALTER TABLE ONLY public.memberships
 
 
 --
+-- Name: financial_statement_assignments fk_rails_a658674e61; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_assignments
+    ADD CONSTRAINT fk_rails_a658674e61 FOREIGN KEY (account_id) REFERENCES public.accounts(id);
+
+
+--
 -- Name: memberships fk_rails_a959f0d1fb; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.memberships
     ADD CONSTRAINT fk_rails_a959f0d1fb FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
+-- Name: financial_statement_sections fk_rails_c48cc303c2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_sections
+    ADD CONSTRAINT fk_rails_c48cc303c2 FOREIGN KEY (parent_id) REFERENCES public.financial_statement_sections(id);
+
+
+--
+-- Name: financial_statement_sections fk_rails_f389e55e55; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.financial_statement_sections
+    ADD CONSTRAINT fk_rails_f389e55e55 FOREIGN KEY (financial_statement_version_id) REFERENCES public.financial_statement_versions(id);
 
 
 --
@@ -1900,6 +2182,7 @@ ALTER TABLE ONLY public.memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731100000'),
 ('20260731091000'),
 ('20260731090000'),
 ('20260730230000'),

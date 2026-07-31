@@ -56,8 +56,12 @@ class InvitationsController < ApplicationController
     return head :forbidden unless owner?
 
     invitation = Invitation.where(tenant_id: Current.tenant.id, accepted_at: nil).find(params[:id])
-    invitation.queue_delivery!
-    redirect_to team_path(tenant_id: Current.tenant.id), notice: "Invitation re-queued for #{invitation.email}."
+    if invitation.queue_delivery!
+      redirect_to team_path(tenant_id: Current.tenant.id), notice: "Invitation re-queued for #{invitation.email}."
+    else
+      redirect_to team_path(tenant_id: Current.tenant.id),
+        notice: "That invitation is already queued or was sent recently. Try again in a minute."
+    end
   end
 
   private
