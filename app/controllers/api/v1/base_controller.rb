@@ -32,6 +32,7 @@ module Api
       rescue_from CreditNotes::InvalidCreditNote do |e| render_error(e.message, :unprocessable_entity) end
       rescue_from PurchaseBills::InvalidBill do |e| render_error(e.message, :unprocessable_entity) end
       rescue_from PurchaseCreditNotes::InvalidCreditNote do |e| render_error(e.message, :unprocessable_entity) end
+      rescue_from PurchaseDebitNotes::InvalidDebitNote do |e| render_error(e.message, :unprocessable_entity) end
       rescue_from Settlements::InvalidSettlement do |e| render_error(e.message, :unprocessable_entity) end
       rescue_from Settlements::InvalidReset do |e| render_error(e.message, :unprocessable_entity) end
       rescue_from BusinessProfiles::InvalidProfile do |e| render_error(e.message, :unprocessable_entity) end

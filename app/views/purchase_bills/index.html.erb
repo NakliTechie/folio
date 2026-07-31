@@ -9,6 +9,7 @@
     </div>
     <div class="action-row">
       <%= link_to "Supplier credits", purchase_credit_notes_path(tenant_route_options), class: "button button--secondary" %>
+      <%= link_to "Supplier debits", purchase_debit_notes_path(tenant_route_options), class: "button button--secondary" %>
       <%= link_to "Payments", new_settlement_path(tenant_route_options.merge(kind: "payment")), class: "button button--secondary" %>
       <% if permitted?("bills.create") %>
         <%= link_to "New purchase bill", new_purchase_bill_path(tenant_route_options),

@@ -17,8 +17,8 @@ module Reports
           tenant_id: tenant_id,
           tax_registration_id: registration.id,
           document_date: from_date..to_date,
-          doc_type: %w[SI CN PB PC]
-        ).where.not(posted_entry_id: nil).includes(:document_lines, :reverses, :credit_note_for)
+          doc_type: %w[SI CN PB PC PD]
+        ).where.not(posted_entry_id: nil).includes(:document_lines, :reverses, :credit_note_for, :debit_note_for)
           .order(:document_date, :id).to_a
         negative_posting_entries = EntryLine.where(
           entry_id: documents.map(&:posted_entry_id), is_negative_posting: true
@@ -31,7 +31,7 @@ module Reports
         sales_reversals = documents.select do |document|
           document.doc_type == "SI" && negative_posting_entries.key?(document.posted_entry_id)
         end
-        purchase_documents = documents.select { |document| %w[PB PC].include?(document.doc_type) }
+        purchase_documents = documents.select { |document| %w[PB PC PD].include?(document.doc_type) }
 
         table_4a = document_table(invoices, effect: 1)
         table_9b = document_table(credit_notes, effect: 1)
@@ -76,7 +76,8 @@ module Reports
           recipient_gstin: document.party_snapshot&.fetch("gstin", nil),
           recipient_name: document.party_snapshot&.fetch("name", nil),
           place_of_supply_state_code: document.place_of_supply_state_code,
-          source_document_number: document.credit_note_for&.document_number || document.reverses&.document_number,
+          source_document_number: document.credit_note_for&.document_number ||
+            document.debit_note_for&.document_number || document.reverses&.document_number,
           taxable_value_minor: effect * document.subtotal_minor,
           invoice_value_minor: effect * document.total_minor,
           tax: components.transform_values { |amount| effect * amount }
@@ -169,6 +170,7 @@ module Reports
             document.doc_type == "PB" && !negative_posting_entries.key?(document.posted_entry_id)
           end,
           supplier_credit_note_count: documents.count { |document| document.doc_type == "PC" },
+          supplier_debit_note_count: documents.count { |document| document.doc_type == "PD" },
           reversal_count: documents.count do |document|
             document.doc_type == "PB" && negative_posting_entries.key?(document.posted_entry_id)
           end,

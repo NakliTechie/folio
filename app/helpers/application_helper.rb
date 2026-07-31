@@ -22,6 +22,15 @@ module ApplicationHelper
     }.fetch(reason_code.to_s, reason_code.to_s.humanize)
   end
 
+  def debit_note_reason_label(reason_code)
+    {
+      "price_increase" => "Price increase",
+      "additional_charge" => "Additional charge",
+      "underbilling" => "Underbilling",
+      "other" => "Other"
+    }.fetch(reason_code.to_s, reason_code.to_s.humanize)
+  end
+
   def role_name
     current_role_assignment&.role_template&.name || "Member"
   end
@@ -54,6 +63,8 @@ module ApplicationHelper
       settlement_path(document, tenant_route_options)
     elsif document.doc_type == "PC"
       purchase_credit_note_path(document, tenant_route_options)
+    elsif document.doc_type == "PD"
+      purchase_debit_note_path(document, tenant_route_options)
     elsif document.doc_type == "PB"
       purchase_bill_path(document, tenant_route_options)
     elsif document.doc_type == "CN"

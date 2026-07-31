@@ -1,0 +1,56 @@
+<% content_for :title, "#{@document.document_number || "Draft supplier debit"} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= link_to "← Back to supplier debits", purchase_debit_notes_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading">
+    <div><p class="eyebrow">Supplier debit note</p><h1><%= @document.document_number || "Draft supplier debit" %></h1>
+      <p>Supplier note <%= @document.external_reference %> · For purchase bill <%= link_to @document.debit_note_for.document_number,
+        purchase_bill_path(@document.debit_note_for, tenant_route_options) %> · <%= debit_note_reason_label(@document.reason_code) %></p></div>
+    <span class="<%= status_class(@document.state) %>"><%= @document.state.humanize %></span>
+  </header>
+
+  <section class="panel voucher-card">
+    <dl class="metadata-grid">
+      <div><dt>Supplier debit note</dt><dd><%= @document.external_reference %></dd></div>
+      <div><dt>Debit-note date</dt><dd><%= @document.document_date.to_fs(:long) %></dd></div>
+      <div><dt>Purchase bill</dt><dd><%= @document.debit_note_for.document_number %></dd></div>
+      <div><dt>Vendor</dt><dd><%= @document.party_snapshot.fetch("name") %></dd></div>
+      <div><dt>Vendor GSTIN</dt><dd><%= @document.party_snapshot.fetch("gstin") %></dd></div>
+      <div><dt>Buyer GSTIN</dt><dd><%= @document.tax_registration_snapshot.fetch("identifier") %></dd></div>
+    </dl>
+    <div class="table-wrap"><table>
+      <caption class="sr-only">Supplier-debit lines</caption>
+      <thead><tr><th scope="col">Service</th><th scope="col">SAC</th><th scope="col">Additional quantity</th>
+        <th scope="col">GST rate</th><th scope="col">Taxable increase</th></tr></thead>
+      <tbody><% @document.document_lines.each do |line| %><tr>
+        <td><strong><%= line.item_snapshot.fetch("name") %></strong></td><td><%= line.hsn_sac_code %></td>
+        <td><%= line.quantity.to_s("F") %> <%= line.item_snapshot.fetch("unitOfMeasure") %></td>
+        <td><%= basis_points_percentage(line.tax_rate_basis_points) %></td>
+        <td class="money"><%= money_amount(line.taxable_minor, currency: @document.currency) %></td>
+      </tr><% end %></tbody>
+      <tfoot>
+        <tr><th scope="row" colspan="4">Taxable increase</th><td class="money"><%= money_amount(@document.subtotal_minor, currency: @document.currency) %></td></tr>
+        <% @document.tax_breakdown.sort.each do |component, amount| %>
+          <tr><th scope="row" colspan="4"><%= component.upcase %> input-tax increase</th><td class="money"><%= money_amount(amount, currency: @document.currency) %></td></tr>
+        <% end %>
+        <tr><th scope="row" colspan="4">Total supplier debit</th><td class="money"><strong><%= money_amount(@document.total_minor, currency: @document.currency) %></strong></td></tr>
+      </tfoot>
+    </table></div>
+  </section>
+
+  <% if @document.postable? %>
+    <section class="panel posting-panel">
+      <div><p class="eyebrow">Accounting preview</p><h2><%= @simulation[:balanced] ? "Balanced and ready to post" : "This supplier debit does not balance" %></h2>
+        <p>Posting debits the original expense and input-GST accounts and credits a separate open vendor payable.</p></div>
+      <% if @simulation[:balanced] && permitted?("bills.create") %>
+        <%= button_to "Post supplier debit", post_purchase_debit_note_path(@document, tenant_route_options),
+          method: :post, class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% else %>
+    <div class="action-row">
+      <%= link_to "Open source purchase bill", purchase_bill_path(@document.debit_note_for, tenant_route_options), class: "button button--secondary" %>
+      <%= link_to "Vendor ledger", party_ledger_report_path(tenant_route_options.merge(party_id: @document.party_id)), class: "button button--secondary" %>
+    </div>
+  <% end %>
+</main>

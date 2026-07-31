@@ -109,12 +109,16 @@
             <td class="money"><%= money_amount(outward[:taxable_value_minor]) %></td><td class="money"><%= money_amount(outward.dig(:tax, :igst)) %></td>
             <td class="money"><%= money_amount(outward.dig(:tax, :cgst)) %></td><td class="money"><%= money_amount(outward.dig(:tax, :sgst) + outward.dig(:tax, :utgst)) %></td>
             <td class="money"><%= money_amount(outward.dig(:tax, :cess)) %></td></tr>
-          <tr><th scope="row">4(A)(5) All other ITC</th><td><strong>Reference only:</strong> purchase bills net of supplier credits require GSTR-2B and eligibility review</td>
+          <tr><th scope="row">4(A)(5) All other ITC</th><td><strong>Reference only:</strong> purchase bills adjusted by supplier credits and debits require GSTR-2B and eligibility review</td>
             <td class="money"><%= money_amount(input_tax[:taxable_value_minor]) %></td><td class="money"><%= money_amount(input_tax.dig(:tax, :igst)) %></td>
             <td class="money"><%= money_amount(input_tax.dig(:tax, :cgst)) %></td><td class="money"><%= money_amount(input_tax.dig(:tax, :sgst) + input_tax.dig(:tax, :utgst)) %></td>
             <td class="money"><%= money_amount(input_tax.dig(:tax, :cess)) %></td></tr>
         </tbody>
       </table></div>
+      <p class="table-note"><%= input_tax[:document_count] %> purchase bill(s),
+        <%= input_tax[:supplier_credit_note_count] %> supplier credit note(s),
+        <%= input_tax[:supplier_debit_note_count] %> supplier debit note(s), and
+        <%= input_tax[:reversal_count] %> internal reversal(s).</p>
       <p class="table-note"><strong>Preparation only.</strong> Reconcile outward values to the GST portal and input-tax values to GSTR-2B, eligibility, reversals and reclaims before filing.</p>
     </section>
   <% else %>

@@ -133,16 +133,23 @@ engine logic, surfaced in Folio per-office / consolidated. Build once in the sha
 - No CRDT / E2EE-relay / offline-merge machinery — the server is authoritative. Planned `.khata`
   exports will provide portable offline copies without making them a merge substrate.
 
-## 12. Product status and roadmap
+## 12. Performance baseline
 
-The current checkpoint includes the governed ledger, India B2B sales/purchases and linked credits,
+Run `bin/performance-baseline` to create, post, report on, verify, and rebuild a realistic isolated
+tenant. The generated rows are rolled back, and the command prints machine-readable JSON. Adjust
+volume with `FOLIO_PERF_ENTRIES` and repetitions with `FOLIO_PERF_REPORT_RUNS`. Optional median
+budgets use names from the JSON, such as `FOLIO_PERF_BUDGET_REPORTS_DAY_BOOK_MS=500`.
+
+## 13. Product status and roadmap
+
+The current checkpoint includes the governed ledger, India B2B sales/purchases and linked supplier
+credits and debits,
 cash settlement/correction, current-state ageing and party ledgers, GST preparation/day book,
 period controls, tenant-wide RBAC, replay recovery, and browser/API flows. The project planning
-workspace maintains the executable sequence and explicit deferrals: deeper role journeys and
-performance, supplier debit notes/TDS, full-suite accounting,
+workspace maintains the executable sequence and explicit deferrals: TDS, full-suite accounting,
 multi-office/multi-country enterprise depth, the complete `.khata` bridge, and production launch.
 
-## 13. Open questions
+## 14. Open questions
 1. Final **name** (Folio vs Abacus / Comptoir / Ledgerline).
 2. **Repo shape** — monorepo (Bahi + Folio + shared corpus package, keeps corpus authoritative) vs
    separate repos sharing a published corpus package. Leaning a shared `khata-conformance`
@@ -150,7 +157,7 @@ multi-office/multi-country enterprise depth, the complete `.khata` bridge, and p
 3. **Self-host packaging** — Docker Compose vs single-binary-ish; how far to go for v1.
 4. **Managed billing** model + tenant provisioning.
 
-## 14. Production configuration
+## 15. Production configuration
 
 Production boots only with an explicit public host, sender, and SMTP account; placeholder delivery
 is not accepted. Configure these environment variables through the deployment secret store:

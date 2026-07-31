@@ -14,6 +14,7 @@ module Posting
       "credit_note" => "Posting::Rules::CreditNote",
       "purchase_bill" => "Posting::Rules::PurchaseBill",
       "purchase_credit_note" => "Posting::Rules::PurchaseCreditNote",
+      "purchase_debit_note" => "Posting::Rules::PurchaseDebitNote",
       "settlement" => "Posting::Rules::Settlement"
     }.freeze
 

@@ -68,6 +68,9 @@
         <%= link_to "Record supplier credit", new_purchase_credit_note_path(
           tenant_route_options.merge(purchase_bill_id: @document.id)
         ), class: "button button--secondary" %>
+        <%= link_to "Record supplier debit", new_purchase_debit_note_path(
+          tenant_route_options.merge(purchase_bill_id: @document.id)
+        ), class: "button button--secondary" %>
       <% end %>
       <% if @document.reversible? && permitted?("documents.reverse") %>
         <%= button_to "Reverse bill", reverse_purchase_bill_path(@document, tenant_route_options),

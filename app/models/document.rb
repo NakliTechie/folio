@@ -11,12 +11,15 @@ class Document < ApplicationRecord
   belongs_to :party, optional: true
   belongs_to :tax_registration, optional: true
   belongs_to :credit_note_for, class_name: "Document", foreign_key: :credit_note_for_document_id, optional: true
+  belongs_to :debit_note_for, class_name: "Document", foreign_key: :debit_note_for_document_id, optional: true
   belongs_to :reverses, class_name: "Document", foreign_key: :reverses_document_id, optional: true
   belongs_to :reversed_by, class_name: "Document", foreign_key: :reversed_by_document_id, optional: true
   has_many :document_lines, -> { order(:line_no) }, dependent: :destroy
   has_many :document_allocations, -> { order(:line_no) }, dependent: :destroy
   has_many :entries, dependent: :nullify
   has_many :credit_notes, class_name: "Document", foreign_key: :credit_note_for_document_id,
+    dependent: :restrict_with_exception
+  has_many :debit_notes, class_name: "Document", foreign_key: :debit_note_for_document_id,
     dependent: :restrict_with_exception
 
   validates :tenant_id, :entity_id, :office_id, :doc_type, :fiscal_year,
@@ -28,8 +31,9 @@ class Document < ApplicationRecord
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
   def reversible?
-    posted? && reversed_by_document_id.nil? && !%w[CN PC RC PY].include?(doc_type) &&
-      !credit_notes.where(state: %w[posted reversed]).exists?
+    posted? && reversed_by_document_id.nil? && !%w[CN PC PD RC PY].include?(doc_type) &&
+      !credit_notes.where(state: %w[posted reversed]).exists? &&
+      !debit_notes.where(state: %w[posted reversed]).exists?
   end
 
   def statutory_printable?

@@ -1,0 +1,39 @@
+<% content_for :title, "Supplier debits · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Purchase adjustments</p>
+      <h1>Supplier debit notes</h1>
+      <p>Record supplier-issued increases to purchase-bill expense, input GST, and vendor payables.</p>
+    </div>
+    <%= link_to "Purchase bills", purchase_bills_path(tenant_route_options), class: "button button--secondary" %>
+  </header>
+
+  <% if @documents.any? %>
+    <section class="panel panel--table">
+      <div class="table-wrap"><table>
+        <caption class="sr-only">Supplier debit notes for <%= Current.tenant.name %></caption>
+        <thead><tr><th scope="col">Folio debit</th><th scope="col">Supplier debit note</th><th scope="col">Vendor</th><th scope="col">Date</th>
+          <th scope="col">Purchase bill</th><th scope="col">Reason</th><th scope="col">Total</th><th scope="col">State</th><th scope="col"></th></tr></thead>
+        <tbody>
+          <% @documents.each do |note| %><tr>
+            <td><strong><%= note.document_number || "Draft ##{note.id}" %></strong></td>
+            <td><%= note.external_reference %></td><td><%= note.party_snapshot.fetch("name") %></td><td><%= note.document_date.to_fs(:long) %></td>
+            <td><%= note.debit_note_for.document_number %></td><td><%= debit_note_reason_label(note.reason_code) %></td>
+            <td class="money"><%= money_amount(note.total_minor, currency: note.currency) %></td>
+            <td><span class="<%= status_class(note.state) %>"><%= note.state.humanize %></span></td>
+            <td><%= link_to "Open", purchase_debit_note_path(note, tenant_route_options), class: "text-link" %></td>
+          </tr><% end %>
+        </tbody>
+      </table></div>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">↗</span>
+      <h2>No supplier debits yet</h2>
+      <p>Open a posted purchase bill to record a supplier debit note that increases its value.</p>
+      <%= link_to "Open purchase bills", purchase_bills_path(tenant_route_options), class: "button button--primary" %>
+    </section>
+  <% end %>
+</main>

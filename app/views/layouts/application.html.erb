@@ -73,7 +73,7 @@
           <%= link_to "Sales invoices", sales_invoices_path(tenant_route_options),
             class: navigation_class("sales_invoices") %>
           <%= link_to "Purchases", purchase_bills_path(tenant_route_options),
-            class: navigation_class("purchase_bills", "purchase_credit_notes") %>
+            class: navigation_class("purchase_bills", "purchase_credit_notes", "purchase_debit_notes") %>
           <%= link_to "Cash", settlements_path(tenant_route_options),
             class: navigation_class("settlements") %>
           <%= link_to "Chart of accounts", accounts_path(tenant_route_options),

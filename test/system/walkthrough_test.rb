@@ -326,6 +326,35 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_no_button "Reverse bill"
   end
 
+  test "owner records an increasing supplier debit against a posted purchase bill" do
+    setup = create_posted_purchase_bill("supplier-debit-walkthrough@folio.invalid", "Supplier Debit Walkthrough")
+
+    visit new_session_path
+    fill_in "Email", with: setup.fetch(:org).user.email_address
+    fill_in "Password", with: PASSWORD
+    click_button "Sign in"
+    assert_text "Signed in as #{setup.fetch(:org).user.email_address}.", wait: 5
+    visit purchase_bill_path(setup.fetch(:bill), tenant_id: setup.fetch(:org).tenant.id)
+    click_link "Record supplier debit"
+    fill_in "Supplier debit-note number", with: "V-DN-1042"
+    set_date_field "Supplier debit-note date", "2026-08-01"
+    select "Additional charge", from: "Reason"
+    fill_in "Explanation", with: "Additional service charge"
+    fill_in "Additional quantity for line 1", with: "0.5"
+    click_button "Review supplier debit"
+
+    assert_selector "h2", text: "Balanced and ready to post"
+    assert_text "INR 29.50"
+    click_button "Post supplier debit"
+
+    assert_selector "h1", text: "PD/26-27/00001"
+    assert_selector "[role=status]", text: /posted.*separate vendor payable/i
+    assert_text "V-DN-1042"
+    click_link "Open source purchase bill"
+    assert_selector "h1", text: "PB/26-27/00001"
+    assert_no_button "Reverse bill"
+  end
+
   test "service business allocates a partial customer receipt without resetting ageing" do
     setup = create_posted_invoice("receipt-walkthrough@folio.invalid", "Receipt Walkthrough")
     invoice = setup.fetch(:invoice)
@@ -374,7 +403,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_text "Reapplied to SI/26-27/00001"
   end
 
-  test "every RBAC preset can enter and leave its authenticated landing" do
+  test "each RBAC preset completes its browser-specific journey" do
     org = Onboarding::SignUp.call(
       email: "role-owner@folio.invalid", password: PASSWORD, org_name: "Role Walkthrough"
     )
@@ -399,6 +428,58 @@ class WalkthroughTest < ApplicationSystemTestCase
 
       assert_current_path root_path
       assert_text "Signed in as #{user.email_address}.", wait: 5
+      assert_selector ".user-context__role", text: Rbac::Presets::MATRIX.fetch(role_code).fetch(:name)
+
+      case role_code
+      when "owner"
+        assert_link "Team"
+        assert_link "Tax setup"
+        click_link "Team"
+        assert_selector "h1", text: "People and invitations"
+        assert_button "Queue invitation"
+      when "accountant"
+        assert_no_link "Team"
+        assert_link "Tax setup"
+        click_link "Chart of accounts"
+        assert_link "Add account"
+        click_link "Opening balances"
+        assert_selector "h1", text: "Opening balances"
+        click_link "Enter opening balances"
+        assert_selector "h1", text: "Enter opening balances"
+        visit period_close_path(tenant_id: org.tenant.id)
+        assert_selector "h1", text: "Period close"
+        assert_no_button "Restrict to close team"
+      when "operator"
+        assert_no_link "Team"
+        assert_no_link "Tax setup"
+        assert_no_link "Record your first transaction"
+        click_link "Purchases"
+        assert_link "New purchase bill"
+        visit new_account_path(tenant_id: org.tenant.id)
+        assert_current_path root_path, ignore_query: true
+        assert_selector "[role=alert]", text: /do not have permission/i
+      when "ca_auditor"
+        assert_no_link "Team"
+        assert_no_link "Tax setup"
+        assert_link "Record your first transaction"
+        click_link "Reports"
+        click_link "Period close"
+        assert_button "Restrict to close team"
+        visit new_party_path(tenant_id: org.tenant.id)
+        assert_current_path root_path, ignore_query: true
+        assert_selector "[role=alert]", text: /do not have permission/i
+      when "viewer"
+        assert_no_link "Team"
+        assert_no_link "Tax setup"
+        assert_no_link "Record your first transaction"
+        click_link "Reports"
+        assert_selector "h1", text: "Trial balance"
+        assert_no_link "Record your first transaction"
+        visit new_purchase_bill_path(tenant_id: org.tenant.id)
+        assert_current_path root_path, ignore_query: true
+        assert_selector "[role=alert]", text: /do not have permission/i
+      end
+
       click_button "Sign out"
       assert_current_path new_session_path
     end

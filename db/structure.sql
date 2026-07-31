@@ -186,6 +186,7 @@ CREATE TABLE public.document_lines (
     tax_components jsonb,
     item_snapshot jsonb,
     credited_document_line_id bigint,
+    debited_document_line_id bigint,
     CONSTRAINT chk_document_lines_cess_rate CHECK (((cess_rate_basis_points IS NULL) OR ((cess_rate_basis_points >= 0) AND (cess_rate_basis_points <= 10000)))),
     CONSTRAINT chk_document_lines_invoice_amounts CHECK (((item_id IS NULL) OR ((quantity > (0)::numeric) AND (unit_price_minor >= 0) AND (taxable_minor > 0)))),
     CONSTRAINT chk_document_lines_tax_rate CHECK (((tax_rate_basis_points IS NULL) OR ((tax_rate_basis_points >= 0) AND (tax_rate_basis_points <= 4000))))
@@ -286,7 +287,8 @@ CREATE TABLE public.documents (
     tax_breakdown jsonb,
     credit_note_for_document_id bigint,
     reason_code character varying,
-    CONSTRAINT chk_documents_credit_note_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying])::text[])))),
+    debit_note_for_document_id bigint,
+    CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying, 'price_increase'::character varying, 'additional_charge'::character varying, 'underbilling'::character varying])::text[])))),
     CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
     CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
     CONSTRAINT chk_documents_supply_type CHECK (((supply_type IS NULL) OR ((supply_type)::text = ANY ((ARRAY['B2B'::character varying, 'B2C'::character varying])::text[]))))
@@ -1960,6 +1962,13 @@ CREATE INDEX idx_documents_credit_note_source ON public.documents USING btree (t
 
 
 --
+-- Name: idx_documents_debit_note_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_documents_debit_note_source ON public.documents USING btree (tenant_id, debit_note_for_document_id, state);
+
+
+--
 -- Name: idx_documents_tenant_party_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1985,6 +1994,13 @@ CREATE UNIQUE INDEX idx_documents_unique_vendor_bill_reference ON public.documen
 --
 
 CREATE UNIQUE INDEX idx_documents_unique_vendor_credit_reference ON public.documents USING btree (tenant_id, party_id, external_reference) WHERE (((doc_type)::text = 'PC'::text) AND (external_reference IS NOT NULL));
+
+
+--
+-- Name: idx_documents_unique_vendor_debit_reference; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_documents_unique_vendor_debit_reference ON public.documents USING btree (tenant_id, party_id, external_reference) WHERE (((doc_type)::text = 'PD'::text) AND (external_reference IS NOT NULL));
 
 
 --
@@ -2139,6 +2155,13 @@ CREATE UNIQUE INDEX index_document_allocations_on_document_id_and_line_no ON pub
 --
 
 CREATE INDEX index_document_lines_on_credited_document_line_id ON public.document_lines USING btree (credited_document_line_id);
+
+
+--
+-- Name: index_document_lines_on_debited_document_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_document_lines_on_debited_document_line_id ON public.document_lines USING btree (debited_document_line_id);
 
 
 --
@@ -2739,6 +2762,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801002000'),
 ('20260801001000'),
 ('20260801000000'),
 ('20260731235500'),
