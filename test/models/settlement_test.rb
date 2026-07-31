@@ -103,9 +103,24 @@ class SettlementTest < ActiveSupport::TestCase
     assert_equal SETTLEMENT_DATE, original.cleared_on
     residual = original.residuals.first
     assert residual.open_item?
+    assert_equal "statistical", residual.line_class
     assert_equal SETTLEMENT_DATE, residual.baseline_date
     assert_equal original.assignment, residual.assignment
     assert_equal 7_800, Posting::Clearing.open_amount(residual)
+
+    trial_balance = Reports.trial_balance(@org.tenant.id)
+    assert_equal trial_balance.sum { |row| row.fetch("debit") },
+      trial_balance.sum { |row| row.fetch("credit") }
+
+    day_book = Reports.day_book(
+      @org.tenant.id, from_date: Date.new(2026, 7, 31), to_date: SETTLEMENT_DATE
+    )
+    assert_equal day_book.fetch(:debit_minor), day_book.fetch(:credit_minor)
+
+    readiness = PeriodControls::Readiness.call(
+      tenant: @org.tenant, fiscal_year: 2026, period_no: 5
+    )
+    assert readiness.fetch(:balanced)
   end
 
   test "settlements reject cross-party and wrong-role allocations" do

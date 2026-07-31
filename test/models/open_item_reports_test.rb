@@ -97,6 +97,13 @@ class OpenItemReportsTest < ActiveSupport::TestCase
     assert_equal 7_800, report.fetch(:total_minor)
     assert_equal 46, report.dig(:rows, 0, :age_days)
     assert_equal "days_31_60", report.dig(:rows, 0, :bucket)
+
+    ledger = Reports.party_ledger(@org.tenant.id, party_id: @customer.id)
+    assert_equal [ 11_800, 0, 0 ], ledger.fetch(:rows).map { |row| row.fetch(:debit_minor) }
+    assert_equal [ 0, 4_000, 0 ], ledger.fetch(:rows).map { |row| row.fetch(:credit_minor) }
+    assert_equal [ 11_800, 7_800, 7_800 ], ledger.fetch(:rows).map { |row| row.fetch(:running_balance_minor) }
+    assert_equal 7_800, ledger.fetch(:balance_minor)
+    assert_equal 7_800, ledger.fetch(:open_minor)
   end
 
   test "party ledgers remain tenant scoped" do

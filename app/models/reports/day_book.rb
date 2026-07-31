@@ -22,7 +22,7 @@ module Reports
       private
 
       def row(entry)
-        amounts = entry.entry_lines.flat_map(&:amounts)
+        amounts = entry.entry_lines.select { |line| line.line_class == "real" }.flat_map(&:amounts)
           .select { |amount| amount.slot_role == "transaction" }
           .map(&:amount_minor)
         document = entry.document

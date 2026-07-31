@@ -223,7 +223,9 @@ module Posting
       end
     end
 
-    # The new open item that a residual clearing opens, with a fresh baseline (ageing reset).
+    # The new statistical open item that a residual clearing opens, with a fresh baseline
+    # (ageing reset). Its amount drives subledger clearing only; the source document and
+    # settlement already contain the complete general-ledger accounting.
     # source_event_id = the clearing event, so the residual has its own stable (event, ledger, line_no)
     # key and can itself be cleared later.
     def self.open_residual!(item:, remaining:, sign:, txn:, baseline:, source_event_id:, host_entry_id:)
@@ -234,7 +236,7 @@ module Posting
         line_no: next_no, source_event_id: source_event_id, party_id: item.party_id,
         party_role: item.party_role, open_item: true, item_class: item.item_class,
         assignment: item.assignment, baseline_date: baseline, residual_of_line_id: item.id,
-        line_class: "real", posting_layer: "00"
+        line_class: "statistical", posting_layer: "00"
       )
       return residual unless txn
 

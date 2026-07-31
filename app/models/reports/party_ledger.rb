@@ -14,7 +14,8 @@ module Reports
         amount = line.amounts.find { |candidate| candidate.slot_role == "transaction" }
         next unless amount
 
-        running += amount.amount_minor
+        ledger_amount = line.line_class == "real" ? amount.amount_minor : 0
+        running += ledger_amount
         {
           entry_line_id: line.id,
           posting_date: line.entry.posting_date,
@@ -22,8 +23,8 @@ module Reports
           document_number: line.entry.document&.document_number,
           assignment: line.assignment,
           party_role: line.party_role,
-          debit_minor: [ amount.amount_minor, 0 ].max,
-          credit_minor: [ -amount.amount_minor, 0 ].max,
+          debit_minor: [ ledger_amount, 0 ].max,
+          credit_minor: [ -ledger_amount, 0 ].max,
           running_balance_minor: running,
           open_item: line.open_item?,
           outstanding_minor: line.open_item? && line.cleared_on.nil? ? Posting::Clearing.open_amount(line) : 0,

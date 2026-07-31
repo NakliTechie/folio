@@ -16,6 +16,7 @@ module PeriodControls
       )
       amounts = JournalEntryLineAmount.joins(entry_line: :entry)
         .where(entries: { tenant_id: tenant.id, fiscal_year: fiscal_year, period_no: period_no })
+        .where(entry_lines: { line_class: "real" })
         .where(slot_role: "transaction").pluck(:amount_minor)
       debit = amounts.select(&:positive?).sum
       credit = -amounts.select(&:negative?).sum

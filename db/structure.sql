@@ -2762,6 +2762,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801003000'),
 ('20260801002000'),
 ('20260801001000'),
 ('20260801000000'),
