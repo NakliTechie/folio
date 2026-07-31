@@ -129,7 +129,19 @@ CREATE TABLE public.document_lines (
     narration character varying,
     extra jsonb,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    item_id bigint,
+    quantity numeric(20,6),
+    unit_price_minor bigint,
+    taxable_minor bigint,
+    hsn_sac_code character varying,
+    tax_rate_basis_points integer,
+    cess_rate_basis_points integer,
+    tax_components jsonb,
+    item_snapshot jsonb,
+    CONSTRAINT chk_document_lines_cess_rate CHECK (((cess_rate_basis_points IS NULL) OR ((cess_rate_basis_points >= 0) AND (cess_rate_basis_points <= 10000)))),
+    CONSTRAINT chk_document_lines_invoice_amounts CHECK (((item_id IS NULL) OR ((quantity > (0)::numeric) AND (unit_price_minor >= 0) AND (taxable_minor > 0)))),
+    CONSTRAINT chk_document_lines_tax_rate CHECK (((tax_rate_basis_points IS NULL) OR ((tax_rate_basis_points >= 0) AND (tax_rate_basis_points <= 4000))))
 );
 
 
@@ -212,7 +224,22 @@ CREATE TABLE public.documents (
     document_type_id bigint,
     document_date date,
     posting_date date,
-    CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[])))
+    party_id bigint,
+    tax_registration_id bigint,
+    supply_type character varying,
+    place_of_supply_state_code character varying,
+    due_date date,
+    currency character varying(3),
+    minor_unit_exponent integer,
+    subtotal_minor bigint,
+    tax_minor bigint,
+    total_minor bigint,
+    party_snapshot jsonb,
+    tax_registration_snapshot jsonb,
+    tax_breakdown jsonb,
+    CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
+    CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
+    CONSTRAINT chk_documents_supply_type CHECK (((supply_type IS NULL) OR ((supply_type)::text = ANY ((ARRAY['B2B'::character varying, 'B2C'::character varying])::text[]))))
 );
 
 
@@ -373,7 +400,12 @@ CREATE TABLE public.entry_lines (
     cleared_amount_minor bigint DEFAULT 0 NOT NULL,
     residual_of_line_id bigint,
     clearing_reason character varying,
-    source_event_id bigint
+    source_event_id bigint,
+    hsn_sac_code character varying,
+    tax_component character varying,
+    tax_rate_basis_points integer,
+    taxable_amount_minor bigint,
+    CONSTRAINT chk_entry_lines_tax_component CHECK (((tax_component IS NULL) OR ((tax_component)::text = ANY ((ARRAY['cgst'::character varying, 'sgst'::character varying, 'utgst'::character varying, 'igst'::character varying, 'cess'::character varying])::text[]))))
 );
 
 
@@ -1785,6 +1817,27 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_documents_tenant_party_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_documents_tenant_party_date ON public.documents USING btree (tenant_id, party_id, document_date);
+
+
+--
+-- Name: idx_documents_tenant_tax_registration_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_documents_tenant_tax_registration_date ON public.documents USING btree (tenant_id, tax_registration_id, document_date);
+
+
+--
+-- Name: idx_entry_lines_tax_reporting; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_entry_lines_tax_reporting ON public.entry_lines USING btree (tenant_id, tax_registration_id, tax_component) WHERE (tax_component IS NOT NULL);
+
+
+--
 -- Name: idx_office_tax_registrations_tenant_registration; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1915,6 +1968,13 @@ CREATE INDEX index_document_lines_on_document_id ON public.document_lines USING 
 --
 
 CREATE UNIQUE INDEX index_document_lines_on_document_id_and_line_no ON public.document_lines USING btree (document_id, line_no);
+
+
+--
+-- Name: index_document_lines_on_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_document_lines_on_item_id ON public.document_lines USING btree (item_id);
 
 
 --
@@ -2457,6 +2517,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731230000'),
 ('20260731220000'),
 ('20260731100000'),
 ('20260731091000'),

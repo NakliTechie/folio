@@ -18,6 +18,7 @@
 
     <%# Includes all stylesheet files in app/assets/stylesheets %>
     <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
   </head>
 
   <body class="<%= authenticated? && Current.tenant ? "app-body" : "public-body" %>">
@@ -69,6 +70,8 @@
           <%= link_to "Overview", root_path(tenant_route_options), class: navigation_class("home") %>
           <%= link_to "Transactions", journal_vouchers_path(tenant_route_options),
             class: navigation_class("journal_vouchers") %>
+          <%= link_to "Sales invoices", sales_invoices_path(tenant_route_options),
+            class: navigation_class("sales_invoices") %>
           <%= link_to "Chart of accounts", accounts_path(tenant_route_options),
             class: navigation_class("accounts") %>
           <%= link_to "Customers & vendors", parties_path(tenant_route_options),

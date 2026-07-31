@@ -1,0 +1,49 @@
+<% content_for :title, "Sales invoices · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Sales</p>
+      <h1>Sales invoices</h1>
+      <p>Create B2B service invoices with a frozen GST preview, then post them to receivables and the ledger.</p>
+    </div>
+    <% if permitted?("invoices.create") %>
+      <%= link_to "New sales invoice", new_sales_invoice_path(tenant_route_options),
+        class: "button button--primary" %>
+    <% end %>
+  </header>
+
+  <% if @documents.any? %>
+    <section class="panel panel--table">
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Sales invoices for <%= Current.tenant.name %></caption>
+          <thead><tr><th scope="col">Invoice</th><th scope="col">Date</th><th scope="col">Customer</th>
+            <th scope="col">Total</th><th scope="col">State</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+          <tbody>
+            <% @documents.each do |document| %>
+              <tr>
+                <td><strong><%= document.document_number || "Draft ##{document.id}" %></strong></td>
+                <td><%= document.document_date.to_fs(:long) %></td>
+                <td><%= document.party_snapshot&.fetch("name", nil) || document.party&.name || "—" %></td>
+                <td class="money"><%= money_amount(document.total_minor, currency: document.currency) %></td>
+                <td><span class="<%= status_class(document.state) %>"><%= document.state.humanize %></span></td>
+                <td><%= link_to "Open", sales_invoice_path(document, tenant_route_options), class: "text-link" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">₹</span>
+      <h2>No sales invoices yet</h2>
+      <p>Add a seller GSTIN, a registered customer, and a service before creating your first invoice.</p>
+      <% if permitted?("invoices.create") %>
+        <%= link_to "Create your first invoice", new_sales_invoice_path(tenant_route_options),
+          class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% end %>
+</main>

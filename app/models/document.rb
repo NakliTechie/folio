@@ -8,6 +8,8 @@ class Document < ApplicationRecord
   STATES = %w[draft parked posted reversed].freeze
 
   belongs_to :document_type
+  belongs_to :party, optional: true
+  belongs_to :tax_registration, optional: true
   belongs_to :reverses, class_name: "Document", foreign_key: :reverses_document_id, optional: true
   belongs_to :reversed_by, class_name: "Document", foreign_key: :reversed_by_document_id, optional: true
   has_many :document_lines, -> { order(:line_no) }, dependent: :destroy
@@ -17,6 +19,7 @@ class Document < ApplicationRecord
     :document_date, :posting_date, presence: true
   validates :state, inclusion: { in: STATES }
   validate :document_type_matches_document
+  validate :invoice_totals_are_consistent
 
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
@@ -30,5 +33,12 @@ class Document < ApplicationRecord
     unless document_type.tenant_id == tenant_id && document_type.code == doc_type
       errors.add(:document_type, "must belong to the same tenant and match doc_type")
     end
+  end
+
+  def invoice_totals_are_consistent
+    return if subtotal_minor.nil? && tax_minor.nil? && total_minor.nil?
+    return if subtotal_minor.to_i.positive? && tax_minor.to_i >= 0 && total_minor == subtotal_minor + tax_minor
+
+    errors.add(:total_minor, "must equal the positive subtotal plus tax")
   end
 end

@@ -698,6 +698,10 @@ input[type="submit"]:hover {
   margin-bottom: 0;
 }
 
+.panel--table > .invoice-lines-heading {
+  padding: 1.35rem 1.35rem 0;
+}
+
 .content-grid {
   display: grid;
   align-items: start;

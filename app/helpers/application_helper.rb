@@ -3,6 +3,10 @@ module ApplicationHelper
     "#{currency} #{number_with_precision(amount_minor.to_i / 100.0, precision: 2, delimiter: ",")}"
   end
 
+  def basis_points_percentage(basis_points)
+    number_to_percentage(basis_points.to_i / 100.0, precision: 2, strip_insignificant_zeros: true)
+  end
+
   def role_name
     current_role_assignment&.role_template&.name || "Member"
   end
@@ -31,7 +35,9 @@ module ApplicationHelper
   end
 
   def browser_document_path(document)
-    if document.doc_type == "OB"
+    if document.doc_type == "SI"
+      sales_invoice_path(document, tenant_route_options)
+    elsif document.doc_type == "OB"
       opening_balance_path(document, tenant_route_options)
     else
       journal_voucher_path(document, tenant_route_options)

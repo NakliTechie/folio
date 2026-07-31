@@ -6,6 +6,11 @@ module Posting
     # entry line on the PRIMARY ledger, no tax, no split. It exercises the whole
     # document→rule→post loop; richer rules (invoices computing tax/splits) plug in the same way.
     class JournalVoucher
+      def self.validate_document!(document)
+        lines = document.document_lines.to_a
+        raise Documents::InvalidDocument, "a document needs at least two non-zero lines" if lines.size < 2
+      end
+
       def self.entry_lines(document)
         ledger = Ledger.find_by!(tenant_id: document.tenant_id, code: "PRIMARY")
         # A reversal keeps the SAME account with a negated amount (a negative posting, not a

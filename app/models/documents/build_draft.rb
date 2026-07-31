@@ -12,6 +12,9 @@ module Documents
       entity = Entity.find_by!(tenant_id: tenant.id, code: "PRIMARY")
       office = Office.find_by!(tenant_id: tenant.id, entity_id: entity.id, code: "PRIMARY")
       type = DocumentType.where(tenant_id: tenant.id, active: true).find_by!(code: doc_type)
+      unless %w[journal_voucher opening_balance].include?(type.posting_rule)
+        raise InvalidDocument, "#{type.code} drafts require their specialized endpoint"
+      end
       resolved_fiscal_year = Documents.fiscal_year(posting_on, variant: entity.fiscal_year_variant)
       assert_fiscal_year!(fiscal_year, resolved_fiscal_year)
       normalized_lines = normalize_lines!(tenant, lines)

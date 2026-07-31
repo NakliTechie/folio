@@ -93,6 +93,72 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_selector "tfoot", text: "Net profit"
   end
 
+  test "service business creates posts and reverses a GST sales invoice" do
+    org = Onboarding::SignUp.call(
+      email: "invoice-walkthrough@folio.invalid", password: PASSWORD, org_name: "Invoice Walkthrough"
+    )
+    entity = Entity.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office = Office.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    TaxRegistrations::Manage.create!(
+      tenant: org.tenant, entity: entity,
+      attributes: {
+        kind: "GSTIN", identifier: "27AAPFU0939F1ZV", jurisdiction: "IN-MH",
+        valid_from: Date.new(2026, 4, 1)
+      },
+      office_ids: [ office.id ], actor: org.user
+    )
+    Parties::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        party_number: "C-001", name: "Acme Customer", state_code: "29", country_code: "IN"
+      },
+      roles: [ "customer" ],
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "29AAAAA0300L1Z8", valid_from: Date.new(2026, 4, 1)
+      },
+      actor: org.user
+    )
+    Items::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        code: "CONSULT", name: "Consulting services", item_type: "service",
+        hsn_sac_code: "998311", unit_of_measure: "OTH", tax_rate_basis_points: 1800,
+        cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000"
+      },
+      actor: org.user
+    )
+
+    visit new_session_path
+    fill_in "Email", with: org.user.email_address
+    fill_in "Password", with: PASSWORD
+    click_button "Sign in"
+    click_link "Sales invoices"
+    click_link "New sales invoice"
+    select "C-001 · Acme Customer", from: "Customer"
+    select "27AAPFU0939F1ZV · State 27", from: "Seller GSTIN"
+    fill_in "Invoice date", with: "2026-07-31"
+    fill_in "Due date", with: "2026-08-30"
+    select "29 · GST state/UT", from: "Place of supply (state code)"
+    select "CONSULT · Consulting services", from: "Product or service for line 1"
+    fill_in "Quantity for line 1", with: "2"
+    fill_in "Unit price for line 1", with: "50.00"
+    click_button "Review invoice"
+
+    assert_selector "h2", text: "GST calculated and ready to post"
+    assert_text "IGST"
+    assert_text "INR 118.00"
+    click_button "Post invoice"
+
+    assert_selector "h1", text: "SI/1"
+    assert_selector "[role=status]", text: /posted.*receivables.*GST/i
+    accept_confirm("Reverse this unsettled invoice with a compensating entry?") do
+      click_button "Reverse invoice"
+    end
+
+    assert_selector "[role=status]", text: /reversed.*open receivable cleared/i
+    assert_selector ".status-badge--danger", text: "Reversed"
+  end
+
   test "every RBAC preset can enter and leave its authenticated landing" do
     org = Onboarding::SignUp.call(
       email: "role-owner@folio.invalid", password: PASSWORD, org_name: "Role Walkthrough"

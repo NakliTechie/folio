@@ -1,0 +1,122 @@
+<% content_for :title, "New sales invoice · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= link_to "← Back to sales invoices", sales_invoices_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">New B2B invoice</p>
+    <h1>Create a sales invoice</h1>
+    <p>Choose the statutory identities and service lines. Folio calculates GST and freezes the complete preview before posting.</p>
+  </header>
+
+  <% if @parties.empty? || @seller_registrations.empty? || @items.empty? %>
+    <section class="panel">
+      <h2>Finish invoice setup</h2>
+      <p>A sales invoice needs an active seller GSTIN, a customer with an in-force GSTIN, and an active product or service.</p>
+      <div class="action-row">
+        <%= link_to "Tax setup", tax_registrations_path(tenant_route_options), class: "button button--secondary" if permitted?("masters.manage") %>
+        <%= link_to "Customers", parties_path(tenant_route_options), class: "button button--secondary" %>
+        <%= link_to "Products & services", items_path(tenant_route_options), class: "button button--secondary" %>
+      </div>
+    </section>
+  <% end %>
+
+  <%= form_with scope: :sales_invoice, url: sales_invoices_path(tenant_route_options), class: "stacked-form" do |form| %>
+    <section class="panel form-panel">
+      <div class="form-grid form-grid--two">
+        <div class="form-group">
+          <%= form.label :party_id, "Customer" %>
+          <%= form.select :party_id,
+            @parties.map { |party| ["#{party.party_number} · #{party.name}", party.id] },
+            { prompt: "Choose a registered customer", selected: params.dig(:sales_invoice, :party_id) },
+            required: true %>
+        </div>
+        <div class="form-group">
+          <%= form.label :tax_registration_id, "Seller GSTIN" %>
+          <%= form.select :tax_registration_id,
+            @seller_registrations.map { |registration| ["#{registration.identifier} · State #{registration.state_code}", registration.id] },
+            { prompt: "Choose the issuing GSTIN", selected: params.dig(:sales_invoice, :tax_registration_id) },
+            required: true %>
+        </div>
+        <div class="form-group">
+          <%= form.label :document_date, "Invoice date" %>
+          <%= form.date_field :document_date, required: true,
+            value: params.dig(:sales_invoice, :document_date).presence || Date.current.iso8601 %>
+        </div>
+        <div class="form-group">
+          <%= form.label :due_date, "Due date" %>
+          <%= form.date_field :due_date, required: true,
+            value: params.dig(:sales_invoice, :due_date).presence || (Date.current + 30).iso8601 %>
+        </div>
+        <div class="form-group">
+          <%= form.label :place_of_supply_state_code, "Place of supply (state code)" %>
+          <%= form.select :place_of_supply_state_code,
+            Taxes::India::StateCodes::CODES.map { |code| ["#{code} · GST state/UT", code] },
+            { prompt: "Choose the place of supply", selected: params.dig(:sales_invoice, :place_of_supply_state_code) },
+            required: true %>
+          <small>This determines whether Folio applies IGST or CGST plus SGST/UTGST.</small>
+        </div>
+        <div class="form-group">
+          <%= form.label :external_reference, "Customer reference (optional)" %>
+          <%= form.text_field :external_reference, maxlength: 100,
+            value: params.dig(:sales_invoice, :external_reference), placeholder: "Purchase order or contract" %>
+        </div>
+      </div>
+      <div class="form-group">
+        <%= form.label :narration, "Invoice note (optional)" %>
+        <%= form.text_field :narration, maxlength: 200,
+          value: params.dig(:sales_invoice, :narration), placeholder: "For example, July consulting services" %>
+      </div>
+    </section>
+
+    <section class="panel panel--table">
+      <div class="panel__header invoice-lines-heading">
+        <div><p class="eyebrow">Line items</p><h2>Services and prices</h2></div>
+        <small>Use up to five lines in this first service-invoice flow.</small>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Sales invoice line input</caption>
+          <thead><tr><th scope="col">Product or service</th><th scope="col">Quantity</th>
+            <th scope="col">Unit price (<%= Current.tenant.functional_currency %>)</th><th scope="col">GST</th></tr></thead>
+          <tbody>
+            <% 5.times do |index| %>
+              <% submitted = @submitted_lines[index] || {} %>
+              <tr>
+                <td>
+                  <%= label_tag "sales_invoice_line_#{index}_item", "Product or service for line #{index + 1}", class: "sr-only" %>
+                  <%= select_tag "sales_invoice[lines][][item_id]",
+                    options_for_select(@items.map { |item| ["#{item.code} · #{item.name}", item.id] }, submitted[:item_id] || submitted["item_id"]),
+                    include_blank: index.zero? ? "Choose a product or service" : "Optional line",
+                    id: "sales_invoice_line_#{index}_item", required: index.zero? %>
+                </td>
+                <td>
+                  <%= label_tag "sales_invoice_line_#{index}_quantity", "Quantity for line #{index + 1}", class: "sr-only" %>
+                  <%= number_field_tag "sales_invoice[lines][][quantity]", submitted[:quantity] || submitted["quantity"],
+                    id: "sales_invoice_line_#{index}_quantity", min: "0.000001", step: "0.000001",
+                    inputmode: "decimal", placeholder: "1" %>
+                </td>
+                <td>
+                  <%= label_tag "sales_invoice_line_#{index}_unit_price", "Unit price for line #{index + 1}", class: "sr-only" %>
+                  <%= number_field_tag "sales_invoice[lines][][unit_price]", submitted[:unit_price] || submitted["unit_price"],
+                    id: "sales_invoice_line_#{index}_unit_price", min: "0", step: "0.01",
+                    inputmode: "decimal", placeholder: "0.00" %>
+                </td>
+                <td><small>Select a line to use its governed HSN/SAC and tax rate.</small></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="balance-note">
+      <span aria-hidden="true">₹</span>
+      <p><strong>Nothing posts yet.</strong> Folio resolves the applicable GST, freezes every master snapshot, and shows the exact accounting preview first.</p>
+    </div>
+    <div class="form-actions">
+      <%= form.submit "Review invoice", class: "button button--primary",
+        disabled: @parties.empty? || @seller_registrations.empty? || @items.empty? %>
+      <%= link_to "Cancel", sales_invoices_path(tenant_route_options), class: "button button--quiet" %>
+    </div>
+  <% end %>
+</main>

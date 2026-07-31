@@ -9,7 +9,8 @@ module Posting
 
     REGISTRY = {
       "journal_voucher" => "Posting::Rules::JournalVoucher",
-      "opening_balance" => "Posting::Rules::OpeningBalance"
+      "opening_balance" => "Posting::Rules::OpeningBalance",
+      "sales_invoice" => "Posting::Rules::SalesInvoice"
     }.freeze
 
     def self.for(identifier)

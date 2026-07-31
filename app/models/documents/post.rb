@@ -20,13 +20,13 @@ module Documents
         document.lock!
         raise NotPostable, "document is #{document.state}, not postable" unless document.postable?
         assert_document_integrity!(document)
-        assert_accounts_active!(document)
+        sim = Simulate.call(document)
+        assert_accounts_active!(document, sim[:lines])
 
         authority, role_capabilities = enforce_and_resolve_authority!(
-          document, authorize, required_capability: required_capability
+          document, authorize, lines: sim[:lines], required_capability: required_capability
         )
         effective_capabilities = (Array(capabilities) + role_capabilities).uniq
-        sim = Simulate.call(document)
         raise Posting::UnbalancedError, sim[:offenders] unless sim[:balanced]
 
         posting = document.posting_date || document.document_date || Date.current
@@ -43,8 +43,8 @@ module Documents
       end
     end
 
-    def assert_accounts_active!(document)
-      codes = document.document_lines.map(&:account_code).uniq
+    def assert_accounts_active!(document, posting_lines)
+      codes = posting_lines.map { |line| line.fetch(:account_code) }.uniq
       scope = Account.where(tenant_id: document.tenant_id, code: codes)
       available_codes = document.reverses_document_id.present? ? scope.pluck(:code) : scope.active.pluck(:code)
       unavailable = codes - available_codes
@@ -79,7 +79,7 @@ module Documents
       end
 
       lines = document.document_lines.to_a
-      raise InvalidDocument, "a document needs at least two non-zero lines" if lines.size < 2
+      Documents.rule_for(document).validate_document!(document)
 
       expected_currency = tenant.functional_currency
       expected_exponent = CurrencyProfile.exponent_for!(expected_currency)
@@ -96,13 +96,16 @@ module Documents
     # Reject a post the actor's role/limit does not permit; return the authority to stamp.
     # The tenant is ALWAYS the document's own tenant_id — never a caller-supplied value — so a
     # role held in another tenant can never authorize a post here.
-    def enforce_and_resolve_authority!(document, authorize, required_capability:)
+    def enforce_and_resolve_authority!(document, authorize, lines:, required_capability:)
       return [ {}, [] ] unless authorize
 
       user = authorize.fetch(:user)
       tenant_id = document.tenant_id
       office_id = authorize[:office_id] || document.office_id
-      amount = document.document_lines.select { |l| l.amount_minor.positive? }.sum(&:amount_minor)
+      amount = lines.sum do |line|
+        Array(line.fetch(:amounts)).select { |slot| slot[:slot_role] == "transaction" }
+          .sum { |slot| [ Integer(slot[:amount_minor]), 0 ].max }
+      end
       user_role = Authorization.role_for(user: user, tenant_id: tenant_id, office_id: office_id)
 
       unless user_role && Authorization.permits?(user: user, tenant_id: tenant_id, capability: required_capability,
