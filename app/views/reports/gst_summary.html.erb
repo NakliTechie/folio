@@ -109,7 +109,7 @@
             <td class="money"><%= money_amount(outward[:taxable_value_minor]) %></td><td class="money"><%= money_amount(outward.dig(:tax, :igst)) %></td>
             <td class="money"><%= money_amount(outward.dig(:tax, :cgst)) %></td><td class="money"><%= money_amount(outward.dig(:tax, :sgst) + outward.dig(:tax, :utgst)) %></td>
             <td class="money"><%= money_amount(outward.dig(:tax, :cess)) %></td></tr>
-          <tr><th scope="row">4(A)(5) All other ITC</th><td><strong>Reference only:</strong> purchase books require GSTR-2B and eligibility review</td>
+          <tr><th scope="row">4(A)(5) All other ITC</th><td><strong>Reference only:</strong> purchase bills net of supplier credits require GSTR-2B and eligibility review</td>
             <td class="money"><%= money_amount(input_tax[:taxable_value_minor]) %></td><td class="money"><%= money_amount(input_tax.dig(:tax, :igst)) %></td>
             <td class="money"><%= money_amount(input_tax.dig(:tax, :cgst)) %></td><td class="money"><%= money_amount(input_tax.dig(:tax, :sgst) + input_tax.dig(:tax, :utgst)) %></td>
             <td class="money"><%= money_amount(input_tax.dig(:tax, :cess)) %></td></tr>

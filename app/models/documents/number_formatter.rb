@@ -2,7 +2,7 @@
 
 module Documents
   module NumberFormatter
-    STATUTORY_TYPES = %w[SI CN PB RC PY].freeze
+    STATUTORY_TYPES = %w[SI CN PB PC RC PY].freeze
     VALID_STATUTORY_NUMBER = /\A[A-Za-z0-9\/-]{1,16}\z/
 
     module_function

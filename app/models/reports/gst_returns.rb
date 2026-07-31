@@ -17,7 +17,7 @@ module Reports
           tenant_id: tenant_id,
           tax_registration_id: registration.id,
           document_date: from_date..to_date,
-          doc_type: %w[SI CN PB]
+          doc_type: %w[SI CN PB PC]
         ).where.not(posted_entry_id: nil).includes(:document_lines, :reverses, :credit_note_for)
           .order(:document_date, :id).to_a
         negative_posting_entries = EntryLine.where(
@@ -31,14 +31,14 @@ module Reports
         sales_reversals = documents.select do |document|
           document.doc_type == "SI" && negative_posting_entries.key?(document.posted_entry_id)
         end
-        purchase_bills = documents.select { |document| document.doc_type == "PB" }
+        purchase_documents = documents.select { |document| %w[PB PC].include?(document.doc_type) }
 
         table_4a = document_table(invoices, effect: 1)
         table_9b = document_table(credit_notes, effect: 1)
         reversal_adjustments = document_table(sales_reversals, effect: -1)
         reportable_net = add_totals(table_4a.fetch(:totals), negate_totals(table_9b.fetch(:totals)))
         book_outward = add_totals(reportable_net, reversal_adjustments.fetch(:totals))
-        input_tax = purchase_input_tax(purchase_bills, negative_posting_entries)
+        input_tax = purchase_input_tax(purchase_documents, negative_posting_entries)
 
         {
           registration: registration_json(registration),
@@ -153,7 +153,11 @@ module Reports
         taxable = 0
         invoice_value = 0
         documents.each do |document|
-          effect = negative_posting_entries.key?(document.posted_entry_id) ? -1 : 1
+          effect = if document.doc_type == "PC" || negative_posting_entries.key?(document.posted_entry_id)
+            -1
+          else
+            1
+          end
           taxable += effect * document.subtotal_minor
           invoice_value += effect * document.total_minor
           component_hash(document.tax_breakdown).each do |component, amount|
@@ -161,8 +165,13 @@ module Reports
           end
         end
         {
-          document_count: documents.count { |document| !negative_posting_entries.key?(document.posted_entry_id) },
-          reversal_count: documents.count { |document| negative_posting_entries.key?(document.posted_entry_id) },
+          document_count: documents.count do |document|
+            document.doc_type == "PB" && !negative_posting_entries.key?(document.posted_entry_id)
+          end,
+          supplier_credit_note_count: documents.count { |document| document.doc_type == "PC" },
+          reversal_count: documents.count do |document|
+            document.doc_type == "PB" && negative_posting_entries.key?(document.posted_entry_id)
+          end,
           taxable_value_minor: taxable,
           invoice_value_minor: invoice_value,
           tax: components

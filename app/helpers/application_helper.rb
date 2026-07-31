@@ -46,6 +46,8 @@ module ApplicationHelper
   def browser_document_path(document)
     if %w[RC PY].include?(document.doc_type)
       settlement_path(document, tenant_route_options)
+    elsif document.doc_type == "PC"
+      purchase_credit_note_path(document, tenant_route_options)
     elsif document.doc_type == "PB"
       purchase_bill_path(document, tenant_route_options)
     elsif document.doc_type == "CN"

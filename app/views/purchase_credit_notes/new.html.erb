@@ -1,0 +1,70 @@
+<% content_for :title, "Credit #{@purchase_bill.document_number} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= link_to "← Back to purchase bill", purchase_bill_path(@purchase_bill, tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">New supplier credit</p>
+    <h1>Credit <%= @purchase_bill.document_number %></h1>
+    <p>Enter the supplier's credit-note reference and quantities. Rates, GST identity, place of supply, and master snapshots remain tied to the purchase bill.</p>
+  </header>
+
+  <%= form_with scope: :purchase_credit_note, url: purchase_credit_notes_path(tenant_route_options), class: "stacked-form" do |form| %>
+    <%= form.hidden_field :purchase_bill_id, value: @purchase_bill.id %>
+    <section class="panel form-panel">
+      <div class="form-grid form-grid--two">
+        <div class="form-group"><%= form.label :external_reference, "Supplier credit-note number" %>
+          <%= form.text_field :external_reference, maxlength: 100, required: true,
+            value: params.dig(:purchase_credit_note, :external_reference), placeholder: "For example, V-CN-1042" %></div>
+        <div class="form-group"><%= form.label :document_date, "Supplier credit-note date" %>
+          <%= form.date_field :document_date, required: true, min: @purchase_bill.document_date.iso8601,
+            value: params.dig(:purchase_credit_note, :document_date).presence || Date.current.iso8601 %></div>
+        <div class="form-group"><%= form.label :reason_code, "Reason" %>
+          <%= form.select :reason_code,
+            PurchaseCreditNotes::BuildDraft::REASONS.map { |reason| [credit_note_reason_label(reason), reason] },
+            { prompt: "Choose the adjustment reason", selected: params.dig(:purchase_credit_note, :reason_code) },
+            required: true %></div>
+        <div class="form-group"><%= form.label :narration, "Explanation" %>
+          <%= form.text_field :narration, maxlength: 200, required: true,
+            value: params.dig(:purchase_credit_note, :narration), placeholder: "Why did the supplier issue this credit?" %></div>
+      </div>
+    </section>
+
+    <section class="panel panel--table">
+      <div class="table-wrap"><table>
+        <caption class="sr-only">Purchase-bill lines available to credit</caption>
+        <thead><tr><th scope="col">Service</th><th scope="col">Billed</th><th scope="col">Available</th>
+          <th scope="col">Unit price</th><th scope="col">Quantity credited</th></tr></thead>
+        <tbody>
+          <% @purchase_bill.document_lines.each_with_index do |line, index| %>
+            <% remaining = @remaining_quantities.fetch(line.id) %>
+            <% submitted = @submitted_lines[index] || {} %>
+            <tr>
+              <td><strong><%= line.item_snapshot.fetch("name") %></strong><br><small>SAC <%= line.hsn_sac_code %> · <%= basis_points_percentage(line.tax_rate_basis_points) %> GST</small></td>
+              <td><%= line.quantity.to_s("F") %> <%= line.item_snapshot.fetch("unitOfMeasure") %></td>
+              <td><%= remaining.to_s("F") %></td>
+              <td class="money"><%= money_amount(line.unit_price_minor, currency: @purchase_bill.currency) %></td>
+              <td><%= hidden_field_tag "purchase_credit_note[lines][][document_line_id]", line.id %>
+                <%= label_tag "purchase_credit_note_line_#{line.id}_quantity", "Quantity credited for line #{line.line_no}", class: "sr-only" %>
+                <%= number_field_tag "purchase_credit_note[lines][][quantity]",
+                  submitted[:quantity] || submitted["quantity"], id: "purchase_credit_note_line_#{line.id}_quantity",
+                  min: "0.000001", max: remaining.to_s("F"), step: "0.000001", inputmode: "decimal",
+                  disabled: remaining.zero?, placeholder: "0" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table></div>
+    </section>
+
+    <% fully_credited = @remaining_quantities.values.all?(&:zero?) %>
+    <% if fully_credited %>
+      <div class="notification notification--error" role="alert"><strong>This purchase bill is already fully credited.</strong></div>
+    <% else %>
+      <div class="balance-note"><span aria-hidden="true">↙</span><p><strong>The preview is immutable.</strong>
+        Posting reduces expense and input GST, debits vendor payables, and applies both open-item sides.</p></div>
+    <% end %>
+    <div class="form-actions">
+      <%= form.submit "Review supplier credit", class: "button button--primary", disabled: fully_credited %>
+      <%= link_to "Cancel", purchase_bill_path(@purchase_bill, tenant_route_options), class: "button button--quiet" %>
+    </div>
+  <% end %>
+</main>

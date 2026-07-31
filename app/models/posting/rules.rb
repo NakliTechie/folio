@@ -13,6 +13,7 @@ module Posting
       "sales_invoice" => "Posting::Rules::SalesInvoice",
       "credit_note" => "Posting::Rules::CreditNote",
       "purchase_bill" => "Posting::Rules::PurchaseBill",
+      "purchase_credit_note" => "Posting::Rules::PurchaseCreditNote",
       "settlement" => "Posting::Rules::Settlement"
     }.freeze
 

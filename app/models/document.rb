@@ -28,7 +28,7 @@ class Document < ApplicationRecord
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
   def reversible?
-    posted? && reversed_by_document_id.nil? && !%w[CN RC PY].include?(doc_type) &&
+    posted? && reversed_by_document_id.nil? && !%w[CN PC RC PY].include?(doc_type) &&
       !credit_notes.where(state: %w[posted reversed]).exists?
   end
 

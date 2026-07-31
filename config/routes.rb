@@ -56,6 +56,9 @@ Rails.application.routes.draw do
       post :reverse
     end
   end
+  resources :purchase_credit_notes, path: "purchase-credit-notes", only: %i[index show new create] do
+    post :post, on: :member
+  end
   resources :settlements, path: "cash", only: %i[index show new create] do
     post :post, on: :member
   end
@@ -115,6 +118,9 @@ Rails.application.routes.draw do
           post :post
           post :reverse
         end
+      end
+      resources :purchase_credit_notes, only: %i[index show create] do
+        post :post, on: :member
       end
       resources :settlements, only: %i[index show create] do
         post :post, on: :member

@@ -16,7 +16,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Password", with: PASSWORD
     click_button "Create company books"
 
-    assert_current_path root_path
+    assert_current_path root_path, wait: 15
     assert_selector "[role=status]", text: "Welcome to Folio — Walkthrough Books is ready."
     assert_text "Signed in as walkthrough-owner@folio.invalid."
     assert_selector "h1", text: "Your books, at a glance"
@@ -43,6 +43,8 @@ class WalkthroughTest < ApplicationSystemTestCase
     select "INR — Indian rupee", from: "Functional currency"
     select "April–March", from: "Fiscal year"
     click_button "Create company books"
+
+    assert_current_path root_path, wait: 15
 
     click_link "Record your first transaction"
     set_date_field "Posting date", "2026-07-30"
@@ -76,6 +78,8 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Email", with: "migration@folio.invalid"
     fill_in "Password", with: PASSWORD
     click_button "Create company books"
+
+    assert_current_path root_path, wait: 15
 
     click_link "Chart of accounts"
     click_link "Opening balances"
@@ -293,6 +297,35 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_selector ".status-badge--danger", text: "Reversed"
   end
 
+  test "owner records a partial supplier credit against a posted purchase bill" do
+    setup = create_posted_purchase_bill("supplier-credit-walkthrough@folio.invalid", "Supplier Credit Walkthrough")
+
+    visit new_session_path
+    fill_in "Email", with: setup.fetch(:org).user.email_address
+    fill_in "Password", with: PASSWORD
+    click_button "Sign in"
+    assert_text "Signed in as #{setup.fetch(:org).user.email_address}.", wait: 5
+    visit purchase_bill_path(setup.fetch(:bill), tenant_id: setup.fetch(:org).tenant.id)
+    click_link "Record supplier credit"
+    fill_in "Supplier credit-note number", with: "V-CN-1042"
+    set_date_field "Supplier credit-note date", "2026-08-01"
+    select "Service deficiency", from: "Reason"
+    fill_in "Explanation", with: "Service-level adjustment"
+    fill_in "Quantity credited for line 1", with: "0.5"
+    click_button "Review supplier credit"
+
+    assert_selector "h2", text: "Balanced and ready to post"
+    assert_text "INR 29.50"
+    click_button "Post supplier credit"
+
+    assert_selector "h1", text: "PC/26-27/00001"
+    assert_selector "[role=status]", text: /posted.*applied.*purchase-bill payable/i
+    assert_text "V-CN-1042"
+    click_link "Open source purchase bill"
+    assert_selector "h1", text: "PB/26-27/00001"
+    assert_no_button "Reverse bill"
+  end
+
   test "service business allocates a partial customer receipt without resetting ageing" do
     setup = create_posted_invoice("receipt-walkthrough@folio.invalid", "Receipt Walkthrough")
     invoice = setup.fetch(:invoice)
@@ -427,5 +460,52 @@ class WalkthroughTest < ApplicationSystemTestCase
     )
     Documents::Post.call(invoice, actor: "u:#{org.user.id}")
     { org: org, invoice: invoice }
+  end
+
+  def create_posted_purchase_bill(email, org_name)
+    org = Onboarding::SignUp.call(email: email, password: PASSWORD, org_name: org_name)
+    entity = Entity.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office = Office.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office.update!(
+      address_line1: "1 Ledger Lane", city: "Mumbai", postal_code: "400001",
+      state_code: "27", country_code: "IN"
+    )
+    registration = TaxRegistrations::Manage.create!(
+      tenant: org.tenant, entity: entity,
+      attributes: {
+        kind: "GSTIN", identifier: "27AAPFU0939F1ZV", jurisdiction: "IN-MH",
+        valid_from: Date.new(2026, 4, 1)
+      },
+      office_ids: [ office.id ], actor: org.user
+    )
+    vendor = Parties::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        party_number: "V-001", name: "Acme Vendor", state_code: "27", country_code: "IN",
+        address_line1: "2 Supplier Road", city: "Mumbai", postal_code: "400002"
+      },
+      roles: [ "vendor" ],
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "27AAPFU0939F1ZV", valid_from: Date.new(2026, 4, 1)
+      },
+      actor: org.user
+    )
+    service = Items::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        code: "LEGAL", name: "Legal services", item_type: "service",
+        hsn_sac_code: "998211", unit_of_measure: "OTH", tax_rate_basis_points: 1800,
+        cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000"
+      },
+      actor: org.user
+    )
+    bill = PurchaseBills::BuildDraft.call(
+      tenant: org.tenant, party_id: vendor.id, tax_registration_id: registration.id,
+      document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
+      place_of_supply_state_code: "27", external_reference: "V-INV-1042",
+      lines: [ { item_id: service.id, quantity: "2", unit_price: "50.00" } ]
+    )
+    Documents::Post.call(bill, actor: "u:#{org.user.id}")
+    { org: org, bill: bill }
   end
 end

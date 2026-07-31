@@ -1979,6 +1979,13 @@ CREATE UNIQUE INDEX idx_documents_unique_vendor_bill_reference ON public.documen
 
 
 --
+-- Name: idx_documents_unique_vendor_credit_reference; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_documents_unique_vendor_credit_reference ON public.documents USING btree (tenant_id, party_id, external_reference) WHERE (((doc_type)::text = 'PC'::text) AND (external_reference IS NOT NULL));
+
+
+--
 -- Name: idx_entry_lines_tax_reporting; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2716,6 +2723,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731235500'),
 ('20260731235000'),
 ('20260731234000'),
 ('20260731233000'),

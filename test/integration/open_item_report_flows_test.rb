@@ -41,13 +41,13 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
       lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
     )
     Documents::Post.call(@invoice, actor: "u:#{@org.user.id}")
-    bill = PurchaseBills::BuildDraft.call(
+    @bill = PurchaseBills::BuildDraft.call(
       tenant: @org.tenant, party_id: @vendor.id, tax_registration_id: @registration.id,
       document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
       place_of_supply_state_code: "27", external_reference: "V-INV-001",
       lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
     )
-    Documents::Post.call(bill, actor: "u:#{@org.user.id}")
+    Documents::Post.call(@bill, actor: "u:#{@org.user.id}")
     receivable = EntryLine.joins(:entry).find_by!(
       entries: { document_id: @invoice.id }, account_code: "1200"
     )
@@ -150,6 +150,13 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
       lines: [ { document_line_id: @invoice.document_lines.first.id, quantity: "0.5" } ]
     )
     Documents::Post.call(credit_note, actor: "u:#{@org.user.id}")
+    supplier_credit = PurchaseCreditNotes::BuildDraft.call(
+      tenant: @org.tenant, purchase_bill_id: @bill.id,
+      document_date: Date.new(2026, 7, 31), external_reference: "V-CN-001",
+      reason_code: "service_deficiency",
+      lines: [ { document_line_id: @bill.document_lines.first.id, quantity: "0.5" } ]
+    )
+    Documents::Post.call(supplier_credit, actor: "u:#{@org.user.id}")
 
     reversed_invoice = SalesInvoices::BuildDraft.call(
       tenant: @org.tenant, party_id: @customer.id, tax_registration_id: @registration.id,
@@ -170,6 +177,9 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
     assert_equal(-10_000, report.dig(:gstr_1, :internal_reversal_review, :totals, :taxable_value_minor))
     assert_equal 7_500, report.dig(:gstr_1, :book_adjusted_outward, :taxable_value_minor)
     assert_equal 675, report.dig(:gstr_3b, :table_3_1_a_outward_taxable, :tax, :cgst)
+    assert_equal 1, report.dig(:gstr_3b, :table_4_a_5_book_input_tax_reference, :supplier_credit_note_count)
+    assert_equal 7_500, report.dig(:gstr_3b, :table_4_a_5_book_input_tax_reference, :taxable_value_minor)
+    assert_equal 1_350, report.dig(:gstr_3b, :table_4_a_5_book_input_tax_reference, :tax, :igst)
     assert_equal 3.5.to_d, report.dig(:gstr_1, :hsn_summary, 0, :quantity)
   end
 
