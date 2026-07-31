@@ -1,0 +1,8 @@
+<% content_for :title, "Aged payables · #{Current.tenant.name} · Folio" %>
+
+<%= render "aged_open_items",
+  title: "Aged payables",
+  eyebrow: "Vendor balances",
+  description: "Current vendor payables aged to #{@aged_to.to_fs(:long)}.",
+  empty_title: "No open payables",
+  empty_description: "Posted purchase bills with an outstanding balance will appear here." %>

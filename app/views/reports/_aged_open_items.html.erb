@@ -1,0 +1,61 @@
+<main id="main-content" class="page-shell">
+  <%= render "navigation" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow"><%= eyebrow %></p>
+      <h1><%= title %></h1>
+      <p><%= description %></p>
+    </div>
+  </header>
+
+  <section class="panel report-filter">
+    <%= form_with url: request.path, method: :get, class: "filter-form" do |form| %>
+      <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+      <div class="form-group"><%= form.label :aged_to, "Age balances to" %>
+        <%= form.date_field :aged_to, value: @aged_to.iso8601, required: true %></div>
+      <%= form.submit "Run report", class: "button button--secondary" %>
+    <% end %>
+    <small>This is a current-open-item view aged to the selected date, not a reconstructed historical snapshot.</small>
+  </section>
+
+  <% if @aged_report[:rows].any? %>
+    <section class="summary-strip" aria-label="Ageing buckets">
+      <% Reports::OpenItems::BUCKETS.each do |bucket| %>
+        <div>
+          <span><%= age_bucket_label(bucket) %></span>
+          <strong><%= money_amount(@aged_report.dig(:totals, bucket)) %></strong>
+          <small>Outstanding</small>
+        </div>
+      <% end %>
+    </section>
+
+    <section class="panel panel--table">
+      <div class="table-wrap"><table>
+        <caption class="sr-only"><%= title %> for <%= Current.tenant.name %></caption>
+        <thead><tr><th scope="col">Counterparty</th><th scope="col">Document</th>
+          <th scope="col">Posting date</th><th scope="col">Due date</th><th scope="col">Age</th>
+          <th scope="col">Outstanding</th></tr></thead>
+        <tbody>
+          <% @aged_report[:rows].each do |row| %>
+            <tr>
+              <td><strong><%= row[:party_name] %></strong><br><small><%= row[:party_number] %></small></td>
+              <td><%= row[:source_document_number] || row[:assignment] %></td>
+              <td><%= row[:posting_date].to_fs(:long) %></td>
+              <td><%= row[:due_date]&.to_fs(:long) || "—" %></td>
+              <td><%= row[:age_days] %> days · <%= age_bucket_label(row[:bucket]) %></td>
+              <td class="money"><%= money_amount(row[:outstanding_minor]) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+        <tfoot><tr><th scope="row" colspan="5">Total outstanding</th>
+          <td class="money"><%= money_amount(@aged_report[:total_minor]) %></td></tr></tfoot>
+      </table></div>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">✓</span>
+      <h2><%= empty_title %></h2>
+      <p><%= empty_description %></p>
+    </section>
+  <% end %>
+</main>

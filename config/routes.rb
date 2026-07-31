@@ -61,6 +61,9 @@ Rails.application.routes.draw do
   end
   get "reports/profit-and-loss", to: "reports#profit_and_loss", as: :profit_and_loss_report
   get "reports/balance-sheet", to: "reports#balance_sheet", as: :balance_sheet_report
+  get "reports/aged-receivables", to: "reports#aged_receivables", as: :aged_receivables_report
+  get "reports/aged-payables", to: "reports#aged_payables", as: :aged_payables_report
+  get "reports/party-ledger", to: "reports#party_ledger", as: :party_ledger_report
   resource :reports, only: :show, controller: :reports
   resource :team, only: :show, controller: :team
   namespace :api do
@@ -76,6 +79,9 @@ Rails.application.routes.draw do
       get "reports/account_type_totals", to: "reports#account_type_totals"
       get "reports/profit_and_loss", to: "reports#profit_and_loss"
       get "reports/balance_sheet", to: "reports#balance_sheet"
+      get "reports/aged_receivables", to: "reports#aged_receivables"
+      get "reports/aged_payables", to: "reports#aged_payables"
+      get "reports/party_ledger", to: "reports#party_ledger"
       resources :documents, only: %i[show create] do
         member do
           post :simulate

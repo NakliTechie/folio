@@ -32,6 +32,22 @@ module Api
         render_error(e.message, :unprocessable_entity)
       end
 
+      def aged_receivables
+        render_aged_open_items("customer")
+      end
+
+      def aged_payables
+        render_aged_open_items("vendor")
+      end
+
+      def party_ledger
+        raise ActiveRecord::RecordNotFound, "party is required" if params[:party_id].blank?
+
+        render json: {
+          party_ledger: Reports.party_ledger(Current.tenant.id, party_id: params[:party_id])
+        }
+      end
+
       private
 
       def fiscal_year_start(date)
@@ -39,6 +55,15 @@ module Api
         return Date.new(date.year, 1, 1) unless entity.fiscal_year_variant == "IN_APR_MAR"
 
         Date.new(date.month >= 4 ? date.year : date.year - 1, 4, 1)
+      end
+
+      def render_aged_open_items(role)
+        aged_to = params[:aged_to].present? ? Date.iso8601(params[:aged_to]) : Date.current
+        render json: {
+          aged_open_items: Reports.aged_open_items(Current.tenant.id, role: role, aged_to: aged_to)
+        }
+      rescue Date::Error => e
+        render_error(e.message, :unprocessable_entity)
       end
     end
   end

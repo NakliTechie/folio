@@ -303,6 +303,14 @@ class WalkthroughTest < ApplicationSystemTestCase
       .document_allocations.first
     assert_equal 7_800, Posting::Clearing.open_amount(allocation.target_item)
     assert_nil allocation.target_item.cleared_on
+
+    visit aged_receivables_report_path(
+      tenant_id: setup.fetch(:org).tenant.id, aged_to: "2026-09-30"
+    )
+    assert_selector "h1", text: "Aged receivables"
+    assert_text "INR 78.00"
+    click_link "Party ledger"
+    assert_selector "tbody tr", count: 2
   end
 
   test "every RBAC preset can enter and leave its authenticated landing" do

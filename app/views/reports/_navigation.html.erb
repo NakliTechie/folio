@@ -5,4 +5,10 @@
     class: action_name == "profit_and_loss" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
   <%= link_to "Balance sheet", balance_sheet_report_path(tenant_route_options),
     class: action_name == "balance_sheet" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
+  <%= link_to "Aged receivables", aged_receivables_report_path(tenant_route_options),
+    class: action_name == "aged_receivables" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
+  <%= link_to "Aged payables", aged_payables_report_path(tenant_route_options),
+    class: action_name == "aged_payables" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
+  <%= link_to "Party ledger", party_ledger_report_path(tenant_route_options),
+    class: action_name == "party_ledger" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
 </nav>

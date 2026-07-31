@@ -28,12 +28,35 @@ class ReportsController < BrowserController
     redirect_to balance_sheet_report_path(tenant_route_options), alert: e.message unless params[:as_of].blank?
   end
 
+  def aged_receivables
+    load_aged_report("customer")
+  end
+
+  def aged_payables
+    load_aged_report("vendor")
+  end
+
+  def party_ledger
+    @parties = Party.joins(:party_roles).where(tenant_id: Current.tenant.id)
+      .where(party_roles: { role: %w[customer vendor] }).distinct.order(:party_number)
+    @selected_party = params[:party_id].present? ? @parties.find(params[:party_id]) : @parties.first
+    @ledger = Reports.party_ledger(Current.tenant.id, party_id: @selected_party.id) if @selected_party
+  end
+
   private
 
   def report_date(key, fallback)
     params[key].present? ? Date.iso8601(params[key]) : fallback
   rescue Date::Error
     raise ArgumentError, "#{key.to_s.humanize} must be a valid date"
+  end
+
+  def load_aged_report(role)
+    @aged_to = report_date(:aged_to, Date.current)
+    @aged_report = Reports.aged_open_items(Current.tenant.id, role: role, aged_to: @aged_to)
+  rescue ArgumentError => e
+    destination = role == "customer" ? aged_receivables_report_path : aged_payables_report_path
+    redirect_to destination, alert: e.message unless params[:aged_to].blank?
   end
 
   def fiscal_year_start(date)

@@ -54,6 +54,14 @@ module Reports
     FinancialStatements::Report.balance_sheet(tenant_id: tenant_id, as_of: as_of)
   end
 
+  def aged_open_items(tenant_id, role:, aged_to:)
+    OpenItems.call(tenant_id: tenant_id, role: role, aged_to: aged_to)
+  end
+
+  def party_ledger(tenant_id, party_id:)
+    PartyLedger.call(tenant_id: tenant_id, party_id: party_id)
+  end
+
   def base(tenant_id)
     EntryLine.where(tenant_id: tenant_id).joins(ACCOUNT_JOIN).joins(AMOUNT_JOIN)
   end

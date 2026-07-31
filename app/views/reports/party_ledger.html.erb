@@ -1,0 +1,60 @@
+<% content_for :title, "Party ledger · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= render "navigation" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Subledger</p>
+      <h1>Customer and vendor ledger</h1>
+      <p>Every posted counterparty line, its running signed balance, and its current open amount.</p>
+    </div>
+  </header>
+
+  <section class="panel report-filter">
+    <%= form_with url: party_ledger_report_path, method: :get, class: "filter-form" do |form| %>
+      <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+      <div class="form-group"><%= form.label :party_id, "Customer or vendor" %>
+        <%= form.select :party_id,
+          @parties.map { |party| ["#{party.party_number} · #{party.name}", party.id] },
+          { selected: @selected_party&.id, prompt: "Choose a party" }, required: true %></div>
+      <%= form.submit "Open ledger", class: "button button--secondary" %>
+    <% end %>
+  </section>
+
+  <% if @ledger %>
+    <section class="summary-strip" aria-label="Party ledger summary">
+      <div><span>Party</span><strong><%= @ledger.dig(:party, :party_number) %></strong><small><%= @ledger.dig(:party, :name) %></small></div>
+      <div><span>Signed balance</span><strong><%= money_amount(@ledger[:balance_minor].abs) %></strong>
+        <small><%= @ledger[:balance_minor].negative? ? "Credit" : "Debit" %></small></div>
+      <div><span>Currently open</span><strong><%= money_amount(@ledger[:open_minor]) %></strong><small>Absolute outstanding</small></div>
+    </section>
+
+    <section class="panel panel--table">
+      <div class="table-wrap"><table>
+        <caption class="sr-only">Ledger for <%= @ledger.dig(:party, :name) %></caption>
+        <thead><tr><th scope="col">Date</th><th scope="col">Document</th><th scope="col">Role</th>
+          <th scope="col">Debit</th><th scope="col">Credit</th><th scope="col">Running balance</th>
+          <th scope="col">Open</th></tr></thead>
+        <tbody>
+          <% @ledger[:rows].each do |row| %>
+            <tr>
+              <td><%= row[:posting_date].to_fs(:long) %></td>
+              <td><%= row[:document_number] || row[:assignment] || "Entry line ##{row[:entry_line_id]}" %></td>
+              <td><%= row[:party_role].humanize %></td>
+              <td class="money"><%= money_amount(row[:debit_minor]) %></td>
+              <td class="money"><%= money_amount(row[:credit_minor]) %></td>
+              <td class="money"><%= money_amount(row[:running_balance_minor].abs) %> <%= row[:running_balance_minor].negative? ? "Cr" : "Dr" %></td>
+              <td class="money"><%= row[:outstanding_minor].positive? ? money_amount(row[:outstanding_minor]) : "—" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table></div>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">↔</span>
+      <h2>No customer or vendor activity</h2>
+      <p>Post a sales invoice or purchase bill to start a party ledger.</p>
+    </section>
+  <% end %>
+</main>

@@ -63,4 +63,14 @@ module ApplicationHelper
     code = document_or_code.respond_to?(:doc_type) ? document_or_code.doc_type : document_or_code.to_s
     { "RC" => "Customer receipt", "PY" => "Vendor payment" }.fetch(code, code)
   end
+
+  def age_bucket_label(bucket)
+    {
+      "current" => "Current (0 days)",
+      "days_1_30" => "1–30 days",
+      "days_31_60" => "31–60 days",
+      "days_61_90" => "61–90 days",
+      "days_91_plus" => "91+ days"
+    }.fetch(bucket.to_s, bucket.to_s.humanize)
+  end
 end

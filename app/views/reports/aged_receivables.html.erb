@@ -1,0 +1,8 @@
+<% content_for :title, "Aged receivables · #{Current.tenant.name} · Folio" %>
+
+<%= render "aged_open_items",
+  title: "Aged receivables",
+  eyebrow: "Customer balances",
+  description: "Current customer receivables aged to #{@aged_to.to_fs(:long)}.",
+  empty_title: "No open receivables",
+  empty_description: "Posted sales invoices with an outstanding balance will appear here." %>
