@@ -121,32 +121,38 @@ module Posting
     end
 
     def self.reset!(clearing_event:, actor:, reset_on:, reason: nil)
-      raise ArgumentError, "only a clearing event can be reset" unless clearing_event.action == "items.cleared"
-      raise ArgumentError, "clearing was already reset" if reset_event_for(clearing_event)
+      ActiveRecord::Base.transaction do
+        # Rebuild deletes the line projection, so take the tenant event lock before
+        # locking that line. Callers may already hold it; transaction advisory locks
+        # are safely re-entrant on the same connection.
+        LedgerEvent.acquire_tenant_lock!(clearing_event.tenant_id)
+        raise ArgumentError, "only a clearing event can be reset" unless clearing_event.action == "items.cleared"
+        raise ArgumentError, "clearing was already reset" if reset_event_for(clearing_event)
 
-      clearing = JSON.parse(clearing_event.payload).fetch("clearing")
-      item = EntryLine.lock.find_by!(
-        tenant_id: clearing_event.tenant_id,
-        source_event_id: clearing.dig("target", "sourceEventId"),
-        line_no: clearing.dig("target", "lineNo")
-      )
-      validate_resettable!(item, clearing_event, clearing)
-      payload = {
-        "clearingReset" => {
-          "clearingEventId" => clearing_event.id,
-          "target" => clearing.fetch("target"),
-          "amountMinor" => clearing.fetch("amountMinor"),
-          "mode" => clearing.fetch("mode"),
-          "reason" => reason
-        }.compact
-      }
-      event = LedgerEvent.append!(
-        tenant_id: clearing_event.tenant_id, actor: actor,
-        action: "items.clearing_reset", origin: "folio", ts: reset_on.to_s,
-        payload_str: Folio::KhataHash.canonical_payload(payload)
-      )
-      replay_reset!(event)
-      event
+        clearing = JSON.parse(clearing_event.payload).fetch("clearing")
+        item = EntryLine.lock.find_by!(
+          tenant_id: clearing_event.tenant_id,
+          source_event_id: clearing.dig("target", "sourceEventId"),
+          line_no: clearing.dig("target", "lineNo")
+        )
+        validate_resettable!(item, clearing_event, clearing)
+        payload = {
+          "clearingReset" => {
+            "clearingEventId" => clearing_event.id,
+            "target" => clearing.fetch("target"),
+            "amountMinor" => clearing.fetch("amountMinor"),
+            "mode" => clearing.fetch("mode"),
+            "reason" => reason
+          }.compact
+        }
+        event = LedgerEvent.append!(
+          tenant_id: clearing_event.tenant_id, actor: actor,
+          action: "items.clearing_reset", origin: "folio", ts: reset_on.to_s,
+          payload_str: Folio::KhataHash.canonical_payload(payload)
+        )
+        replay_reset!(event)
+        event
+      end
     end
 
     def self.replay_reset!(event)

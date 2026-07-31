@@ -207,6 +207,22 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     assert_equal INVOICE_DATE, original_receivable.cleared_on
   end
 
+  test "a posted invoice remains reversible after projection rebuild" do
+    invoice = build_invoice
+    Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+    old_entry_id = invoice.posted_entry_id
+
+    Posting.rebuild!(@org.tenant.id)
+    refute_equal old_entry_id, invoice.reload.posted_entry_id
+    rebuilt_receivable = Entry.find(invoice.posted_entry_id).entry_lines.find_by!(account_code: "1200")
+
+    reversal_entry = Documents::Reverse.call(invoice, actor: "u:#{@org.user.id}")
+
+    assert_equal 11_800, rebuilt_receivable.reload.cleared_amount_minor
+    assert_equal reversal_entry.id, rebuilt_receivable.cleared_by_entry_id
+    assert_equal INVOICE_DATE, rebuilt_receivable.cleared_on
+  end
+
   test "a partially settled invoice requires a credit note instead of reversal" do
     invoice = build_invoice
     Documents::Post.call(invoice, actor: "u:#{@org.user.id}")

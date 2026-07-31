@@ -105,6 +105,26 @@ class Documents::DocumentFlowTest < ActiveSupport::TestCase
     assert_equal 2, Document.where(tenant_id: TENANT).count, "reversal ADDS a document, deletes none"
   end
 
+  test "projection rebuild atomically rebinds every posted document to its new entry" do
+    first = build_jv(amount: 100_000)
+    second = build_jv(amount: 25_000)
+    Documents::Post.call(first, actor: "u:1")
+    Documents::Post.call(second, actor: "u:1")
+    old_entry_ids = [ first, second ].map { |document| document.reload.posted_entry_id }
+
+    Posting.rebuild!(TENANT)
+
+    rebuilt = [ first, second ].map do |document|
+      pointer = document.reload.posted_entry_id
+      assert_not_nil pointer
+      assert_equal document.id, Entry.find(pointer).document_id
+      pointer
+    end
+    assert_empty(old_entry_ids & rebuilt)
+    assert_equal 1, Entry.where(tenant_id: TENANT, document_id: first.id).count
+    assert_equal 1, Entry.where(tenant_id: TENANT, document_id: second.id).count
+  end
+
   test "a reversal is recorded as a NEGATIVE posting, not a naive counter-posting (§7)" do
     doc = build_jv(amount: 100_000)
     Documents::Post.call(doc, actor: "u")

@@ -20,6 +20,19 @@ class Posting::RebuildTest < ActiveSupport::TestCase
     assert_equal original_line_ids, EntryLine.where(tenant_id: TENANT).order(:line_no).pluck(:id)
   end
 
+  test "the database prevents duplicate event and document projections" do
+    indexes = ActiveRecord::Base.connection.indexes(:entries).index_by(&:name)
+    event_index = indexes.fetch("index_entries_on_tenant_event_unique")
+    document_index = indexes.fetch("index_entries_on_tenant_document_unique")
+
+    assert event_index.unique
+    assert_equal %w[tenant_id ledger_event_id], event_index.columns
+    assert_equal "(ledger_event_id IS NOT NULL)", event_index.where
+    assert document_index.unique
+    assert_equal %w[tenant_id document_id], document_index.columns
+    assert_equal "(document_id IS NOT NULL)", document_index.where
+  end
+
   private
 
   def draft

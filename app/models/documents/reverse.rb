@@ -11,6 +11,9 @@ module Documents
 
     def call(document, actor:, on: nil, authorize: nil, capabilities: [])
       ActiveRecord::Base.transaction do
+        # Keep the lock order aligned with Documents::Post and Posting.rebuild!: tenant
+        # event lock first, document rows second.
+        LedgerEvent.acquire_tenant_lock!(document.tenant_id)
         document.lock!
         unless document.reversible?
           raise NotReversible, "only a posted, not-yet-reversed document can be reversed"

@@ -94,6 +94,22 @@ class PurchaseCreditNoteTest < ActiveSupport::TestCase
     assert_equal 10_000, Posting::Clearing.open_amount(credit_payable)
   end
 
+  test "a supplier credit posted after projection rebuild applies to the rebuilt payable" do
+    old_entry_id = @bill.posted_entry_id
+    Posting.rebuild!(@org.tenant.id)
+    refute_equal old_entry_id, @bill.reload.posted_entry_id
+
+    note = build_credit(quantity: "1")
+    entry = Documents::Post.call(note, actor: actor)
+
+    bill_payable = payable_for(@bill)
+    credit_payable = entry.entry_lines.find_by!(account_code: "2000")
+    assert_equal 5_900, bill_payable.cleared_amount_minor
+    assert_equal 5_900, Posting::Clearing.open_amount(bill_payable)
+    assert_equal 5_900, credit_payable.cleared_amount_minor
+    assert_equal DOCUMENT_DATE + 1, credit_payable.cleared_on
+  end
+
   test "cumulative supplier credits cannot exceed the purchase bill" do
     first = build_credit(quantity: "1")
     Documents::Post.call(first, actor: actor)

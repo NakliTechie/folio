@@ -21,7 +21,9 @@ module Taxes
         "35" => "Andaman and Nicobar Islands", "36" => "Telangana", "37" => "Andhra Pradesh",
         "38" => "Ladakh", "97" => "Other Territory"
       }.freeze
-      UNION_TERRITORIES_WITHOUT_LEGISLATURE = %w[04 26 31 34 35 38].freeze
+      # Puducherry (34) has a legislature and its own SGST Act. Only the territories
+      # governed by the central UTGST Act belong here.
+      UNION_TERRITORIES_WITHOUT_LEGISLATURE = %w[04 26 31 35 38].freeze
 
       module_function
 

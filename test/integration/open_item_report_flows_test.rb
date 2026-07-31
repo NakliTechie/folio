@@ -167,6 +167,12 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
     Documents::Post.call(reversed_invoice, actor: "u:#{@org.user.id}")
     Documents::Reverse.call(reversed_invoice, actor: "u:#{@org.user.id}", on: Date.new(2026, 7, 31))
 
+    # GST classification must resolve the rebuilt entry ids, not stale document pointers.
+    Posting.rebuild!(@org.tenant.id)
+    Document.where(tenant_id: @org.tenant.id, state: %w[posted reversed]).find_each do |document|
+      assert_equal document.id, Entry.find(document.posted_entry_id).document_id
+    end
+
     report = Reports.gst_returns(
       @org.tenant.id, tax_registration_id: @registration.id,
       from_date: Date.new(2026, 7, 1), to_date: Date.new(2026, 7, 31)

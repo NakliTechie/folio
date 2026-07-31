@@ -51,6 +51,23 @@ class TaxesIndiaTest < ActiveSupport::TestCase
     assert_equal({ cgst: 250, utgst: 250 }, result.components)
   end
 
+  test "an intra-Puducherry supply uses SGST because Puducherry has a legislature" do
+    result = Taxes::India::Adapter.calculate(
+      taxable_minor: 100_00,
+      rate_basis_points: 500,
+      supplier_state_code: "34",
+      place_of_supply_state_code: "34"
+    )
+
+    assert_equal({ cgst: 250, sgst: 250 }, result.components)
+    refute Taxes::India::StateCodes.union_territory_without_legislature?("34")
+  end
+
+  test "the central UTGST jurisdiction set stays explicit" do
+    assert_equal %w[04 26 31 35 38],
+      Taxes::India::StateCodes::UNION_TERRITORIES_WITHOUT_LEGISLATURE
+  end
+
   test "the jurisdiction registry selects adapters without a posting-core country branch" do
     india = Entity.new(jurisdiction_profile: "IN")
     result = Taxes.calculate(

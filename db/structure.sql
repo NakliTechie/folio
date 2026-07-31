@@ -2231,6 +2231,20 @@ CREATE INDEX index_entries_on_reverses_id ON public.entries USING btree (reverse
 
 
 --
+-- Name: index_entries_on_tenant_document_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_entries_on_tenant_document_unique ON public.entries USING btree (tenant_id, document_id) WHERE (document_id IS NOT NULL);
+
+
+--
+-- Name: index_entries_on_tenant_event_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_entries_on_tenant_event_unique ON public.entries USING btree (tenant_id, ledger_event_id) WHERE (ledger_event_id IS NOT NULL);
+
+
+--
 -- Name: index_entries_on_tenant_id_and_fiscal_year_and_period_no; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2723,6 +2737,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801000000'),
 ('20260731235500'),
 ('20260731235000'),
 ('20260731234000'),

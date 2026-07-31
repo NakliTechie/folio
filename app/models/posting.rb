@@ -24,11 +24,23 @@ module Posting
 
   # Wipe a tenant's projection and rebuild it from the log, in seq order. Because clearing
   # events reference earlier entries, order matters — in_order (by seq) guarantees an entry
-  # is projected before any clearing that touches it.
+  # is projected before any clearing that touches it. The tenant event lock excludes writers
+  # for the whole wipe/replay/rebind window; document pointers are mutable workflow projection
+  # state and are rebound only after every event has replayed successfully.
   def rebuild!(tenant_id)
     ActiveRecord::Base.transaction do
+      LedgerEvent.acquire_tenant_lock!(tenant_id)
+      Document.where(tenant_id: tenant_id).update_all(posted_entry_id: nil)
       Entry.where(tenant_id: tenant_id).destroy_all
       LedgerEvent.for_tenant(tenant_id).in_order.each { |event| project!(event) }
+      rebind_document_entries!(tenant_id)
+    end
+  end
+
+  def rebind_document_entries!(tenant_id)
+    Entry.where(tenant_id: tenant_id).where.not(document_id: nil).find_each do |entry|
+      Document.where(tenant_id: tenant_id, id: entry.document_id)
+        .update_all(posted_entry_id: entry.id)
     end
   end
 end

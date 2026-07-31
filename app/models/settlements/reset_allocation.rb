@@ -6,6 +6,7 @@ module Settlements
 
     def call(document:, allocation_id:, actor:, reset_on: Date.current)
       ActiveRecord::Base.transaction do
+        LedgerEvent.acquire_tenant_lock!(document.tenant_id)
         document.lock!
         unless %w[RC PY].include?(document.doc_type) && document.state == "posted"
           raise InvalidReset, "only a posted receipt or payment allocation can be reset"

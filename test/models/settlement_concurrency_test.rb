@@ -8,7 +8,10 @@ class SettlementConcurrencyTest < ActiveSupport::TestCase
 
   setup do
     token = SecureRandom.hex(8)
-    @tenant = Tenant.create!(name: "Settlement Race #{token}", slug: "settlement-race-#{token}")
+    @tenant = Tenant.create!(
+      id: 6_400_000_000 + SecureRandom.random_number(100_000_000),
+      name: "Settlement Race #{token}", slug: "settlement-race-#{token}"
+    )
     spine = Onboarding::Seeds.org_spine!(@tenant)
     Onboarding::Seeds.chart_of_accounts!(@tenant)
     Onboarding::Seeds.document_types!(@tenant)

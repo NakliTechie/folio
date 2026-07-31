@@ -12,7 +12,10 @@ class Documents::LifecycleConcurrencyTest < ActiveSupport::TestCase
 
   setup do
     token = SecureRandom.hex(8)
-    @tenant = Tenant.create!(name: "Concurrency #{token}", slug: "concurrency-#{token}")
+    @tenant = Tenant.create!(
+      id: 6_100_000_000 + SecureRandom.random_number(100_000_000),
+      name: "Concurrency #{token}", slug: "concurrency-#{token}"
+    )
     Onboarding::Seeds.org_spine!(@tenant)
     @type = DocumentType.create!(tenant_id: @tenant.id, code: "JV", label: "Journal Voucher",
       posting_rule: "journal_voucher", number_prefix: "JV/")

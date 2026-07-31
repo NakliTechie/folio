@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "securerandom"
 
 # B3.2 — Posting::PostEntry: balance per (ledger, slot, currency), fat events with
 # provenance + authority, and a PURE replay path. Runs in CI.
@@ -8,9 +9,13 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
   PRIMARY = 1
   MGMT = 2 # a second (extension) ledger, for the per-ledger balance case
 
+  setup do
+    @tenant_id = 7_200_000_000 + SecureRandom.random_number(100_000_000)
+  end
+
   def draft(**over)
     {
-      tenant_id: 42, entity_id: 1, office_id: 1, actor: "u:1", origin: "folio",
+      tenant_id: @tenant_id, entity_id: 1, office_id: 1, actor: "u:1", origin: "folio",
       document_date: Date.new(2025, 6, 1), posting_date: Date.new(2025, 6, 1),
       entered_at: Time.utc(2025, 6, 2, 9, 0), fiscal_year: 2025, period_no: 3,
       authority: { role_template_id: 7, posting_limit_id: 3 },
@@ -60,17 +65,17 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
 
     event = LedgerEvent.find(entry.ledger_event_id)
     assert_equal "entry.posted", event.action
-    result = LedgerEvent.verify_chain(42)
+    result = LedgerEvent.verify_chain(@tenant_id)
     assert result[:ok], "chain broke at seq=#{result[:broken_at]} (#{result[:reason]})"
   end
 
   test "post! raises UnbalancedError and writes nothing when a slice does not balance" do
     bad = draft
     bad[:lines][1][:amounts][0][:amount_minor] = -99_999 # off by one paise
-    before = LedgerEvent.for_tenant(42).count
+    before = LedgerEvent.for_tenant(@tenant_id).count
     assert_raises(Posting::UnbalancedError) { Posting::PostEntry.post!(bad) }
-    assert_equal before, LedgerEvent.for_tenant(42).count, "a rejected post appends no event"
-    assert_equal 0, Entry.where(tenant_id: 42).count, "and projects nothing"
+    assert_equal before, LedgerEvent.for_tenant(@tenant_id).count, "a rejected post appends no event"
+    assert_equal 0, Entry.where(tenant_id: @tenant_id).count, "and projects nothing"
   end
 
   # ---- the fat-events guarantee: replay is a PURE function of the payload ----
@@ -120,24 +125,27 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
   # then replay from the event alone. A pure replay needs none of them; any lookup of a
   # ledger/dimension/party/etc. would now return nil and change (or break) the projection.
   test "replay! reconstructs from the event payload alone, with all master data deleted" do
-    # Seed the EXACT masters the payload references (ids matched), so the deletion below
-    # actually removes rows a stray lookup could have used — without this the delete_all is
-    # a silent no-op and the guard is inert. A pure replay needs none of these.
-    Entity.create!(id: 1, tenant_id: 42, code: "E1", legal_name: "Acme", functional_currency: "INR",
-                   fiscal_year_variant: "IN_APR_MAR", jurisdiction_profile: "IN")
-    Office.create!(id: 1, tenant_id: 42, entity_id: 1, code: "O1", name: "HQ")
-    Ledger.create!(id: PRIMARY, tenant_id: 42, code: "PRIMARY", name: "Primary")
-    Party.create!(id: 55, tenant_id: 42, party_number: "C-55", name: "Cust")
+    # Seed masters with generated identities so this test stays isolated from fixtures and
+    # non-transactional concurrency cases. The payload references these exact ids; deleting
+    # only these rows proves replay needs none of them without mutating unrelated tests.
+    token = SecureRandom.hex(6)
+    entity = Entity.create!(tenant_id: @tenant_id, code: "E-#{token}", legal_name: "Acme",
+      functional_currency: "INR", fiscal_year_variant: "IN_APR_MAR", jurisdiction_profile: "IN")
+    office = Office.create!(tenant_id: @tenant_id, entity_id: entity.id, code: "O-#{token}", name: "HQ")
+    ledger = Ledger.create!(tenant_id: @tenant_id, code: "L-#{token}", name: "Primary")
+    party = Party.create!(tenant_id: @tenant_id, party_number: "C-#{token}", name: "Cust")
 
-    entry = Posting::PostEntry.post!(rich_draft)
+    entry = Posting::PostEntry.post!(
+      rich_draft(entity_id: entity.id, office_id: office.id, ledger_id: ledger.id, party_id: party.id)
+    )
     before = fingerprint(entry)
     event = LedgerEvent.find(entry.ledger_event_id)
 
     entry.destroy!
-    deleted = [ Ledger, Dimension, Party, PartyRole, TaxRegistration, Office, Entity ]
-              .sum { |m| m.delete_all }
+    deleted = Party.where(id: party.id).delete_all + Ledger.where(id: ledger.id).delete_all +
+      Office.where(id: office.id).delete_all + Entity.where(id: entity.id).delete_all
     assert_operator deleted, :>=, 4, "the deletion must actually remove the seeded masters"
-    assert_equal 0, Entry.where(tenant_id: 42).count
+    assert_equal 0, Entry.where(tenant_id: @tenant_id).count
 
     replayed = Posting::PostEntry.replay!(event)
     assert_equal before, fingerprint(replayed),
@@ -168,17 +176,19 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
 
   # A draft exercising the full committed dimension set, open-item state and two currency
   # slots, so the oracle and payload-independence tests have real content to check.
-  def rich_draft
+  def rich_draft(entity_id: 1, office_id: 1, ledger_id: PRIMARY, party_id: 55)
     draft(
       lines: [
-        { line_no: 1, account_code: "100100", ledger_id: PRIMARY, entity_id: 1, office_id: 1,
-          party_id: 55, party_role: "customer", open_item: true, item_class: "normal",
+        { line_no: 1, account_code: "100100", ledger_id: ledger_id,
+          entity_id: entity_id, office_id: office_id,
+          party_id: party_id, party_role: "customer", open_item: true, item_class: "normal",
           assignment: "INV-1", baseline_date: Date.new(2025, 6, 1), due_date: Date.new(2025, 7, 1),
           extra: { "campaign" => "diwali" },
           amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2, amount_minor: 100_000 },
                      { slot_role: "group", currency: "USD", minor_unit_exponent: 2, amount_minor: 1_200,
                        rate: "83.33", rate_basis: "posting_date" } ] },
-        { line_no: 2, account_code: "400000", ledger_id: PRIMARY, entity_id: 1, office_id: 1,
+        { line_no: 2, account_code: "400000", ledger_id: ledger_id,
+          entity_id: entity_id, office_id: office_id,
           amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2, amount_minor: -100_000 },
                      { slot_role: "group", currency: "USD", minor_unit_exponent: 2, amount_minor: -1_200,
                        rate: "83.33", rate_basis: "posting_date" } ] }

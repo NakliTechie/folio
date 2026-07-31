@@ -28,22 +28,7 @@ class LedgerEvent < ApplicationRecord
   def self.append!(tenant_id:, actor:, action:, origin:, ts:, payload_str:, ref: nil,
                    office_id: nil, actor_user_id: nil, signature: nil)
     transaction do
-      # Serialize appends per tenant so two writers cannot fork the chain. The unique
-      # index on (tenant_id, seq) is the backstop; this lock is what stops the retry.
-      #
-      # Both arguments must be int4 — the (int, int) overload is the only two-arg form.
-      # Passing tenant_id directly bound it as bigint and raised
-      # `function pg_advisory_xact_lock(integer, bigint) does not exist` for any tenant
-      # above 2^31, which tenant_id (a bigint column) will eventually exceed. hashtext
-      # maps the id into int4 instead. A hash collision between two tenants makes them
-      # share a lock — they serialise needlessly, which is safe; the failure mode that
-      # matters is two writers on ONE tenant, and that cannot happen.
-      connection.execute(
-        sanitize_sql_array(
-          [ "SELECT pg_advisory_xact_lock(hashtext('ledger_events'), hashtext(?))",
-            tenant_id.to_s ]
-        )
-      )
+      acquire_tenant_lock!(tenant_id)
 
       head = for_tenant(tenant_id).in_order.last
       prev = head&.hash_hex || Folio::KhataHash::GENESIS_PREV
@@ -61,6 +46,22 @@ class LedgerEvent < ApplicationRecord
         ts: ts, actor: actor, action: action, ref: ref, origin: origin, payload: payload_str
       )
     end
+  end
+
+  # Serializes both event append and projection maintenance for one tenant. Rebuild must
+  # hold the same transaction-scoped lock as writers; otherwise a post can land between
+  # the projection wipe and event scan and be projected twice.
+  #
+  # Both arguments must be int4 — the (int, int) overload is the only two-arg form.
+  # hashtext maps bigint tenant ids into int4. A collision only serializes unrelated
+  # tenants unnecessarily; it cannot weaken the one-tenant exclusion guarantee.
+  def self.acquire_tenant_lock!(tenant_id)
+    connection.execute(
+      sanitize_sql_array(
+        [ "SELECT pg_advisory_xact_lock(hashtext('ledger_events'), hashtext(?))",
+          tenant_id.to_s ]
+      )
+    )
   end
 
   # Recompute every link for a tenant. Returns {ok:, head:, rows:, broken_at:, reason:}.

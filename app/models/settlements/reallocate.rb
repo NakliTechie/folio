@@ -6,6 +6,7 @@ module Settlements
 
     def call(document:, allocation_id:, target_entry_line_id:, clearing_mode:, actor:, applied_on: Date.current)
       ActiveRecord::Base.transaction do
+        LedgerEvent.acquire_tenant_lock!(document.tenant_id)
         document.lock!
         allocation = document.document_allocations.lock.find(allocation_id)
         unless document.state == "posted" && allocation.reset? && allocation.settlement_reallocation.nil?

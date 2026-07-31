@@ -17,6 +17,10 @@ module Documents
     # system posts (existing engine tests). This is defence-in-depth: the API also checks.
     def call(document, actor:, capabilities: [], authorize: nil, required_capability: "documents.post")
       ActiveRecord::Base.transaction do
+        # Lock before any document/dependency row. Posting and projection rebuild use the
+        # same tenant lock, so maintenance cannot wipe between append and projection and
+        # the two paths cannot deadlock by taking their locks in opposite order.
+        LedgerEvent.acquire_tenant_lock!(document.tenant_id)
         rule = Documents.rule_for(document)
         rule.lock_dependencies!(document) if rule.respond_to?(:lock_dependencies!)
         document.lock!

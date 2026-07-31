@@ -103,6 +103,22 @@ class CreditNoteTest < ActiveSupport::TestCase
     assert_equal 10_000, Posting::Clearing.open_amount(credit_receivable)
   end
 
+  test "a credit posted after projection rebuild applies to the rebuilt receivable" do
+    old_entry_id = @invoice.posted_entry_id
+    Posting.rebuild!(@org.tenant.id)
+    refute_equal old_entry_id, @invoice.reload.posted_entry_id
+
+    note = build_credit_note(quantity: "1")
+    entry = Documents::Post.call(note, actor: "u:#{@org.user.id}")
+
+    invoice_receivable = receivable_for(@invoice)
+    credit_receivable = entry.entry_lines.find_by!(account_code: "1200")
+    assert_equal 5_900, invoice_receivable.cleared_amount_minor
+    assert_equal 5_900, Posting::Clearing.open_amount(invoice_receivable)
+    assert_equal 5_900, credit_receivable.cleared_amount_minor
+    assert_equal DOCUMENT_DATE + 1, credit_receivable.cleared_on
+  end
+
   test "cumulative credit quantities cannot exceed the source invoice" do
     first = build_credit_note(quantity: "1")
     Documents::Post.call(first, actor: "u:#{@org.user.id}")
