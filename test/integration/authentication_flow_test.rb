@@ -35,6 +35,21 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     assert_select "[role=alert]", "Try another email address or password."
   end
 
+  test "login after an unauthenticated post returns to the referring page, not the post-only action" do
+    org = Onboarding::SignUp.call(
+      email: "post-return@x.com", password: "correct-horse-battery", org_name: "Post Return Books"
+    )
+    return_url = security_url(tenant_id: org.tenant.id)
+
+    post invitations_path(tenant_id: org.tenant.id),
+      params: { email: "ignored@folio.invalid", role_code: "viewer" },
+      headers: { "HTTP_REFERER" => return_url }
+    assert_redirected_to new_session_path
+
+    post session_path, params: { email_address: org.user.email_address, password: "correct-horse-battery" }
+    assert_redirected_to return_url
+  end
+
   test "logout terminates the session" do
     sign_in_as(users(:one))
     delete session_path
