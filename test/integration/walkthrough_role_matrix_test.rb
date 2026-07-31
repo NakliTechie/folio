@@ -45,6 +45,19 @@ class WalkthroughRoleMatrixTest < ActionDispatch::IntegrationTest
       as_role(role_code) do
         get "/api/v1/reports/trial_balance"
         assert_response :success, "#{role_code} should have reports.read"
+        get "/api/v1/period_close", params: { fiscal_year: 2026, period_no: 4 }
+        assert_response :success, "#{role_code} should read period-close readiness"
+      end
+    end
+  end
+
+  test "only owner and close-authorized auditor can change a period state" do
+    allowed = %w[owner ca_auditor]
+    @users.each_key.with_index do |role_code, index|
+      as_role(role_code) do
+        patch "/api/v1/period_close",
+          params: { fiscal_year: 2026, period_no: index + 1, state: "restricted" }
+        assert_response allowed.include?(role_code) ? :success : :forbidden
       end
     end
   end

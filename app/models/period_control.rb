@@ -12,7 +12,9 @@ class PeriodControl < ApplicationRecord
   validates :state, inclusion: { in: STATES }
   validates :domain, inclusion: { in: DOMAINS }
   validates :period_no, inclusion: { in: 0..16 }
+  validates :fiscal_year, numericality: { only_integer: true, in: 1900..9998 }
   validates :capability, presence: true, if: -> { state == "restricted" }
+  validates :capability, absence: true, unless: -> { state == "restricted" }
 
   # The effective control for a post: the specific account_class wins, else the ALL
   # wildcard, else open. Returns [state, capability].

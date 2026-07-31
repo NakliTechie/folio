@@ -72,7 +72,13 @@ module Posting
     end
 
     def self.account_class_for(line)
-      line[:account_class] || "GL"
+      return line[:account_class] if line[:account_class]
+
+      case line[:party_role]
+      when "customer" then "AR"
+      when "vendor" then "AP"
+      else "GL"
+      end
     end
 
     # ---- POST path -------------------------------------------------------------------

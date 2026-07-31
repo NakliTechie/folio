@@ -1,0 +1,86 @@
+<% content_for :title, "Period close · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= render "reports/navigation" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Close control</p>
+      <h1>Period close</h1>
+      <p>Review the period, restrict adjustments to the close team, then close posting with an immutable audit event.</p>
+    </div>
+    <span class="<%= status_class(@readiness[:state]) %>"><%= @readiness[:state].humanize %></span>
+  </header>
+
+  <section class="panel report-filter">
+    <%= form_with url: period_close_path, method: :get, class: "filter-form" do |form| %>
+      <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+      <div class="form-group"><%= form.label :fiscal_year, "Fiscal year starting" %>
+        <%= form.select :fiscal_year, @fiscal_years, { selected: @fiscal_year }, required: true %></div>
+      <div class="form-group"><%= form.label :period_no, "Accounting period" %>
+        <%= form.select :period_no, @periods, { selected: @period_no }, required: true %></div>
+      <%= form.submit "Review period", class: "button button--secondary" %>
+    <% end %>
+  </section>
+
+  <section class="summary-strip" aria-label="Period-close summary">
+    <div><span>Period</span><strong><%= @readiness[:period_label] %></strong>
+      <small><%= @readiness[:from_date] ? "#{@readiness[:from_date]} to #{@readiness[:to_date]}" : "No calendar date range" %></small></div>
+    <div><span>Posting state</span><strong><%= @readiness[:state].humanize %></strong>
+      <small><%= @readiness[:state] == "restricted" ? "Requires period.lock" : "Whole primary ledger" %></small></div>
+    <div><span>Posted entries</span><strong><%= @readiness[:posted_entry_count] %></strong><small>In stored period</small></div>
+    <div><span>Readiness</span><strong><%= @readiness[:ready] ? "Ready" : "Review needed" %></strong><small>Signals do not auto-close</small></div>
+  </section>
+
+  <section class="metric-grid" aria-label="Close-readiness checks">
+    <article class="metric-card"><span class="metric-card__label">Ledger balance</span>
+      <strong><%= @readiness[:balanced] ? "Balanced" : "Out of balance" %></strong>
+      <span class="metric-card__hint"><%= money_amount(@readiness[:debit_minor]) %> debit · <%= money_amount(@readiness[:credit_minor]) %> credit</span></article>
+    <article class="metric-card"><span class="metric-card__label">Unposted documents</span>
+      <strong><%= @readiness[:draft_document_count] %></strong><span class="metric-card__hint">Draft or parked documents dated in the period</span></article>
+    <article class="metric-card"><span class="metric-card__label">Unapplied cash</span>
+      <strong><%= @readiness[:unapplied_cash_count] %></strong><span class="metric-card__hint">Reset allocations still awaiting reallocation</span></article>
+    <article class="metric-card"><span class="metric-card__label">Audit chain</span>
+      <strong><%= @readiness.dig(:audit_chain, :ok) ? "Verified" : "Broken" %></strong>
+      <span class="metric-card__hint"><%= @readiness.dig(:audit_chain, :rows) %> immutable event rows checked</span></article>
+    <article class="metric-card"><span class="metric-card__label">Sales reversals</span>
+      <strong><%= @readiness[:internal_sales_reversal_count] %></strong><span class="metric-card__hint">Review GST treatment before filing</span></article>
+  </section>
+
+  <section class="panel form-panel">
+    <div class="section-heading"><div><h2>Posting control</h2>
+      <p>Restriction lets users with <code>period.lock</code> post close adjustments. Closing blocks everyone.</p></div></div>
+    <% if permitted?("period.lock") %>
+      <div class="button-row">
+        <% unless @readiness[:state] == "open" %>
+          <%= button_to "Reopen period", period_close_path(tenant_route_options), method: :patch,
+            params: { period_control: { fiscal_year: @fiscal_year, period_no: @period_no, state: "open" } },
+            class: "button button--secondary",
+            form: { data: { turbo_confirm: "Reopen this period for ordinary posting? The change will be audited." } } %>
+        <% end %>
+        <% unless @readiness[:state] == "restricted" %>
+          <%= button_to "Restrict to close team", period_close_path(tenant_route_options), method: :patch,
+            params: { period_control: { fiscal_year: @fiscal_year, period_no: @period_no, state: "restricted" } },
+            class: "button button--secondary" %>
+        <% end %>
+        <% unless @readiness[:state] == "closed" %>
+          <%= button_to "Close posting", period_close_path(tenant_route_options), method: :patch,
+            params: { period_control: { fiscal_year: @fiscal_year, period_no: @period_no, state: "closed" } },
+            class: "button button--danger",
+            form: { data: { turbo_confirm: "Close this period for all posting? Readiness warnings do not block this authorized action." } } %>
+        <% end %>
+      </div>
+    <% else %>
+      <p class="table-note">You can review close readiness, but only an owner or close-authorized auditor can change the posting state.</p>
+    <% end %>
+  </section>
+
+  <section class="panel panel--table">
+    <div class="section-heading"><div><h2>Recent period-control history</h2><p>Hash-chained state changes across this company</p></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Recorded</th><th scope="col">Action</th><th scope="col">Actor</th><th scope="col">Reference</th></tr></thead>
+      <tbody>
+        <% @history.each do |event| %><tr><td><%= event.ts %></td><td><%= event.action.humanize %></td><td><%= event.actor %></td><td><%= event.ref %></td></tr><% end %>
+      </tbody>
+    </table></div>
+  </section>
+</main>

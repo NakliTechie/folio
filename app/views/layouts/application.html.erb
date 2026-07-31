@@ -87,7 +87,8 @@
               class: navigation_class("tax_registrations") %>
           <% end %>
           <% if permitted?("reports.read") %>
-            <%= link_to "Reports", reports_path(tenant_route_options), class: navigation_class("reports") %>
+            <%= link_to "Reports", reports_path(tenant_route_options),
+              class: navigation_class("reports", "period_closes") %>
           <% end %>
           <% if permitted?("users.manage") %>
             <%= link_to "Team", team_path(tenant_route_options), class: navigation_class("team") %>

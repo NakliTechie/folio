@@ -45,7 +45,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     click_button "Create company books"
 
     click_link "Record your first transaction"
-    fill_in "Posting date", with: "2026-07-30"
+    set_date_field "Posting date", "2026-07-30"
     fill_in "What is this transaction for?", with: "Owner capital introduced"
     fill_in "Amount (INR)", with: "1250.50"
     select "1000 · Cash", from: "Debit account"
@@ -60,6 +60,14 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_selector "h1", text: "Trial balance"
     assert_selector "[role=status]", text: /posted.*trial balance/i
     assert_selector "tr.table-row--highlight", count: 2
+
+    click_link "Period close"
+    assert_selector "h1", text: "Period close"
+    assert_selector ".metric-card__label", text: /Ledger balance/i
+    assert_selector ".metric-card__label", text: /Audit chain/i
+    click_button "Restrict to close team"
+    assert_selector "[role=status]", text: /posting period is now restricted/i
+    assert_selector ".status-badge", text: "Restricted"
   end
 
   test "owner migrates opening balances and reads versioned financial statements" do

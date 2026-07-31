@@ -39,8 +39,8 @@ module ApplicationHelper
     end
   end
 
-  def navigation_class(controller)
-    controller_name == controller ? "app-nav__link app-nav__link--active" : "app-nav__link"
+  def navigation_class(*controllers)
+    controllers.flatten.include?(controller_name) ? "app-nav__link app-nav__link--active" : "app-nav__link"
   end
 
   def browser_document_path(document)

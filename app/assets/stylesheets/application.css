@@ -1061,6 +1061,12 @@ tfoot td {
   color: #6d4c0d;
 }
 
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .summary-strip {
   display: grid;
   overflow: hidden;

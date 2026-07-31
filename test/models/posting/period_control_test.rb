@@ -6,7 +6,7 @@ require "test_helper"
 class Posting::PeriodControlTest < ActiveSupport::TestCase
   TENANT = 88
 
-  def draft(period_no: 3, account_class: nil, capabilities: nil)
+  def draft(period_no: 3, account_class: nil, capabilities: nil, party_role: nil)
     lines = [
       { line_no: 1, account_code: "100100", ledger_id: 1, entity_id: 1, office_id: 1,
         amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2, amount_minor: 100_000 } ] },
@@ -14,6 +14,7 @@ class Posting::PeriodControlTest < ActiveSupport::TestCase
         amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2, amount_minor: -100_000 } ] }
     ]
     lines.each { |l| l[:account_class] = account_class } if account_class
+    lines.first[:party_role] = party_role if party_role
     d = {
       tenant_id: TENANT, entity_id: 1, office_id: 1, actor: "u:1", origin: "folio",
       document_date: Date.new(2025, 6, 1), posting_date: Date.new(2025, 6, 1),
@@ -55,6 +56,14 @@ class Posting::PeriodControlTest < ActiveSupport::TestCase
     control!(period_no: 3, state: "closed", account_class: "AP")
     assert Posting::PostEntry.post!(draft(period_no: 3)).persisted?, "GL lines post fine while AP is closed"
     assert_raises(Posting::PeriodClosedError) { Posting::PostEntry.post!(draft(period_no: 3, account_class: "AP")) }
+  end
+
+  test "customer and vendor party roles derive AR and AP period classes" do
+    control!(period_no: 3, state: "closed", account_class: "AP")
+    assert_raises(Posting::PeriodClosedError) do
+      Posting::PostEntry.post!(draft(period_no: 3, party_role: "vendor"))
+    end
+    assert Posting::PostEntry.post!(draft(period_no: 3, party_role: "customer")).persisted?
   end
 
   test "the tax lock is a separate domain from the posting lock" do
