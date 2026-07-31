@@ -17,7 +17,8 @@ require "tempfile"
 # Mapping (verified against the corpus):
 #   Bahi account.id -> Folio account.code (string); Bahi has no separate code.
 #   Bahi (debit, credit) — always one-zero and non-negative across the whole corpus ->
-#     signed amount_minor = debit - credit, transaction slot, INR, ISO exponent 2 (paise).
+#     signed amount_minor = debit - credit. The source has no currency metadata, so callers
+#     must explicitly declare the currency and ISO 4217 exponent instead of inheriting INR/2.
 #     The report reconstructs debit/credit by sign.
 #
 # Bulk-inserts (insert_all!) because the corpus runs to ~22k lines per file; per-row create!
@@ -25,15 +26,22 @@ require "tempfile"
 module Khata
   class Import
     InvalidLineAmount = Class.new(StandardError)
-    INR_EXPONENT = 2
+    InvalidCurrencyProfile = Class.new(StandardError)
+    CURRENCY_PROFILE_ERROR =
+      "declare a three-letter currency and ISO 4217 minor-unit exponent between 0 and 4"
 
-    def self.import!(khata_path:, tenant_id:)
-      new(khata_path, tenant_id).import!
+    def self.import!(khata_path:, tenant_id:, currency:, minor_unit_exponent:)
+      new(khata_path, tenant_id, currency, minor_unit_exponent).import!
     end
 
-    def initialize(khata_path, tenant_id)
+    def initialize(khata_path, tenant_id, currency, minor_unit_exponent)
       @khata_path = khata_path.to_s
       @tenant_id = tenant_id
+      @currency = currency.to_s.upcase
+      @minor_unit_exponent = Integer(minor_unit_exponent)
+      validate_currency_profile!
+    rescue ArgumentError, TypeError
+      raise InvalidCurrencyProfile, CURRENCY_PROFILE_ERROR
     end
 
     def import!
@@ -103,8 +111,8 @@ module Khata
 
       amount_by_key = source.to_h { |s| [ [ s[:entry_id], s[:line_no] ], s[:amount_minor] ] }
       amounts = EntryLine.where(tenant_id: @tenant_id).pluck(:id, :entry_id, :line_no).map do |id, eid, ln|
-        { tenant_id: @tenant_id, entry_line_id: id, slot_role: "transaction", currency: "INR",
-          minor_unit_exponent: INR_EXPONENT, amount_minor: amount_by_key.fetch([ eid, ln ]),
+        { tenant_id: @tenant_id, entry_line_id: id, slot_role: "transaction", currency: @currency,
+          minor_unit_exponent: @minor_unit_exponent, amount_minor: amount_by_key.fetch([ eid, ln ]),
           created_at: now, updated_at: now }
       end
       JournalEntryLineAmount.insert_all!(amounts)
@@ -120,6 +128,12 @@ module Khata
           "expected exactly one positive side, got debit=#{debit} credit=#{credit}"
       end
       debit - credit
+    end
+
+    def validate_currency_profile!
+      return if @currency.match?(/\A[A-Z]{3}\z/) && @minor_unit_exponent.between?(0, 4)
+
+      raise InvalidCurrencyProfile, CURRENCY_PROFILE_ERROR
     end
 
     # Indian FY (Apr–Mar): Apr→period 1 … Mar→period 12. Faithful, though the reports don't

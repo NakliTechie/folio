@@ -15,7 +15,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
   test "an authenticated user reaches the root" do
     org = Onboarding::SignUp.call(
-      email: "authenticated@x.com", password: "password123", org_name: "Authenticated Books"
+      email: "authenticated@x.com", password: "correct-horse-battery", org_name: "Authenticated Books"
     )
     sign_in_as(org.user)
     get root_path

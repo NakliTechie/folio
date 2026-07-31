@@ -80,6 +80,7 @@
           <% if permitted?("users.manage") %>
             <%= link_to "Team", team_path(tenant_route_options), class: navigation_class("team") %>
           <% end %>
+          <%= link_to "Security", security_path(tenant_route_options), class: navigation_class("security") %>
         </nav>
       </header>
     <% else %>

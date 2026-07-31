@@ -6,12 +6,12 @@ require "test_helper"
 # another's, no matter what tenant selector they send.
 class Api::V1::TenantIsolationTest < ActionDispatch::IntegrationTest
   setup do
-    @alice = User.create!(email_address: "alice@x.com", password: "password")
+    @alice = User.create!(email_address: "alice@x.com", password: "correct-horse-battery")
     @acme = Tenant.create!(name: "Acme", slug: "acme")
     @globex = Tenant.create!(name: "Globex", slug: "globex")
     Membership.create!(user: @alice, tenant: @acme)
     # @globex has a different member — @alice must never reach it.
-    Membership.create!(user: User.create!(email_address: "bob@x.com", password: "password"), tenant: @globex)
+    Membership.create!(user: User.create!(email_address: "bob@x.com", password: "correct-horse-battery"), tenant: @globex)
   end
 
   test "an unauthenticated API request gets 401 JSON, not an HTML redirect" do
@@ -35,7 +35,7 @@ class Api::V1::TenantIsolationTest < ActionDispatch::IntegrationTest
   end
 
   test "a user with no membership is forbidden (no default tenant leaks in)" do
-    sign_in_as(User.create!(email_address: "charlie@x.com", password: "password"))
+    sign_in_as(User.create!(email_address: "charlie@x.com", password: "correct-horse-battery"))
     get "/api/v1/tenant"
     assert_response :forbidden
   end

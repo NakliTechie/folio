@@ -6,8 +6,8 @@ require "test_helper"
 # tenant isolation, RBAC, balance, CSRF, and the full document lifecycle.
 class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
   setup do
-    @acme = Onboarding::SignUp.call(email: "acme@x.com", password: "password123", org_name: "Acme")
-    @globex = Onboarding::SignUp.call(email: "globex@x.com", password: "password123", org_name: "Globex")
+    @acme = Onboarding::SignUp.call(email: "acme@x.com", password: "correct-horse-battery", org_name: "Acme")
+    @globex = Onboarding::SignUp.call(email: "globex@x.com", password: "correct-horse-battery", org_name: "Globex")
   end
 
   def jv_params(dr: 100_000)
@@ -81,7 +81,7 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
     accountant = Onboarding::Invite.accept!(
       token: Onboarding::Invite.create!(tenant: @acme.tenant, email: "accountant@x.com",
         role_code: "accountant", invited_by: @acme.user).generate_token_for(:invite),
-      password: "password123"
+      password: "correct-horse-battery"
     )
     entity = Entity.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY")
     ledger = Ledger.find_by!(tenant_id: @acme.tenant.id, code: "PRIMARY")
@@ -125,7 +125,7 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
   test "RBAC — an operator cannot create/post a voucher (403)" do
     op = Onboarding::Invite.accept!(
       token: Onboarding::Invite.create!(tenant: @acme.tenant, email: "op@x.com", role_code: "operator",
-        invited_by: @acme.user).generate_token_for(:invite), password: "password123")
+        invited_by: @acme.user).generate_token_for(:invite), password: "correct-horse-battery")
     sign_in_as(op)
     post "/api/v1/documents", params: jv_params
     assert_response :forbidden

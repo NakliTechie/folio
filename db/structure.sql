@@ -881,7 +881,9 @@ CREATE TABLE public.sessions (
     ip_address character varying,
     user_agent character varying,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    last_seen_at timestamp(6) without time zone NOT NULL,
+    expires_at timestamp(6) without time zone NOT NULL
 );
 
 
@@ -1753,6 +1755,13 @@ CREATE UNIQUE INDEX index_role_templates_on_tenant_id_and_code ON public.role_te
 
 
 --
+-- Name: index_sessions_on_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_sessions_on_expires_at ON public.sessions USING btree (expires_at);
+
+
+--
 -- Name: index_sessions_on_user_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1785,6 +1794,13 @@ CREATE UNIQUE INDEX index_tenants_on_slug ON public.tenants USING btree (slug);
 --
 
 CREATE INDEX index_user_office_roles_on_role_template_id ON public.user_office_roles USING btree (role_template_id);
+
+
+--
+-- Name: index_user_office_roles_on_tenant_wide_assignment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_user_office_roles_on_tenant_wide_assignment ON public.user_office_roles USING btree (user_id, tenant_id) WHERE (office_id IS NULL);
 
 
 --
@@ -1884,6 +1900,8 @@ ALTER TABLE ONLY public.memberships
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731091000'),
+('20260731090000'),
 ('20260730230000'),
 ('20260729180100'),
 ('20260729180000'),

@@ -41,7 +41,8 @@ class PasswordsControllerTest < ActionDispatch::IntegrationTest
 
   test "update" do
     assert_changes -> { @user.reload.password_digest } do
-      put password_path(@user.password_reset_token), params: { password: "new", password_confirmation: "new" }
+      put password_path(@user.password_reset_token),
+        params: { password: "a-new-secure-passphrase", password_confirmation: "a-new-secure-passphrase" }
       assert_redirected_to new_session_path
     end
 
@@ -57,7 +58,27 @@ class PasswordsControllerTest < ActionDispatch::IntegrationTest
     end
 
     follow_redirect!
-    assert_notice "Passwords did not match"
+    assert_notice "Password confirmation doesn't match Password"
+  end
+
+  test "update rejects a short password" do
+    token = @user.password_reset_token
+    assert_no_changes -> { @user.reload.password_digest } do
+      put password_path(token), params: { password: "too-short", password_confirmation: "too-short" }
+      assert_redirected_to edit_password_path(token)
+    end
+
+    follow_redirect!
+    assert_notice "Password is too short"
+  end
+
+  test "only implemented password routes are exposed" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("/passwords", method: :get)
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("/passwords/token", method: :delete)
+    end
   end
 
   private

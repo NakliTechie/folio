@@ -20,7 +20,7 @@ class OnboardingDeliveryJobsTest < ActiveJob::TestCase
   test "verification delivery records success" do
     user = User.create!(
       email_address: "delivery@x.com",
-      password: "password123",
+      password: "correct-horse-battery",
       verification_delivery_state: "queued"
     )
 
@@ -35,7 +35,7 @@ class OnboardingDeliveryJobsTest < ActiveJob::TestCase
   test "verification delivery records failure before re-raising" do
     user = User.create!(
       email_address: "delivery-failure@x.com",
-      password: "password123",
+      password: "correct-horse-battery",
       verification_delivery_state: "queued"
     )
     with_failing_delivery do
@@ -48,7 +48,7 @@ class OnboardingDeliveryJobsTest < ActiveJob::TestCase
 
   test "invitation delivery records success and failure" do
     org = Onboarding::SignUp.call(
-      email: "delivery-owner@x.com", password: "password123", org_name: "Delivery Books"
+      email: "delivery-owner@x.com", password: "correct-horse-battery", org_name: "Delivery Books"
     )
     invitation = Onboarding::Invite.create!(
       tenant: org.tenant,

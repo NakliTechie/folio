@@ -35,5 +35,9 @@ module Folio
     # Money is integer minor units end to end; time is UTC and explicit.
     config.time_zone = "UTC"
     config.active_record.default_timezone = :utc
+
+    # Non-production environments use the reserved .invalid domain. Production overrides this
+    # with a required sender identity in config/environments/production.rb.
+    config.x.mail_from = "folio@example.invalid"
   end
 end

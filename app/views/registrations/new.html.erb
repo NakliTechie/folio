@@ -26,8 +26,10 @@
       </div>
       <div class="form-group">
         <%= f.label :password %>
-        <%= f.password_field :password, required: true, autocomplete: "new-password", maxlength: 72 %>
-        <small>Use a unique password of up to 72 characters.</small>
+        <%= f.password_field :password, required: true, autocomplete: "new-password",
+          minlength: User::MINIMUM_PASSWORD_LENGTH, maxlength: 72,
+          aria: { describedby: "password-hint" } %>
+        <small id="password-hint">Use a unique password of <%= User::MINIMUM_PASSWORD_LENGTH %>–72 characters.</small>
       </div>
 
       <fieldset class="profile-fieldset">

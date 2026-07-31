@@ -7,7 +7,7 @@ require "test_helper"
 class OnboardingFlowTest < ActionDispatch::IntegrationTest
   test "self-signup creates an org, seeds books, and logs the user in" do
     assert_difference [ "Tenant.count", "User.count" ], 1 do
-      post registration_path, params: { org_name: "Acme Co", email_address: "founder@acme.com", password: "password123" }
+      post registration_path, params: { org_name: "Acme Co", email_address: "founder@acme.com", password: "correct-horse-battery" }
     end
     assert_redirected_to root_path
     follow_redirect!
@@ -21,7 +21,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     post registration_path, params: {
       org_name: "Pacific Co",
       email_address: "founder@pacific.example",
-      password: "password123",
+      password: "correct-horse-battery",
       jurisdiction_profile: "US",
       functional_currency: "USD",
       fiscal_year_variant: "CAL"
@@ -41,7 +41,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
       post registration_path, params: {
         org_name: "Unknown Co",
         email_address: "unknown@example.com",
-        password: "password123",
+        password: "correct-horse-battery",
         jurisdiction_profile: "ZZ",
         functional_currency: "USD",
         fiscal_year_variant: "CAL"
@@ -54,9 +54,9 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "signup with a duplicate email is rejected and creates no org" do
-    User.create!(email_address: "taken@x.com", password: "password123")
+    User.create!(email_address: "taken@x.com", password: "correct-horse-battery")
     assert_no_difference "Tenant.count" do
-      post registration_path, params: { org_name: "X", email_address: "taken@x.com", password: "password123" }
+      post registration_path, params: { org_name: "X", email_address: "taken@x.com", password: "correct-horse-battery" }
     end
     assert_response :unprocessable_entity
     assert_select "[role=alert]", "Email address has already been taken"
@@ -66,10 +66,10 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "only an owner can send an invitation; a non-owner is forbidden" do
-    org = Onboarding::SignUp.call(email: "owner@x.com", password: "password123", org_name: "Org")
+    org = Onboarding::SignUp.call(email: "owner@x.com", password: "correct-horse-battery", org_name: "Org")
     operator = Onboarding::Invite.accept!(
       token: Onboarding::Invite.create!(tenant: org.tenant, email: "op@x.com", role_code: "operator",
-        invited_by: org.user).generate_token_for(:invite), password: "password123")
+        invited_by: org.user).generate_token_for(:invite), password: "correct-horse-battery")
 
     sign_in_as(org.user)
     assert_difference "Invitation.count", 1 do
@@ -85,7 +85,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "invite → accept joins the invitee with the assigned role and logs them in" do
-    org = Onboarding::SignUp.call(email: "o@x.com", password: "password123", org_name: "Org")
+    org = Onboarding::SignUp.call(email: "o@x.com", password: "correct-horse-battery", org_name: "Org")
     inv = Onboarding::Invite.create!(tenant: org.tenant, email: "joiner@x.com", role_code: "viewer", invited_by: org.user)
     token = inv.generate_token_for(:invite)
 
@@ -93,7 +93,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     assert_difference "User.count", 1 do
-      post accept_invitation_path(token), params: { password: "password123" }
+      post accept_invitation_path(token), params: { password: "correct-horse-battery" }
     end
     assert_redirected_to root_path
     joiner = User.find_by(email_address: "joiner@x.com")
@@ -101,7 +101,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "accepting an invite with a blank password re-renders, not a 500" do
-    org = Onboarding::SignUp.call(email: "o3@x.com", password: "password123", org_name: "Org3")
+    org = Onboarding::SignUp.call(email: "o3@x.com", password: "correct-horse-battery", org_name: "Org3")
     token = Onboarding::Invite.create!(tenant: org.tenant, email: "j3@x.com", role_code: "viewer",
       invited_by: org.user).generate_token_for(:invite)
     post accept_invitation_path(token), params: { password: "" }
@@ -110,13 +110,13 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "the email-verification link marks the user verified" do
-    user = User.create!(email_address: "v@x.com", password: "password123")
+    user = User.create!(email_address: "v@x.com", password: "correct-horse-battery")
     get verify_email_path(user.generate_token_for(:email_verification))
     assert user.reload.verified?
   end
 
   test "an existing account must authenticate before accepting an invitation" do
-    org = Onboarding::SignUp.call(email: "owner-existing@x.com", password: "password123", org_name: "Org")
+    org = Onboarding::SignUp.call(email: "owner-existing@x.com", password: "correct-horse-battery", org_name: "Org")
     existing = User.create!(email_address: "existing@x.com", password: "existing-password")
     invitation = Onboarding::Invite.create!(
       tenant: org.tenant, email: existing.email_address, role_code: "accountant", invited_by: org.user

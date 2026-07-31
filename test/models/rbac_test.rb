@@ -21,7 +21,7 @@ class RbacTest < ActiveSupport::TestCase
   end
 
   def user_with(email, role_code, tenant: @tenant, office_id: nil)
-    u = User.find_or_create_by!(email_address: email) { |x| x.password = "password" }
+    u = User.find_or_create_by!(email_address: email) { |x| x.password = "correct-horse-battery" }
     Membership.find_or_create_by!(user: u, tenant: tenant)
     UserOfficeRole.create!(user: u, tenant_id: tenant.id, office_id: office_id,
       role_template: Rbac::Presets.role_for(tenant, role_code))
@@ -54,8 +54,27 @@ class RbacTest < ActiveSupport::TestCase
   test "Authorization.permits? resolves the user's role in the given tenant" do
     assert Authorization.permits?(user: @owner, tenant_id: @tenant.id, capability: "documents.post")
     refute Authorization.permits?(user: @operator, tenant_id: @tenant.id, capability: "documents.post")
-    stranger = User.create!(email_address: "stranger@x.com", password: "password")
+    stranger = User.create!(email_address: "stranger@x.com", password: "correct-horse-battery")
     refute Authorization.permits?(user: stranger, tenant_id: @tenant.id, capability: "reports.read")
+  end
+
+  test "a user can have only one tenant-wide role per tenant" do
+    assignment = @owner.user_office_roles.find_by!(tenant_id: @tenant.id, office_id: nil)
+    duplicate = UserOfficeRole.new(
+      user: @owner, tenant_id: @tenant.id, office_id: nil,
+      role_template: Rbac::Presets.role_for(@tenant, "viewer")
+    )
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:user_id], "has already been taken"
+
+    now = Time.current
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      UserOfficeRole.insert_all!([ {
+        user_id: assignment.user_id, tenant_id: assignment.tenant_id, office_id: nil,
+        role_template_id: duplicate.role_template_id, created_at: now, updated_at: now
+      } ])
+    end
   end
 
   test "a role held in another tenant does not authorize here" do

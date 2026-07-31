@@ -53,7 +53,7 @@ class OnboardingConcurrencyTest < ActiveSupport::TestCase
     outcomes = race do |index|
       Onboarding::SignUp.call(
         email: "slug-#{token}-#{index}@x.com",
-        password: "password123",
+        password: "correct-horse-battery",
         org_name: "Concurrent #{token}"
       )
     end
@@ -72,7 +72,7 @@ class OnboardingConcurrencyTest < ActiveSupport::TestCase
     token = SecureRandom.hex(8)
     org = Onboarding::SignUp.call(
       email: "invite-owner-#{token}@x.com",
-      password: "password123",
+      password: "correct-horse-battery",
       org_name: "Invite concurrency #{token}"
     )
     @created_tenant_ids = [ org.tenant.id ]
@@ -86,7 +86,7 @@ class OnboardingConcurrencyTest < ActiveSupport::TestCase
     signed_token = invitation.generate_token_for(:invite)
 
     outcomes = race do
-      Onboarding::Invite.accept!(token: signed_token, password: "password123")
+      Onboarding::Invite.accept!(token: signed_token, password: "correct-horse-battery")
     end
 
     assert_equal 1, outcomes.count { |outcome| outcome.is_a?(User) }

@@ -7,4 +7,5 @@ class UserOfficeRole < ApplicationRecord
   belongs_to :role_template
   belongs_to :posting_limit, optional: true
   validates :tenant_id, presence: true
+  validates :user_id, uniqueness: { scope: %i[tenant_id office_id] }
 end

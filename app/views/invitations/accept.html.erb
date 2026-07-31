@@ -13,7 +13,8 @@
         <div class="form-group">
           <%= f.label :password, @existing_account ? "Confirm your Folio password" : "Choose a password" %>
           <%= f.password_field :password, required: true, autofocus: true,
-            autocomplete: @existing_account ? "current-password" : "new-password", maxlength: 72 %>
+            autocomplete: @existing_account ? "current-password" : "new-password",
+            minlength: (@existing_account ? nil : User::MINIMUM_PASSWORD_LENGTH), maxlength: 72 %>
           <small><%= @existing_account ? "This confirms the invitation belongs to you." : "This creates your Folio sign-in." %></small>
         </div>
       <% end %>

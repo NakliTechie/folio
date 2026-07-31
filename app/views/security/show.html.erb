@@ -1,0 +1,43 @@
+<% content_for :title, "Account security · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Account security</p>
+      <h1>Signed-in devices</h1>
+      <p>Sessions expire after one idle hour or 24 total hours. Revoke anything you do not recognise.</p>
+    </div>
+  </header>
+
+  <section class="panel panel--table">
+    <div class="panel__header">
+      <h2>Active sessions</h2>
+      <span class="count-pill"><%= @sessions.size %></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Active sessions for <%= Current.user.email_address %></caption>
+        <thead>
+          <tr><th scope="col">Device</th><th scope="col">Last active</th><th scope="col">Expires</th><th scope="col"><span class="sr-only">Action</span></th></tr>
+        </thead>
+        <tbody>
+          <% @sessions.each do |session| %>
+            <tr>
+              <td>
+                <strong><%= session.id == Current.session.id ? "This device" : "Signed-in device" %></strong>
+                <small><%= session.user_agent.presence || "Unknown browser" %> · <%= session.ip_address.presence || "Unknown address" %></small>
+              </td>
+              <td><%= time_ago_in_words(session.last_seen_at) %> ago</td>
+              <td><%= l session.expires_at, format: :short %></td>
+              <td>
+                <%= button_to session.id == Current.session.id ? "Sign out" : "Revoke",
+                  active_session_path(session, tenant_route_options), method: :delete,
+                  class: "button button--compact button--quiet" %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>

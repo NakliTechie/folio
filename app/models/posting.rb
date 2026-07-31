@@ -25,7 +25,9 @@ module Posting
   # events reference earlier entries, order matters — in_order (by seq) guarantees an entry
   # is projected before any clearing that touches it.
   def rebuild!(tenant_id)
-    Entry.where(tenant_id: tenant_id).destroy_all
-    LedgerEvent.for_tenant(tenant_id).in_order.each { |event| project!(event) }
+    ActiveRecord::Base.transaction do
+      Entry.where(tenant_id: tenant_id).destroy_all
+      LedgerEvent.for_tenant(tenant_id).in_order.each { |event| project!(event) }
+    end
   end
 end

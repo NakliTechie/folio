@@ -48,13 +48,27 @@ class Khata::ImportTest < ActiveSupport::TestCase
 
       with_khata(debit: debit, credit: credit) do |path|
         error = assert_raises(Khata::Import::InvalidLineAmount) do
-          Khata::Import.import!(khata_path: path, tenant_id: tenant_id)
+          Khata::Import.import!(khata_path: path, tenant_id: tenant_id,
+            currency: "INR", minor_unit_exponent: 2)
         end
 
         assert_match(/expected exactly one positive side/, error.message)
         assert_equal 0, Account.where(tenant_id: tenant_id).count
         assert_equal 0, Entry.where(tenant_id: tenant_id).count
       end
+    end
+  end
+
+  test "requires an explicit valid currency profile" do
+    assert_raises(Khata::Import::InvalidCurrencyProfile) do
+      Khata::Import.import!(khata_path: "unused.khata", tenant_id: 1,
+        currency: "rupees", minor_unit_exponent: 2)
+    end
+
+
+    assert_raises(Khata::Import::InvalidCurrencyProfile) do
+      Khata::Import.import!(khata_path: "unused.khata", tenant_id: 1,
+        currency: "INR", minor_unit_exponent: "unknown")
     end
   end
 end

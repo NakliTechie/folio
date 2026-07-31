@@ -22,12 +22,18 @@ module Reports
                  "AND jla.slot_role = 'transaction'"
   DEBIT  = "SUM(CASE WHEN jla.amount_minor > 0 THEN jla.amount_minor ELSE 0 END)"
   CREDIT = "SUM(CASE WHEN jla.amount_minor < 0 THEN -jla.amount_minor ELSE 0 END)"
+  ACCOUNT_CODE_ORDER = <<~SQL.squish.freeze
+    CASE WHEN a.code ~ '^[0-9]+$' THEN 0 ELSE 1 END,
+    CASE WHEN a.code ~ '^[0-9]+$' THEN a.code::numeric END,
+    a.code
+  SQL
 
   def trial_balance(tenant_id)
-    base(tenant_id).group("a.code, a.name, a.account_type").order(Arel.sql("a.code::integer"))
+    base(tenant_id).group("a.code, a.name, a.account_type").order(Arel.sql(ACCOUNT_CODE_ORDER))
       .pluck(Arel.sql("a.code"), Arel.sql("a.name"), Arel.sql("a.account_type"), Arel.sql(DEBIT), Arel.sql(CREDIT))
       .map do |code, name, type, debit, credit|
-        { "account_id" => code.to_i, "name" => name, "type" => type,
+        account_id = code.match?(/\A\d+\z/) ? code.to_i : code
+        { "account_id" => account_id, "name" => name, "type" => type,
           "debit" => debit.to_i, "credit" => credit.to_i }
       end
   end

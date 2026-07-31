@@ -28,7 +28,8 @@ class TierRThroughRailsTest < ActiveSupport::TestCase
   test "every corpus account report reproduces its golden fixture byte-for-byte through the new model" do
     MANIFEST["cases"].each_with_index do |kase, idx|
       tenant = 8_300 + idx
-      Khata::Import.import!(khata_path: CONFORMANCE.join("corpus", kase["file"]), tenant_id: tenant)
+      Khata::Import.import!(khata_path: CONFORMANCE.join("corpus", kase["file"]), tenant_id: tenant,
+        currency: "INR", minor_unit_exponent: 2)
 
       QUERIES.each do |query, method|
         assert_equal golden(kase["id"], query), canonical(Reports.public_send(method, tenant)),
@@ -40,7 +41,8 @@ class TierRThroughRailsTest < ActiveSupport::TestCase
   test "the Tier R check is non-vacuous — a 1-paise perturbation breaks the byte match" do
     kase = MANIFEST["cases"].find { |c| c["id"] == "consulting" }
     tenant = 8_399
-    Khata::Import.import!(khata_path: CONFORMANCE.join("corpus", kase["file"]), tenant_id: tenant)
+    Khata::Import.import!(khata_path: CONFORMANCE.join("corpus", kase["file"]), tenant_id: tenant,
+      currency: "INR", minor_unit_exponent: 2)
     assert_equal golden("consulting", "trial-balance"), canonical(Reports.trial_balance(tenant))
 
     amt = JournalEntryLineAmount.where(tenant_id: tenant).first

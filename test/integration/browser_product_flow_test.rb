@@ -5,7 +5,7 @@ require "test_helper"
 class BrowserProductFlowTest < ActionDispatch::IntegrationTest
   setup do
     @org = Onboarding::SignUp.call(
-      email: "browser-owner@x.com", password: "password123", org_name: "Browser Books"
+      email: "browser-owner@x.com", password: "correct-horse-battery", org_name: "Browser Books"
     )
     sign_in_as(@org.user)
   end
@@ -87,7 +87,7 @@ class BrowserProductFlowTest < ActionDispatch::IntegrationTest
       token: Onboarding::Invite.create!(
         tenant: @org.tenant, email: "browser-viewer@x.com", role_code: "viewer", invited_by: @org.user
       ).generate_token_for(:invite),
-      password: "password123"
+      password: "correct-horse-battery"
     )
     sign_out
     sign_in_as(viewer)

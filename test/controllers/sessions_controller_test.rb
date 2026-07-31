@@ -30,4 +30,17 @@ class SessionsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_session_path
     assert_empty cookies[:session_id]
   end
+
+  test "an idle session is destroyed and must authenticate again" do
+    sign_in_as(@user)
+    expired_session = Current.session
+    expired_session.update!(last_seen_at: 2.hours.ago)
+    Current.session = nil
+
+    get root_path
+
+    assert_redirected_to new_session_path
+    assert_not Session.exists?(expired_session.id)
+    assert_empty cookies[:session_id]
+  end
 end

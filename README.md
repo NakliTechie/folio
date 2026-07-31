@@ -53,12 +53,20 @@ SQLite ledger is a projection. Folio keeps that shape, server-side:
   minor units).
 - **Rebuild-from-events** — the same replay guarantee Bahi has (`replayAuditLogToFreshDb`), now the
   routine recovery + read-model rebuild path.
+- **Historical references in projections are values, not live master-data dependencies.** Replay is
+  deliberately master-independent, so projection-to-master foreign keys are not used where deleting
+  or superseding a current master would prevent a historical rebuild. Production posting resolves
+  tenant-owned organization/configuration records before appending the authoritative event.
+- **Provenance status** — posting stamps the engine version and resolved authority today. The payload
+  builder supports `configVersions`, but production document posts omit it until the planned
+  append-only configuration registry can provide immutable versions; that part is not yet complete.
 - Concurrency = **Postgres transactions + row locks** (not CRDT). Self-balancing entries (Dr=Cr)
   keep the invariant under concurrent posting.
 
 ## 5. Tenancy & identity
-- **Tenant = a firm** (an account/organization). Row-level tenant scoping on every table
-  (`tenant_id`), enforced in a base scope + Postgres RLS as defense-in-depth.
+- **Tenant = a firm** (an account/organization). Tenant-owned application queries bind `tenant_id`
+  from the authenticated membership or resource and cross-tenant behaviour is covered by integration
+  tests. PostgreSQL RLS is **not implemented yet**; it remains pre-production defense-in-depth work.
 - **Auth** — email/password + TOTP; SSO (Google/Microsoft) for the managed tier; self-host can use
   local auth only. (Follow the RANE/Trellis auth pattern; don't rebuild.)
 - **Per-user signing keys** enrolled per tenant → every event carries a real user signature →
@@ -118,7 +126,7 @@ engine logic, surfaced in Folio per-office / consolidated. Build once in the sha
   contract is executable.
 - **M1 — Engine parity in Ruby.** Port the double-entry + GST posting core to Ruby service objects;
   green against the corpus. Event store + projection + rebuild.
-- **M2 — Tenancy + auth + RBAC spine.** Multi-tenant scoping (RLS), users, per-office roles,
+- **M2 — Tenancy + auth + RBAC spine.** Explicit application-level tenant scoping, users, per-office roles,
   capability gating, signed events with real user keys.
 - **M3 — Office model + core workflows.** Offices, prefixed series, invoices/purchases/payments,
   reports (TB/BS/P&L/CF), period lock.
@@ -133,6 +141,22 @@ engine logic, surfaced in Folio per-office / consolidated. Build once in the sha
    repo/package both depend on (Bahi is its own repo today).
 3. **Self-host packaging** — Docker Compose vs single-binary-ish; how far to go for v1.
 4. **Managed billing** model + tenant provisioning.
+
+## 14. Production configuration
+
+Production boots only with an explicit public host, sender, and SMTP account; placeholder delivery
+is not accepted. Configure these environment variables through the deployment secret store:
+
+- `FOLIO_APP_HOST` — public hostname only, without a scheme.
+- `FOLIO_MAIL_FROM` — verified sender address.
+- `FOLIO_SMTP_ADDRESS`, `FOLIO_SMTP_USERNAME`, `FOLIO_SMTP_PASSWORD` — provider connection.
+- Optional: `FOLIO_SMTP_PORT` (default `587`), `FOLIO_SMTP_DOMAIN`,
+  `FOLIO_SMTP_AUTHENTICATION`, and SMTP open/read timeouts.
+- Optional: `FOLIO_ALLOWED_HOSTS` — comma-separated exact hostnames; defaults to `FOLIO_APP_HOST`.
+
+Production forces HTTPS/HSTS and secure cookies behind its trusted TLS proxy. Mail jobs use the
+durable Solid Queue database; run `bin/jobs` as a worker, or set `SOLID_QUEUE_IN_PUMA=1` for a
+single-server deployment. Prepare the primary and queue databases before booting the app.
 
 ---
 
