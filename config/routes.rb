@@ -6,6 +6,24 @@ Rails.application.routes.draw do
       patch :reactivate
     end
   end
+  resources :parties, only: %i[index new create edit update] do
+    member do
+      patch :deactivate
+      patch :reactivate
+    end
+  end
+  resources :items, only: %i[index new create edit update] do
+    member do
+      patch :deactivate
+      patch :reactivate
+    end
+  end
+  resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
+    member do
+      patch :deactivate
+      patch :reactivate
+    end
+  end
   resources :journal_vouchers, path: "transactions", only: %i[index show new create] do
     member do
       post :post
@@ -26,6 +44,9 @@ Rails.application.routes.draw do
     namespace :v1 do
       get "tenant", to: "tenants#show"
       resources :accounts, only: %i[index show create update]
+      resources :parties, only: %i[index show create update]
+      resources :items, only: %i[index show create update]
+      resources :tax_registrations, only: %i[index show create update]
       resources :document_types, only: :index
       get "reports/trial_balance", to: "reports#trial_balance"
       get "reports/account_type_totals", to: "reports#account_type_totals"

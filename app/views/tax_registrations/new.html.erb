@@ -1,0 +1,13 @@
+<% content_for :title, "Add tax registration · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to tax registrations", tax_registrations_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">Tax setup</p><h1>Add a tax registration</h1>
+    <p>The effective date determines which identity a future document freezes.</p>
+  </header>
+  <section class="panel form-panel">
+    <%= render "form", registration: @registration,
+      form_url: tax_registrations_path(tenant_route_options), submit_label: "Add registration" %>
+  </section>
+</main>

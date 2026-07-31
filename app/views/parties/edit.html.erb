@@ -1,0 +1,29 @@
+<% content_for :title, "Edit #{@party.party_number} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to customers & vendors", parties_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">Masters</p>
+    <h1>Edit <%= @party.party_number %></h1>
+    <p>Changes are audited. Deactivation keeps every historical document and posting intact.</p>
+  </header>
+  <section class="panel form-panel">
+    <%= render "form", party: @party, form_url: party_path(@party, tenant_route_options),
+      submit_label: "Save party" %>
+  </section>
+  <section class="panel lifecycle-panel">
+    <div>
+      <p class="eyebrow">Lifecycle</p>
+      <h2><%= @party.active? ? "Available for new documents" : "Inactive" %></h2>
+      <p>Historical references are never deleted.</p>
+    </div>
+    <% if @party.active? %>
+      <%= button_to "Deactivate party", deactivate_party_path(@party, tenant_route_options), method: :patch,
+        class: "button button--danger",
+        form: { data: { turbo_confirm: "Deactivate #{@party.party_number} for new documents?" } } %>
+    <% else %>
+      <%= button_to "Reactivate party", reactivate_party_path(@party, tenant_route_options), method: :patch,
+        class: "button button--secondary" %>
+    <% end %>
+  </section>
+</main>

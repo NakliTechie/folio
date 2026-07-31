@@ -1,0 +1,42 @@
+<% content_for :title, "Tax registrations · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Tax setup</p>
+      <h1>Tax registrations</h1>
+      <p>Effective-dated registrations are linked to legal entities and the offices that use them.</p>
+    </div>
+    <%= link_to "Add registration", new_tax_registration_path(tenant_route_options),
+      class: "button button--primary" %>
+  </header>
+
+  <section class="panel panel--table">
+    <% if @registrations.any? %>
+      <div class="table-wrap"><table>
+        <caption class="sr-only">Tax registrations for <%= Current.tenant.name %></caption>
+        <thead><tr><th>Kind</th><th>Identifier</th><th>State</th><th>Effective</th><th>Offices</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <% @registrations.each do |registration| %>
+            <tr>
+              <td><span class="status-badge"><%= registration.kind %></span></td>
+              <td><strong><%= registration.identifier %></strong></td>
+              <td><%= registration.state_code.presence || "—" %></td>
+              <td><%= registration.valid_from %> → <%= registration.valid_to || "open" %></td>
+              <td><%= registration.offices.map(&:code).join(", ") %></td>
+              <td><span class="<%= registration.active? ? "status-badge status-badge--success" : "status-badge" %>">
+                <%= registration.active? ? "Active" : "Inactive" %></span></td>
+              <td><%= link_to "Edit", edit_tax_registration_path(registration, tenant_route_options), class: "text-link" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table></div>
+    <% else %>
+      <div class="empty-state">
+        <span class="empty-state__icon" aria-hidden="true">⌁</span>
+        <h2>No tax registration configured</h2>
+        <p>Add the GSTIN the primary office will use before issuing a GST invoice.</p>
+      </div>
+    <% end %>
+  </section>
+</main>

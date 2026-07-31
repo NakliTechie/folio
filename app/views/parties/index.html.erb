@@ -1,0 +1,47 @@
+<% content_for :title, "Customers & vendors · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Masters</p>
+      <h1>Customers & vendors</h1>
+      <p>One governed party record can carry several roles and an effective-dated GST identity.</p>
+    </div>
+    <% if permitted?("masters.manage") %>
+      <%= link_to "Add party", new_party_path(tenant_route_options), class: "button button--primary" %>
+    <% end %>
+  </header>
+
+  <section class="panel panel--table">
+    <% if @parties.any? %>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Customers and vendors for <%= Current.tenant.name %></caption>
+          <thead><tr><th>Code</th><th>Party</th><th>Roles</th><th>GSTIN</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <% @parties.each do |party| %>
+              <% registration = party.party_tax_registrations.select(&:active?).max_by(&:valid_from) %>
+              <tr>
+                <td><span class="account-code"><%= party.party_number %></span></td>
+                <td><strong><%= party.name %></strong><% if party.email.present? %><small><%= party.email %></small><% end %></td>
+                <td><%= party.role_codes.map(&:humanize).join(" · ") %></td>
+                <td><%= registration&.identifier || "Unregistered" %></td>
+                <td><span class="<%= party.active? ? "status-badge status-badge--success" : "status-badge" %>">
+                  <%= party.active? ? "Active" : "Inactive" %></span></td>
+                <td><% if permitted?("masters.manage") %>
+                  <%= link_to "Edit", edit_party_path(party, tenant_route_options), class: "text-link" %>
+                <% end %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="empty-state">
+        <span class="empty-state__icon" aria-hidden="true">◎</span>
+        <h2>No customers or vendors yet</h2>
+        <p>Add the first party before creating a services invoice or purchase bill.</p>
+      </div>
+    <% end %>
+  </section>
+</main>

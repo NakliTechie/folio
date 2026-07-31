@@ -38,10 +38,10 @@ class OrgSpineTest < ActiveSupport::TestCase
     e = Entity.create!(tenant_id: 1, code: "E1", legal_name: "x", functional_currency: "INR",
                        fiscal_year_variant: "IN_APR_MAR", jurisdiction_profile: "IN")
     old = TaxRegistration.create!(tenant_id: 1, entity_id: e.id, kind: "GSTIN",
-                                  identifier: "27AAAAA0000A1Z5", valid_from: "2024-04-01",
+                                  identifier: "27AAPFU0939F1ZV", valid_from: "2024-04-01",
                                   valid_to: "2025-03-31")
     cur = TaxRegistration.create!(tenant_id: 1, entity_id: e.id, kind: "GSTIN",
-                                  identifier: "27AAAAA0000A1Z5", valid_from: "2025-04-01", valid_to: nil)
+                                  identifier: "27AAPFU0939F1ZV", valid_from: "2025-04-01", valid_to: nil)
 
     on_date = TaxRegistration.in_force_on(Date.new(2025, 6, 1)).pluck(:id)
     assert_includes on_date, cur.id

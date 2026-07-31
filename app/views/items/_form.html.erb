@@ -1,0 +1,71 @@
+<%= form_with model: item, url: form_url, class: "stacked-form" do |form| %>
+  <div class="form-grid form-grid--two">
+    <div class="form-group">
+      <%= form.label :code, "Item or service code" %>
+      <% if item.persisted? && item.referenced? %>
+        <%= form.text_field :code, disabled: true %>
+        <small>The code is locked because this item is referenced by a posting.</small>
+      <% else %>
+        <%= form.text_field :code, required: true, autofocus: true, autocomplete: "off" %>
+      <% end %>
+    </div>
+    <div class="form-group">
+      <%= form.label :name %>
+      <%= form.text_field :name, required: true, autocomplete: "off" %>
+    </div>
+    <div class="form-group">
+      <%= form.label :item_type, "Type" %>
+      <%= form.select :item_type, Item::TYPES.map { |type| [type.humanize, type] }, {}, required: true %>
+    </div>
+    <div class="form-group">
+      <%= form.label :hsn_sac_code, "HSN / SAC code" %>
+      <%= form.text_field :hsn_sac_code, required: true, inputmode: "numeric", maxlength: 8,
+        placeholder: "998311" %>
+      <small>Use the applicable 2, 4, 6, or 8-digit classification.</small>
+    </div>
+    <div class="form-group">
+      <%= form.label :unit_of_measure, "Unit code" %>
+      <%= form.text_field :unit_of_measure, required: true, maxlength: 8, placeholder: "OTH" %>
+    </div>
+  </div>
+  <div class="form-group">
+    <%= form.label :description %>
+    <%= form.text_area :description, rows: 3 %>
+  </div>
+
+  <fieldset class="profile-fieldset">
+    <legend>Tax defaults</legend>
+    <p class="form-hint">These defaults feed the invoice preview; every posted document freezes the resolved amounts.</p>
+    <div class="form-grid form-grid--two">
+      <div class="form-group">
+        <%= form.label :tax_rate, "GST rate (%)" %>
+        <%= form.number_field :tax_rate, required: true, min: 0, max: 40, step: "0.01" %>
+      </div>
+      <div class="form-group">
+        <%= form.label :cess_rate, "Cess rate (%)" %>
+        <%= form.number_field :cess_rate, required: true, min: 0, max: 100, step: "0.01" %>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="profile-fieldset">
+    <legend>Account determination</legend>
+    <div class="form-grid form-grid--two">
+      <div class="form-group">
+        <%= form.label :income_account_code, "Sales / income account" %>
+        <%= form.select :income_account_code,
+          @income_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, {}, required: true %>
+      </div>
+      <div class="form-group">
+        <%= form.label :expense_account_code, "Purchase / expense account" %>
+        <%= form.select :expense_account_code,
+          @expense_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, {}, required: true %>
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="form-actions">
+    <%= form.submit submit_label, class: "button button--primary" %>
+    <%= link_to "Cancel", items_path(tenant_route_options), class: "button button--quiet" %>
+  </div>
+<% end %>

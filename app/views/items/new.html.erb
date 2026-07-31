@@ -1,0 +1,14 @@
+<% content_for :title, "Add product or service · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to products & services", items_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">Masters</p>
+    <h1>Add a product or service</h1>
+    <p>Start with the service catalogue; inventory behavior remains a later, explicit batch.</p>
+  </header>
+  <section class="panel form-panel">
+    <%= render "form", item: @item, form_url: items_path(tenant_route_options),
+      submit_label: "Add product or service" %>
+  </section>
+</main>

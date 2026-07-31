@@ -1,0 +1,101 @@
+<%= form_with model: party, url: form_url, class: "stacked-form" do |form| %>
+  <div class="form-grid form-grid--two">
+    <div class="form-group">
+      <%= form.label :party_number, "Party code" %>
+      <% if party.persisted? && party.referenced? %>
+        <%= form.text_field :party_number, disabled: true %>
+        <small>The code is locked because this party is referenced by a posting.</small>
+      <% else %>
+        <%= form.text_field :party_number, required: true, autofocus: true, autocomplete: "off" %>
+        <small>Use a stable code such as C-001 or V-042.</small>
+      <% end %>
+    </div>
+    <div class="form-group">
+      <%= form.label :name, "Legal or display name" %>
+      <%= form.text_field :name, required: true, autocomplete: "organization" %>
+    </div>
+  </div>
+
+  <fieldset class="profile-fieldset">
+    <legend>Roles</legend>
+    <p class="form-hint">A single party can be both a customer and a vendor.</p>
+    <div class="choice-row">
+      <% PartyRole::ROLES.each do |role| %>
+        <label class="choice-card">
+          <%= check_box_tag "party[roles][]", role, @selected_roles.include?(role) %>
+          <span><strong><%= role.humanize %></strong></span>
+        </label>
+      <% end %>
+    </div>
+  </fieldset>
+
+  <div class="form-grid form-grid--two">
+    <div class="form-group">
+      <%= form.label :email %>
+      <%= form.email_field :email, autocomplete: "email" %>
+    </div>
+    <div class="form-group">
+      <%= form.label :phone %>
+      <%= form.telephone_field :phone, autocomplete: "tel" %>
+    </div>
+  </div>
+
+  <fieldset class="profile-fieldset">
+    <legend>Billing address</legend>
+    <div class="form-grid form-grid--two">
+      <div class="form-group">
+        <%= form.label :address_line1, "Address line 1" %>
+        <%= form.text_field :address_line1, autocomplete: "address-line1" %>
+      </div>
+      <div class="form-group">
+        <%= form.label :address_line2, "Address line 2" %>
+        <%= form.text_field :address_line2, autocomplete: "address-line2" %>
+      </div>
+      <div class="form-group">
+        <%= form.label :city %>
+        <%= form.text_field :city, autocomplete: "address-level2" %>
+      </div>
+      <div class="form-group">
+        <%= form.label :postal_code, "Postal code" %>
+        <%= form.text_field :postal_code, autocomplete: "postal-code" %>
+      </div>
+      <div class="form-group">
+        <%= form.label :state_code, "State / GST state code" %>
+        <%= form.text_field :state_code, inputmode: "numeric", maxlength: 2,
+          placeholder: "27", autocomplete: "address-level1" %>
+      </div>
+      <div class="form-group">
+        <%= form.label :country_code, "Country code" %>
+        <%= form.text_field :country_code, maxlength: 2, required: true, autocomplete: "country" %>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="profile-fieldset">
+    <legend>GST registration <span class="status-badge">Optional</span></legend>
+    <p class="form-hint">Leave GSTIN blank for an unregistered or B2C party. Folio validates format and checksum offline.</p>
+    <%= hidden_field_tag "party[tax_registration][kind]", "GSTIN" %>
+    <div class="form-grid form-grid--two">
+      <div class="form-group">
+        <%= label_tag "party_tax_registration_identifier", "GSTIN" %>
+        <%= text_field_tag "party[tax_registration][identifier]", @tax_registration.identifier,
+          id: "party_tax_registration_identifier", maxlength: 15, autocomplete: "off" %>
+      </div>
+      <div class="form-group">
+        <%= label_tag "party_tax_registration_valid_from", "Valid from" %>
+        <%= date_field_tag "party[tax_registration][valid_from]", @tax_registration.valid_from,
+          id: "party_tax_registration_valid_from" %>
+      </div>
+      <div class="form-group">
+        <%= label_tag "party_tax_registration_valid_to", "Valid to" %>
+        <%= date_field_tag "party[tax_registration][valid_to]", @tax_registration.valid_to,
+          id: "party_tax_registration_valid_to" %>
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="form-actions">
+    <%= form.submit submit_label, class: "button button--primary" %>
+    <%= link_to "Cancel", parties_path(tenant_route_options), class: "button button--quiet" %>
+  </div>
+<% end %>

@@ -546,6 +546,51 @@ ALTER SEQUENCE public.invitations_id_seq OWNED BY public.invitations.id;
 
 
 --
+-- Name: items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.items (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    item_type character varying DEFAULT 'service'::character varying NOT NULL,
+    description text,
+    hsn_sac_code character varying NOT NULL,
+    unit_of_measure character varying DEFAULT 'OTH'::character varying NOT NULL,
+    tax_rate_basis_points integer DEFAULT 0 NOT NULL,
+    cess_rate_basis_points integer DEFAULT 0 NOT NULL,
+    income_account_code character varying NOT NULL,
+    expense_account_code character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_items_cess_rate CHECK (((cess_rate_basis_points >= 0) AND (cess_rate_basis_points <= 10000))),
+    CONSTRAINT chk_items_tax_rate CHECK (((tax_rate_basis_points >= 0) AND (tax_rate_basis_points <= 4000))),
+    CONSTRAINT chk_items_type CHECK (((item_type)::text = ANY ((ARRAY['service'::character varying, 'good'::character varying])::text[])))
+);
+
+
+--
+-- Name: items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.items_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.items_id_seq OWNED BY public.items.id;
+
+
+--
 -- Name: journal_entry_line_amounts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -738,6 +783,39 @@ ALTER SEQUENCE public.number_ranges_id_seq OWNED BY public.number_ranges.id;
 
 
 --
+-- Name: office_tax_registrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.office_tax_registrations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    tax_registration_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: office_tax_registrations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.office_tax_registrations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: office_tax_registrations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.office_tax_registrations_id_seq OWNED BY public.office_tax_registrations.id;
+
+
+--
 -- Name: offices; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -782,7 +860,16 @@ CREATE TABLE public.parties (
     party_number character varying NOT NULL,
     name character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    email character varying,
+    phone character varying,
+    address_line1 character varying,
+    address_line2 character varying,
+    city character varying,
+    postal_code character varying,
+    state_code character varying,
+    country_code character varying(2) DEFAULT 'IN'::character varying NOT NULL
 );
 
 
@@ -835,6 +922,45 @@ CREATE SEQUENCE public.party_roles_id_seq
 --
 
 ALTER SEQUENCE public.party_roles_id_seq OWNED BY public.party_roles.id;
+
+
+--
+-- Name: party_tax_registrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.party_tax_registrations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    party_id bigint NOT NULL,
+    kind character varying DEFAULT 'GSTIN'::character varying NOT NULL,
+    identifier character varying NOT NULL,
+    state_code character varying,
+    valid_from date NOT NULL,
+    valid_to date,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_party_tax_registration_dates CHECK (((valid_to IS NULL) OR (valid_from IS NULL) OR (valid_to >= valid_from)))
+);
+
+
+--
+-- Name: party_tax_registrations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.party_tax_registrations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: party_tax_registrations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.party_tax_registrations_id_seq OWNED BY public.party_tax_registrations.id;
 
 
 --
@@ -1031,10 +1157,12 @@ CREATE TABLE public.tax_registrations (
     identifier character varying NOT NULL,
     jurisdiction character varying,
     state_code character varying,
-    valid_from date,
+    valid_from date NOT NULL,
     valid_to date,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    CONSTRAINT chk_tax_registration_dates CHECK (((valid_to IS NULL) OR (valid_from IS NULL) OR (valid_to >= valid_from)))
 );
 
 
@@ -1245,6 +1373,13 @@ ALTER TABLE ONLY public.invitations ALTER COLUMN id SET DEFAULT nextval('public.
 
 
 --
+-- Name: items id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.items ALTER COLUMN id SET DEFAULT nextval('public.items_id_seq'::regclass);
+
+
+--
 -- Name: journal_entry_line_amounts id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1280,6 +1415,13 @@ ALTER TABLE ONLY public.number_ranges ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
+-- Name: office_tax_registrations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.office_tax_registrations ALTER COLUMN id SET DEFAULT nextval('public.office_tax_registrations_id_seq'::regclass);
+
+
+--
 -- Name: offices id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1298,6 +1440,13 @@ ALTER TABLE ONLY public.parties ALTER COLUMN id SET DEFAULT nextval('public.part
 --
 
 ALTER TABLE ONLY public.party_roles ALTER COLUMN id SET DEFAULT nextval('public.party_roles_id_seq'::regclass);
+
+
+--
+-- Name: party_tax_registrations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.party_tax_registrations ALTER COLUMN id SET DEFAULT nextval('public.party_tax_registrations_id_seq'::regclass);
 
 
 --
@@ -1468,6 +1617,14 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: items items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.items
+    ADD CONSTRAINT items_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: journal_entry_line_amounts journal_entry_line_amounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1508,6 +1665,14 @@ ALTER TABLE ONLY public.number_ranges
 
 
 --
+-- Name: office_tax_registrations office_tax_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.office_tax_registrations
+    ADD CONSTRAINT office_tax_registrations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: offices offices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1529,6 +1694,14 @@ ALTER TABLE ONLY public.parties
 
 ALTER TABLE ONLY public.party_roles
     ADD CONSTRAINT party_roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: party_tax_registrations party_tax_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.party_tax_registrations
+    ADD CONSTRAINT party_tax_registrations_pkey PRIMARY KEY (id);
 
 
 --
@@ -1609,6 +1782,34 @@ ALTER TABLE ONLY public.user_office_roles
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_office_tax_registrations_tenant_registration; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_office_tax_registrations_tenant_registration ON public.office_tax_registrations USING btree (tenant_id, tax_registration_id);
+
+
+--
+-- Name: idx_office_tax_registrations_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_office_tax_registrations_unique ON public.office_tax_registrations USING btree (office_id, tax_registration_id);
+
+
+--
+-- Name: idx_on_tenant_id_kind_identifier_valid_from_f473959005; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_tenant_id_kind_identifier_valid_from_f473959005 ON public.tax_registrations USING btree (tenant_id, kind, identifier, valid_from);
+
+
+--
+-- Name: idx_party_tax_registrations_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_party_tax_registrations_identity ON public.party_tax_registrations USING btree (tenant_id, kind, identifier, valid_from);
 
 
 --
@@ -1864,6 +2065,20 @@ CREATE UNIQUE INDEX index_invitations_on_one_pending_email ON public.invitations
 
 
 --
+-- Name: index_items_on_tenant_id_and_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_items_on_tenant_id_and_active ON public.items USING btree (tenant_id, active);
+
+
+--
+-- Name: index_items_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_items_on_tenant_id_and_code ON public.items USING btree (tenant_id, code);
+
+
+--
 -- Name: index_jela_on_line_and_slot; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1941,6 +2156,20 @@ CREATE UNIQUE INDEX index_number_ranges_on_series_key ON public.number_ranges US
 
 
 --
+-- Name: index_office_tax_registrations_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_office_tax_registrations_on_office_id ON public.office_tax_registrations USING btree (office_id);
+
+
+--
+-- Name: index_office_tax_registrations_on_tax_registration_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_office_tax_registrations_on_tax_registration_id ON public.office_tax_registrations USING btree (tax_registration_id);
+
+
+--
 -- Name: index_offices_on_entity_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1955,6 +2184,13 @@ CREATE UNIQUE INDEX index_offices_on_tenant_id_and_code ON public.offices USING 
 
 
 --
+-- Name: index_parties_on_tenant_id_and_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_parties_on_tenant_id_and_active ON public.parties USING btree (tenant_id, active);
+
+
+--
 -- Name: index_parties_on_tenant_id_and_party_number; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1966,6 +2202,13 @@ CREATE UNIQUE INDEX index_parties_on_tenant_id_and_party_number ON public.partie
 --
 
 CREATE UNIQUE INDEX index_party_roles_on_party_id_and_role ON public.party_roles USING btree (party_id, role);
+
+
+--
+-- Name: index_party_tax_registrations_on_party_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_party_tax_registrations_on_party_id ON public.party_tax_registrations USING btree (party_id);
 
 
 --
@@ -2018,10 +2261,10 @@ CREATE INDEX index_tax_registrations_on_entity_id ON public.tax_registrations US
 
 
 --
--- Name: index_tax_registrations_on_tenant_id_and_kind_and_identifier; Type: INDEX; Schema: public; Owner: -
+-- Name: index_tax_registrations_on_tenant_id_and_active; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX index_tax_registrations_on_tenant_id_and_kind_and_identifier ON public.tax_registrations USING btree (tenant_id, kind, identifier);
+CREATE INDEX index_tax_registrations_on_tenant_id_and_active ON public.tax_registrations USING btree (tenant_id, active);
 
 
 --
@@ -2088,6 +2331,14 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 
 
 --
+-- Name: office_tax_registrations fk_rails_019bb5b0bc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.office_tax_registrations
+    ADD CONSTRAINT fk_rails_019bb5b0bc FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
 -- Name: role_permissions fk_rails_0b72cb6964; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2120,6 +2371,14 @@ ALTER TABLE ONLY public.financial_statement_assignments
 
 
 --
+-- Name: office_tax_registrations fk_rails_341ce49cc2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.office_tax_registrations
+    ADD CONSTRAINT fk_rails_341ce49cc2 FOREIGN KEY (tax_registration_id) REFERENCES public.tax_registrations(id);
+
+
+--
 -- Name: sessions fk_rails_758836b4f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2144,6 +2403,14 @@ ALTER TABLE ONLY public.memberships
 
 
 --
+-- Name: party_roles fk_rails_9fe14e5bed; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.party_roles
+    ADD CONSTRAINT fk_rails_9fe14e5bed FOREIGN KEY (party_id) REFERENCES public.parties(id);
+
+
+--
 -- Name: financial_statement_assignments fk_rails_a658674e61; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2157,6 +2424,14 @@ ALTER TABLE ONLY public.financial_statement_assignments
 
 ALTER TABLE ONLY public.memberships
     ADD CONSTRAINT fk_rails_a959f0d1fb FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
+-- Name: party_tax_registrations fk_rails_ba92ab1221; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.party_tax_registrations
+    ADD CONSTRAINT fk_rails_ba92ab1221 FOREIGN KEY (party_id) REFERENCES public.parties(id);
 
 
 --
@@ -2182,6 +2457,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731220000'),
 ('20260731100000'),
 ('20260731091000'),
 ('20260731090000'),

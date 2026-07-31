@@ -71,6 +71,14 @@
             class: navigation_class("journal_vouchers") %>
           <%= link_to "Chart of accounts", accounts_path(tenant_route_options),
             class: navigation_class("accounts") %>
+          <%= link_to "Customers & vendors", parties_path(tenant_route_options),
+            class: navigation_class("parties") %>
+          <%= link_to "Products & services", items_path(tenant_route_options),
+            class: navigation_class("items") %>
+          <% if permitted?("masters.manage") %>
+            <%= link_to "Tax setup", tax_registrations_path(tenant_route_options),
+              class: navigation_class("tax_registrations") %>
+          <% end %>
           <% if permitted?("reports.read") %>
             <%= link_to "Reports", reports_path(tenant_route_options), class: navigation_class("reports") %>
           <% end %>

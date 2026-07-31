@@ -1,0 +1,47 @@
+<% content_for :title, "Products & services · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Masters</p>
+      <h1>Products & services</h1>
+      <p>Reusable invoice lines with HSN/SAC, tax defaults, and governed account determination.</p>
+    </div>
+    <% if permitted?("masters.manage") %>
+      <%= link_to "Add product or service", new_item_path(tenant_route_options), class: "button button--primary" %>
+    <% end %>
+  </header>
+
+  <section class="panel panel--table">
+    <% if @items.any? %>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Products and services for <%= Current.tenant.name %></caption>
+          <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>HSN/SAC</th><th>GST</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <% @items.each do |item| %>
+              <tr>
+                <td><span class="account-code"><%= item.code %></span></td>
+                <td><strong><%= item.name %></strong></td>
+                <td><%= item.item_type.humanize %></td>
+                <td><%= item.hsn_sac_code %></td>
+                <td><%= number_with_precision(item.tax_rate_basis_points / 100.0, precision: 2, strip_insignificant_zeros: true) %>%</td>
+                <td><span class="<%= item.active? ? "status-badge status-badge--success" : "status-badge" %>">
+                  <%= item.active? ? "Active" : "Inactive" %></span></td>
+                <td><% if permitted?("masters.manage") %>
+                  <%= link_to "Edit", edit_item_path(item, tenant_route_options), class: "text-link" %>
+                <% end %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="empty-state">
+        <span class="empty-state__icon" aria-hidden="true">◇</span>
+        <h2>No products or services yet</h2>
+        <p>Add a service with its SAC, GST rate, and ledger accounts before invoicing.</p>
+      </div>
+    <% end %>
+  </section>
+</main>

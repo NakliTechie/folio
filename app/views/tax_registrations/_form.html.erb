@@ -1,0 +1,46 @@
+<%= form_with model: registration, url: form_url, class: "stacked-form" do |form| %>
+  <div class="form-grid form-grid--two">
+    <div class="form-group">
+      <%= form.label :kind, "Registration kind" %>
+      <%= form.select :kind, @registration_kinds.map { |kind| [kind, kind] }, {},
+        required: true, disabled: registration.persisted? && registration.referenced? %>
+    </div>
+    <div class="form-group">
+      <%= form.label :identifier, registration.kind == "GSTIN" ? "GSTIN" : "Identifier" %>
+      <%= form.text_field :identifier, required: true, maxlength: 24, autocomplete: "off",
+        disabled: registration.persisted? && registration.referenced? %>
+      <% if registration.kind == "GSTIN" %><small>Format and checksum are validated offline; portal status is not implied.</small><% end %>
+    </div>
+    <div class="form-group">
+      <%= form.label :jurisdiction, "Jurisdiction label" %>
+      <%= form.text_field :jurisdiction, placeholder: "IN-MH" %>
+    </div>
+    <div class="form-group">
+      <%= form.label :valid_from, "Valid from" %>
+      <%= form.date_field :valid_from, required: true,
+        disabled: registration.persisted? && registration.referenced? %>
+    </div>
+    <div class="form-group">
+      <%= form.label :valid_to, "Valid to" %>
+      <%= form.date_field :valid_to %>
+    </div>
+  </div>
+
+  <fieldset class="profile-fieldset">
+    <legend>Offices using this registration</legend>
+    <div class="choice-row">
+      <% @offices.each do |office| %>
+        <label class="choice-card">
+          <%= check_box_tag "tax_registration[office_ids][]", office.id,
+            @selected_office_ids.include?(office.id) %>
+          <span><strong><%= office.code %> · <%= office.name %></strong></span>
+        </label>
+      <% end %>
+    </div>
+  </fieldset>
+
+  <div class="form-actions">
+    <%= form.submit submit_label, class: "button button--primary" %>
+    <%= link_to "Cancel", tax_registrations_path(tenant_route_options), class: "button button--quiet" %>
+  </div>
+<% end %>

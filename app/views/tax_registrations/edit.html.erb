@@ -1,0 +1,25 @@
+<% content_for :title, "Edit #{@registration.kind} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to tax registrations", tax_registrations_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">Tax setup</p><h1>Edit <%= @registration.kind %></h1>
+    <p>A referenced identity and its effective start are locked; close its validity and add a successor instead.</p>
+  </header>
+  <section class="panel form-panel">
+    <%= render "form", registration: @registration,
+      form_url: tax_registration_path(@registration, tenant_route_options), submit_label: "Save registration" %>
+  </section>
+  <section class="panel lifecycle-panel">
+    <div><p class="eyebrow">Lifecycle</p><h2><%= @registration.active? ? "Available for new documents" : "Inactive" %></h2>
+      <p>Historical documents retain the registration they posted under.</p></div>
+    <% if @registration.active? %>
+      <%= button_to "Deactivate registration", deactivate_tax_registration_path(@registration, tenant_route_options),
+        method: :patch, class: "button button--danger",
+        form: { data: { turbo_confirm: "Deactivate #{@registration.identifier} for new documents?" } } %>
+    <% else %>
+      <%= button_to "Reactivate registration", reactivate_tax_registration_path(@registration, tenant_route_options),
+        method: :patch, class: "button button--secondary" %>
+    <% end %>
+  </section>
+</main>
