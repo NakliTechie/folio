@@ -134,6 +134,7 @@ CREATE TABLE public.document_allocations (
     updated_at timestamp(6) without time zone NOT NULL,
     target_reset_event_id bigint,
     settlement_reset_event_id bigint,
+    target_ledger_id bigint NOT NULL,
     CONSTRAINT chk_document_allocations_mode CHECK (((clearing_mode)::text = ANY ((ARRAY['partial'::character varying, 'residual'::character varying])::text[]))),
     CONSTRAINT chk_document_allocations_positive CHECK ((amount_minor > 0))
 );
@@ -1250,6 +1251,7 @@ CREATE TABLE public.settlement_reallocations (
     settlement_clearing_event_id bigint,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    target_ledger_id bigint NOT NULL,
     CONSTRAINT chk_settlement_reallocations_mode CHECK (((clearing_mode)::text = ANY ((ARRAY['partial'::character varying, 'residual'::character varying])::text[]))),
     CONSTRAINT chk_settlement_reallocations_positive CHECK ((amount_minor > 0))
 );
@@ -1947,7 +1949,7 @@ ALTER TABLE ONLY public.users
 -- Name: idx_document_allocations_stable_target; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_document_allocations_stable_target ON public.document_allocations USING btree (tenant_id, target_source_event_id, target_line_no);
+CREATE INDEX idx_document_allocations_stable_target ON public.document_allocations USING btree (tenant_id, target_source_event_id, target_ledger_id, target_line_no);
 
 
 --
@@ -2024,7 +2026,7 @@ CREATE UNIQUE INDEX idx_party_tax_registrations_identity ON public.party_tax_reg
 -- Name: idx_settlement_reallocations_stable_target; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_settlement_reallocations_stable_target ON public.settlement_reallocations USING btree (tenant_id, target_source_event_id, target_line_no);
+CREATE INDEX idx_settlement_reallocations_stable_target ON public.settlement_reallocations USING btree (tenant_id, target_source_event_id, target_ledger_id, target_line_no);
 
 
 --
@@ -2294,10 +2296,10 @@ CREATE INDEX index_entry_lines_on_party_id ON public.entry_lines USING btree (pa
 
 
 --
--- Name: index_entry_lines_on_source_line_key; Type: INDEX; Schema: public; Owner: -
+-- Name: index_entry_lines_on_source_ledger_line_key; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX index_entry_lines_on_source_line_key ON public.entry_lines USING btree (tenant_id, source_event_id, line_no);
+CREATE INDEX index_entry_lines_on_source_ledger_line_key ON public.entry_lines USING btree (tenant_id, source_event_id, ledger_id, line_no);
 
 
 --
@@ -2737,6 +2739,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801001000'),
 ('20260801000000'),
 ('20260731235500'),
 ('20260731235000'),
@@ -2776,4 +2779,3 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260729100000'),
 ('20260728020000'),
 ('20260727214500');
-

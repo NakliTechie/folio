@@ -171,5 +171,13 @@ class StageThreeMasterDataTest < ActiveSupport::TestCase
     assert invalid.errors[:hsn_sac_code].any?
     assert invalid.errors[:income_account_code].any?
     assert invalid.errors[:expense_account_code].any?
+
+    odd_rate = Item.new(
+      tenant_id: @org.tenant.id, code: "ODD", name: "Odd GST", item_type: "service",
+      hsn_sac_code: "998311", unit_of_measure: "OTH", tax_rate_basis_points: 501,
+      cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000"
+    )
+    refute odd_rate.valid?
+    assert_match(/split exactly/, odd_rate.errors[:tax_rate_basis_points].to_sentence)
   end
 end

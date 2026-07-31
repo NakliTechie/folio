@@ -34,6 +34,7 @@ class Item < ApplicationRecord
   validates :hsn_sac_code, format: { with: /\A(?:\d{2}|\d{4}|\d{6}|\d{8})\z/ }
   validates :tax_rate_basis_points, numericality: { only_integer: true, in: 0..4000 }
   validates :cess_rate_basis_points, numericality: { only_integer: true, in: 0..10_000 }
+  validate :gst_rate_splits_exactly
   validate :accounts_are_compatible
   validate :code_stays_immutable_after_use, on: :update
 
@@ -44,6 +45,15 @@ class Item < ApplicationRecord
   end
 
   private
+
+  # The current India posting model stores CGST and SGST/UTGST rates as whole basis
+  # points. An odd total rate cannot be represented exactly as two components, so reject
+  # it at the governed master instead of allowing drafts that fail only at posting.
+  def gst_rate_splits_exactly
+    return unless tax_rate_basis_points.is_a?(Integer) && tax_rate_basis_points.odd?
+
+    errors.add(:tax_rate_basis_points, "must split exactly into equal GST components")
+  end
 
   def accounts_are_compatible
     validate_account(:income_account_code, "income")

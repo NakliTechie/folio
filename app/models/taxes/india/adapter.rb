@@ -19,6 +19,9 @@ module Taxes
         place_state = state_code!(place_of_supply_state_code, "place_of_supply_state_code")
 
         nature = supplier_state == place_state ? :intra_state : :inter_state
+        if nature == :intra_state && rate.odd?
+          raise InvalidTaxInput, "rate_basis_points must split exactly into equal GST components"
+        end
         components = if nature == :inter_state
           { igst: tax_amount(taxable, rate) }
         else

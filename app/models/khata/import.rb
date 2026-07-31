@@ -48,6 +48,7 @@ module Khata
       with_books do |db|
         ActiveRecord::Base.transaction do
           wipe!
+          ensure_ledger
           import_accounts(db)
           import_entries_and_lines(db)
           seed_statement_mappings
@@ -70,6 +71,12 @@ module Khata
     def seed_statement_mappings
       tenant = Tenant.find_by(id: @tenant_id)
       FinancialStatements::DefaultLayout.ensure!(tenant) if tenant
+    end
+
+    def ensure_ledger
+      @ledger_id = Ledger.find_or_create_by!(tenant_id: @tenant_id, code: "PRIMARY") do |ledger|
+        ledger.name = "Primary"
+      end.id
     end
 
     def import_accounts(db)
@@ -111,7 +118,7 @@ module Khata
       EntryLine.insert_all!(
         source.map do |s|
           { tenant_id: @tenant_id, entry_id: s[:entry_id], line_no: s[:line_no],
-            account_code: s[:account_code], ledger_id: 1, entity_id: 1, office_id: 1,
+            account_code: s[:account_code], ledger_id: @ledger_id, entity_id: 1, office_id: 1,
             created_at: now, updated_at: now }
         end
       )

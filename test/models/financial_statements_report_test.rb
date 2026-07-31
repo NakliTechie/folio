@@ -39,6 +39,24 @@ class FinancialStatementsReportTest < ActiveSupport::TestCase
     assert_equal 60_000, earnings[:amount_minor]
   end
 
+  test "statutory statements exclude statistical lines and non-GL ledgers" do
+    primary = Ledger.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    statistical = Ledger.create!(
+      tenant_id: @org.tenant.id, code: "STAT", name: "Statistical", posts_to_gl: false
+    )
+    post_ledger_slice(ledger: statistical, line_class: "real", amount: 90_000)
+    post_ledger_slice(ledger: primary, line_class: "statistical", amount: 70_000)
+
+    profit = Reports.profit_and_loss(
+      @org.tenant.id, from_date: Date.new(2026, 4, 1), to_date: Date.new(2027, 3, 31)
+    )
+    balance = Reports.balance_sheet(@org.tenant.id, as_of: Date.new(2027, 3, 31))
+
+    assert_equal 0, profit[:net_income_minor]
+    assert_equal 0, balance[:assets_minor]
+    assert_equal 0, balance[:equity_liabilities_minor]
+  end
+
   test "a posted but unmapped account is called out instead of silently omitted" do
     sales = Account.find_by!(tenant_id: @org.tenant.id, code: "4000")
     FinancialStatementAssignment.where(account_id: sales.id).delete_all
@@ -137,6 +155,24 @@ class FinancialStatementsReportTest < ActiveSupport::TestCase
   end
 
   private
+
+  def post_ledger_slice(ledger:, line_class:, amount:)
+    Posting::PostEntry.post!(
+      tenant_id: @org.tenant.id, actor: "test", origin: "test",
+      document_date: Date.new(2026, 4, 5), posting_date: Date.new(2026, 4, 5),
+      entered_at: Time.utc(2026, 4, 5), fiscal_year: 2026, period_no: 1,
+      lines: [
+        { line_no: 1, account_code: "1000", ledger_id: ledger.id,
+          entity_id: 1, office_id: 1, line_class: line_class,
+          amounts: [ { slot_role: "transaction", currency: "INR",
+                       minor_unit_exponent: 2, amount_minor: amount } ] },
+        { line_no: 2, account_code: "4000", ledger_id: ledger.id,
+          entity_id: 1, office_id: 1, line_class: line_class,
+          amounts: [ { slot_role: "transaction", currency: "INR",
+                       minor_unit_exponent: 2, amount_minor: -amount } ] }
+      ]
+    )
+  end
 
   def post_journal(date:, debit:, credit:, amount:, doc_type: "JV")
     entity = Entity.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")

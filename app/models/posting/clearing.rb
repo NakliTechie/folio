@@ -13,8 +13,8 @@ require "json"
 #              FRESH baseline_date, ageing RESET.
 # Getting this wrong produces wrong aged payables, a top-three report.
 #
-# Replayability: the cleared item is targeted by its stable (source_event_id, line_no) key —
-# the ledger_event that created the line, never a projection id — and the clearing entry is
+# Replayability: the cleared item is targeted by its stable (source_event_id, ledger_id,
+# line_no) key — the ledger_event that created the line, never a projection id — and the clearing entry is
 # referenced by its ledger_event_id. Both are stable because ledger_events is never rebuilt
 # (only the projection is), so a full Posting.rebuild! reproduces the cleared state
 # deterministically, and a residual (or a reused assignment) can never be mis-targeted.
@@ -37,7 +37,7 @@ module Posting
     # Clear (part of) an open item. `mode` is honoured only for a part-payment; a full-
     # amount application is always "full". Appends an items.cleared event and projects it.
     # The item may be an original OR a residual — it is targeted by its stable
-    # (source_event_id, line_no) key, so re-clearing a residual works and an assignment
+    # (source_event_id, ledger_id, line_no) key, so re-clearing a residual works and an assignment
     # reused across invoices can never mis-target.
     def self.clear!(item:, amount_minor:, cleared_on:, mode:, clearing_entry: nil,
                     actor: "system", reason: nil)
@@ -57,8 +57,9 @@ module Posting
 
       payload = PostEntry.deep_compact(
         "clearing" => {
-          # stable target: the exact line, by its creating event + line_no (never a projection id).
-          "target" => { "sourceEventId" => item.source_event_id, "lineNo" => item.line_no },
+          # Stable target: the exact line, by its creating event + ledger + line number.
+          # `ledgerId` is additive; replay_target retains the pre-v2 two-field fallback.
+          "target" => stable_target(item),
           "assignment" => item.assignment, "accountCode" => item.account_code,
           "amountMinor" => amt, "mode" => resolved, "clearedOn" => cleared_on.to_s,
           "clearingEventId" => clearing_entry&.ledger_event_id, "reason" => reason,
@@ -78,17 +79,14 @@ module Posting
     end
 
     # Project an items.cleared event onto the read model. Targets the EXACT open item by its
-    # stable (source_event_id, line_no) key. Pure w.r.t. the payload except for resolving the
+    # stable (source_event_id, ledger_id, line_no) key. Pure w.r.t. the payload except for resolving the
     # clearing entry's CURRENT id from its stable ledger_event_id.
     def self.replay!(event)
       data = JSON.parse(event.payload)
       c = data["clearing"]
       return nil unless c.is_a?(Hash) && c["target"].is_a?(Hash)
 
-      item = EntryLine.find_by(
-        tenant_id: event.tenant_id,
-        source_event_id: c.dig("target", "sourceEventId"), line_no: c.dig("target", "lineNo")
-      )
+      item = replay_target(event.tenant_id, c.fetch("target"))
       # Defensive: only an OPEN item can be cleared; a stale/duplicate event is a no-op.
       return nil unless item&.open_item? && item.cleared_on.nil?
 
@@ -130,11 +128,8 @@ module Posting
         raise ArgumentError, "clearing was already reset" if reset_event_for(clearing_event)
 
         clearing = JSON.parse(clearing_event.payload).fetch("clearing")
-        item = EntryLine.lock.find_by!(
-          tenant_id: clearing_event.tenant_id,
-          source_event_id: clearing.dig("target", "sourceEventId"),
-          line_no: clearing.dig("target", "lineNo")
-        )
+        item = replay_target(clearing_event.tenant_id, clearing.fetch("target"), lock: true)
+        raise ActiveRecord::RecordNotFound, "clearing target is unavailable" unless item
         validate_resettable!(item, clearing_event, clearing)
         payload = {
           "clearingReset" => {
@@ -165,11 +160,7 @@ module Posting
       return unless original
 
       clearing = JSON.parse(original.payload).fetch("clearing")
-      item = EntryLine.find_by(
-        tenant_id: event.tenant_id,
-        source_event_id: clearing.dig("target", "sourceEventId"),
-        line_no: clearing.dig("target", "lineNo")
-      )
+      item = replay_target(event.tenant_id, clearing.fetch("target"))
       return unless item
 
       amount = Integer(clearing.fetch("amountMinor"))
@@ -192,6 +183,28 @@ module Posting
       end
     end
 
+    def self.stable_target(item)
+      {
+        "sourceEventId" => item.source_event_id,
+        "ledgerId" => item.ledger_id,
+        "lineNo" => item.line_no
+      }
+    end
+
+    # Events written before ledgerId was added retain their two-field lookup. That is
+    # deterministic for the v1 single-ledger corpus; all new events name the ledger so an
+    # extension-ledger line with the same event/line number cannot be selected instead.
+    def self.replay_target(tenant_id, target, lock: false)
+      scope = EntryLine.where(
+        tenant_id: tenant_id,
+        source_event_id: target["sourceEventId"],
+        line_no: target["lineNo"]
+      )
+      scope = scope.where(ledger_id: target["ledgerId"]) if target.key?("ledgerId")
+      scope = scope.lock if lock
+      scope.order(:id).first
+    end
+
     def self.validate_resettable!(item, clearing_event, clearing)
       amount = Integer(clearing.fetch("amountMinor"))
       raise ArgumentError, "clearing projection no longer contains the applied amount" if item.cleared_amount_minor < amount
@@ -211,7 +224,7 @@ module Posting
     end
 
     # The new open item that a residual clearing opens, with a fresh baseline (ageing reset).
-    # source_event_id = the clearing event, so the residual has its own stable (event, line_no)
+    # source_event_id = the clearing event, so the residual has its own stable (event, ledger, line_no)
     # key and can itself be cleared later.
     def self.open_residual!(item:, remaining:, sign:, txn:, baseline:, source_event_id:, host_entry_id:)
       next_no = EntryLine.where(entry_id: host_entry_id, ledger_id: item.ledger_id).maximum(:line_no).to_i + 1

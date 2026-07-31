@@ -1,6 +1,12 @@
 module ApplicationHelper
   def money_amount(amount_minor, currency: Current.tenant&.functional_currency || "INR")
-    "#{currency} #{number_with_precision(amount_minor.to_i / 100.0, precision: 2, delimiter: ",")}"
+    currency_code = currency.to_s.upcase
+    exponent = CurrencyProfile.exponent_for!(currency_code)
+    minor = Integer(amount_minor || 0)
+    whole, fraction = minor.abs.divmod(10**exponent)
+    digits = number_with_delimiter(whole)
+    digits = "#{digits}.#{fraction.to_s.rjust(exponent, '0')}" if exponent.positive?
+    "#{currency_code} #{minor.negative? ? '-' : ''}#{digits}"
   end
 
   def basis_points_percentage(basis_points)

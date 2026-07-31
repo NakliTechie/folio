@@ -108,6 +108,60 @@ class Posting::ClearingTest < ActiveSupport::TestCase
     assert_equal 40_000, Posting::Clearing.open_amount(residual)
   end
 
+  test "new clearing events qualify same-numbered lines by ledger" do
+    entry = Posting::PostEntry.post!(
+      tenant_id: TENANT, entity_id: 1, office_id: 1, actor: "u:1", origin: "folio",
+      document_date: APR2, posting_date: APR2, entered_at: APR2.to_time,
+      fiscal_year: 2025, period_no: 1,
+      lines: [
+        open_line(ledger_id: 1, amount_minor: 100_000),
+        balancing_line(ledger_id: 1, amount_minor: -100_000),
+        open_line(ledger_id: 2, amount_minor: 25_000),
+        balancing_line(ledger_id: 2, amount_minor: -25_000)
+      ]
+    )
+    target = entry.entry_lines.find_by!(ledger_id: 2, line_no: 1)
+
+    event = Posting::Clearing.clear!(
+      item: target, amount_minor: 25_000, cleared_on: JUN1, mode: :full
+    )
+
+    assert_equal 2, JSON.parse(event.payload).dig("clearing", "target", "ledgerId")
+    Posting.rebuild!(TENANT)
+    ledger_one = EntryLine.find_by!(
+      tenant_id: TENANT, source_event_id: entry.ledger_event_id, ledger_id: 1, line_no: 1
+    )
+    ledger_two = EntryLine.find_by!(
+      tenant_id: TENANT, source_event_id: entry.ledger_event_id, ledger_id: 2, line_no: 1
+    )
+    assert_equal 100_000, Posting::Clearing.open_amount(ledger_one)
+    assert_equal 0, Posting::Clearing.open_amount(ledger_two)
+  end
+
+  test "legacy clearing events without ledgerId still replay for the v1 single ledger" do
+    entry = post_invoice(assignment: "LEGACY")
+    item = entry.entry_lines.find_by!(assignment: "LEGACY")
+    payload = {
+      "clearing" => {
+        "target" => { "sourceEventId" => item.source_event_id, "lineNo" => item.line_no },
+        "amountMinor" => 100_000, "mode" => "full", "clearedOn" => JUN1.iso8601
+      }
+    }
+    event = LedgerEvent.append!(
+      tenant_id: TENANT, actor: "legacy", action: "items.cleared", origin: "test",
+      ts: JUN1.iso8601, payload_str: Folio::KhataHash.canonical_payload(payload)
+    )
+    Posting::Clearing.replay!(event)
+    assert_equal 0, Posting::Clearing.open_amount(item.reload)
+
+    Posting.rebuild!(TENANT)
+
+    rebuilt = EntryLine.find_by!(
+      tenant_id: TENANT, source_event_id: entry.ledger_event_id, ledger_id: 1, line_no: 1
+    )
+    assert_equal 0, Posting::Clearing.open_amount(rebuilt)
+  end
+
   test "over-clearing is rejected" do
     post_invoice(assignment: "INV-X")
     assert_raises(ArgumentError) do
@@ -176,5 +230,31 @@ class Posting::ClearingTest < ActiveSupport::TestCase
     assert_equal 0, Posting::Clearing.open_amount(residual.reload), "the residual is cleared"
     assert_equal 100_000, Posting::Clearing.open_amount(b_line.reload),
       "the reused-assignment invoice B is untouched"
+  end
+
+  private
+
+  def open_line(ledger_id:, amount_minor:)
+    {
+      line_no: 1, account_code: "100100", ledger_id: ledger_id,
+      entity_id: 1, office_id: 1, party_id: 55, party_role: "customer",
+      open_item: true, item_class: "normal", assignment: "L#{ledger_id}",
+      baseline_date: APR2, due_date: Date.new(2025, 5, 2),
+      amounts: [
+        { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2,
+          amount_minor: amount_minor }
+      ]
+    }
+  end
+
+  def balancing_line(ledger_id:, amount_minor:)
+    {
+      line_no: 2, account_code: "400000", ledger_id: ledger_id,
+      entity_id: 1, office_id: 1,
+      amounts: [
+        { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2,
+          amount_minor: amount_minor }
+      ]
+    }
   end
 end

@@ -9,6 +9,12 @@ module FinancialStatements
         ON statement_accounts.tenant_id = entry_lines.tenant_id
        AND statement_accounts.code = entry_lines.account_code
     SQL
+    LEDGER_JOIN = <<~SQL.squish.freeze
+      JOIN ledgers statement_ledgers
+        ON statement_ledgers.id = entry_lines.ledger_id
+       AND statement_ledgers.tenant_id = entry_lines.tenant_id
+       AND statement_ledgers.posts_to_gl = TRUE
+    SQL
     ASSIGNMENT_JOIN = <<~SQL.squish.freeze
       JOIN financial_statement_assignments statement_assignments
         ON statement_assignments.account_id = statement_accounts.id
@@ -72,7 +78,8 @@ module FinancialStatements
     private
 
     def base_scope(from_date:)
-      scope = EntryLine.where(tenant_id: @tenant_id).joins(:entry, :amounts)
+      scope = EntryLine.where(tenant_id: @tenant_id, line_class: "real")
+        .joins(:entry, :amounts).joins(LEDGER_JOIN)
         .where(journal_entry_line_amounts: { slot_role: "transaction" })
         .where("entries.posting_date <= ?", @to_date)
       scope = scope.where("entries.posting_date >= ?", from_date) if from_date

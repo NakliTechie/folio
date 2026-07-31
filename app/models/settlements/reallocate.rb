@@ -25,7 +25,8 @@ module Settlements
         reallocation = SettlementReallocation.create!(
           tenant_id: document.tenant_id, document_allocation: allocation,
           target_entry_line_id: target.id, target_source_event_id: target.source_event_id,
-          target_line_no: target.line_no, amount_minor: allocation.amount_minor,
+          target_ledger_id: target.ledger_id, target_line_no: target.line_no,
+          amount_minor: allocation.amount_minor,
           clearing_mode: clearing_mode, target_snapshot: Settlements::BuildDraft.target_snapshot(target)
         )
         entry = settlement_line.entry

@@ -18,6 +18,8 @@ module Reports
   module_function
 
   ACCOUNT_JOIN = "JOIN accounts a ON a.tenant_id = entry_lines.tenant_id AND a.code = entry_lines.account_code"
+  LEDGER_JOIN = "JOIN ledgers report_ledgers ON report_ledgers.tenant_id = entry_lines.tenant_id " \
+                "AND report_ledgers.id = entry_lines.ledger_id"
   AMOUNT_JOIN  = "JOIN journal_entry_line_amounts jla ON jla.entry_line_id = entry_lines.id " \
                  "AND jla.slot_role = 'transaction'"
   DEBIT  = "SUM(CASE WHEN jla.amount_minor > 0 THEN jla.amount_minor ELSE 0 END)"
@@ -74,6 +76,8 @@ module Reports
   end
 
   def base(tenant_id)
-    EntryLine.where(tenant_id: tenant_id).joins(ACCOUNT_JOIN).joins(AMOUNT_JOIN)
+    EntryLine.where(tenant_id: tenant_id, line_class: "real")
+      .joins(ACCOUNT_JOIN).joins(LEDGER_JOIN).joins(AMOUNT_JOIN)
+      .where("report_ledgers.posts_to_gl = TRUE")
   end
 end

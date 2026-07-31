@@ -115,6 +115,15 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     assert_equal "draft", invoice.reload.state
   end
 
+  test "an unsupported odd component rate is rejected before draft persistence" do
+    @service.update_column(:tax_rate_basis_points, 501)
+
+    assert_no_difference "Document.count" do
+      error = assert_raises(Taxes::InvalidTaxInput) { build_invoice }
+      assert_match(/split exactly/, error.message)
+    end
+  end
+
   test "posting rejects altered invoice identity and price snapshots" do
     invoice = build_invoice
     invoice.update_column(:party_snapshot, invoice.party_snapshot.merge("id" => @customer.id + 1))

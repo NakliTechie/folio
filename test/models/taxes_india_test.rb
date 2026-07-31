@@ -26,6 +26,19 @@ class TaxesIndiaTest < ActiveSupport::TestCase
     assert_equal 1800, result.total_tax_minor
   end
 
+  test "an odd intra-state rate is rejected before a draft can freeze it" do
+    error = assert_raises(Taxes::InvalidTaxInput) do
+      Taxes::India::Adapter.calculate(
+        taxable_minor: 100_00,
+        rate_basis_points: 501,
+        supplier_state_code: "27",
+        place_of_supply_state_code: "27"
+      )
+    end
+
+    assert_match(/split exactly/, error.message)
+  end
+
   test "ordinary inter-state supply uses IGST and preserves cess separately" do
     result = Taxes::India::Adapter.calculate(
       taxable_minor: 100_00,

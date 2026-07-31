@@ -35,6 +35,7 @@ module Api
       rescue_from Settlements::InvalidSettlement do |e| render_error(e.message, :unprocessable_entity) end
       rescue_from Settlements::InvalidReset do |e| render_error(e.message, :unprocessable_entity) end
       rescue_from BusinessProfiles::InvalidProfile do |e| render_error(e.message, :unprocessable_entity) end
+      rescue_from Taxes::InvalidTaxInput do |e| render_error(e.message, :unprocessable_entity) end
       rescue_from CurrencyProfile::UnsupportedCurrency do |e| render_error(e.message, :unprocessable_entity) end
       # A JSON API stays JSON even on a CSRF failure (Rails' default is a static HTML page).
       rescue_from ActionController::InvalidAuthenticityToken do

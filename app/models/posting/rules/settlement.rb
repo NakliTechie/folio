@@ -7,11 +7,11 @@ module Posting
 
       class << self
         def lock_dependencies!(document)
-          pairs = document.document_allocations.order(:target_source_event_id, :target_line_no)
-            .pluck(:target_source_event_id, :target_line_no)
+          pairs = document.document_allocations.order(:target_source_event_id, :target_ledger_id, :target_line_no)
+            .pluck(:target_source_event_id, :target_ledger_id, :target_line_no)
           return if pairs.empty?
 
-          predicate = pairs.map { "(source_event_id = ? AND line_no = ?)" }.join(" OR ")
+          predicate = pairs.map { "(source_event_id = ? AND ledger_id = ? AND line_no = ?)" }.join(" OR ")
           EntryLine.where(tenant_id: document.tenant_id)
             .where(predicate, *pairs.flatten).order(:id).lock.load
         end
@@ -121,7 +121,9 @@ module Posting
         end
 
         def validate_allocations!(document, allocations, config)
-          if allocations.map { |allocation| [ allocation.target_source_event_id, allocation.target_line_no ] }.uniq.size !=
+          if allocations.map do |allocation|
+               [ allocation.target_source_event_id, allocation.target_ledger_id, allocation.target_line_no ]
+             end.uniq.size !=
              allocations.size
             raise Documents::InvalidDocument, "each open item may be allocated only once"
           end
@@ -138,6 +140,7 @@ module Posting
             unless Settlements::BuildDraft.eligible_target?(target, config) &&
                    target.party_id == document.party_id &&
                    snapshot["sourceEventId"].to_i == target.source_event_id &&
+                   snapshot["ledgerId"].to_i == target.ledger_id &&
                    snapshot["lineNo"].to_i == target.line_no &&
                    snapshot["accountCode"] == target.account_code &&
                    snapshot["partyId"].to_i == target.party_id &&

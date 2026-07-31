@@ -61,6 +61,7 @@ module Settlements
             tenant_id: tenant.id, line_no: index + 1,
             target_entry_line_id: target.id,
             target_source_event_id: target.source_event_id,
+            target_ledger_id: target.ledger_id,
             target_line_no: target.line_no,
             amount_minor: allocation.fetch(:amount_minor),
             clearing_mode: allocation.fetch(:clearing_mode),
@@ -135,6 +136,7 @@ module Settlements
       {
         "entryLineId" => target.id,
         "sourceEventId" => target.source_event_id,
+        "ledgerId" => target.ledger_id,
         "lineNo" => target.line_no,
         "accountCode" => target.account_code,
         "partyId" => target.party_id,
