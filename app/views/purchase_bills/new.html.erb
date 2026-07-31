@@ -1,0 +1,124 @@
+<% content_for :title, "New purchase bill · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= link_to "← Back to purchase bills", purchase_bills_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">New B2B bill</p>
+    <h1>Record a purchase bill</h1>
+    <p>Enter the supplier invoice once. Folio freezes its vendor, buyer, classification, and input-GST basis before posting.</p>
+  </header>
+
+  <% unless @company_profile_complete && @parties.any? && @buyer_registrations.any? && @items.any? %>
+    <section class="panel">
+      <h2>Finish purchase setup</h2>
+      <p>A purchase bill needs complete company details, an active buyer GSTIN, a vendor with an in-force GSTIN, and an active product or service.</p>
+      <div class="action-row">
+        <%= link_to "Company details", edit_business_profile_path(tenant_route_options), class: "button button--secondary" if permitted?("masters.manage") %>
+        <%= link_to "Tax setup", tax_registrations_path(tenant_route_options), class: "button button--secondary" if permitted?("masters.manage") %>
+        <%= link_to "Vendors", parties_path(tenant_route_options), class: "button button--secondary" %>
+        <%= link_to "Products & services", items_path(tenant_route_options), class: "button button--secondary" %>
+      </div>
+    </section>
+  <% end %>
+
+  <%= form_with scope: :purchase_bill, url: purchase_bills_path(tenant_route_options), class: "stacked-form" do |form| %>
+    <section class="panel form-panel">
+      <div class="form-grid form-grid--two">
+        <div class="form-group">
+          <%= form.label :party_id, "Vendor" %>
+          <%= form.select :party_id,
+            @parties.map { |party| ["#{party.party_number} · #{party.name}", party.id] },
+            { prompt: "Choose a registered vendor", selected: params.dig(:purchase_bill, :party_id) },
+            required: true %>
+        </div>
+        <div class="form-group">
+          <%= form.label :tax_registration_id, "Buyer GSTIN" %>
+          <%= form.select :tax_registration_id,
+            @buyer_registrations.map { |registration| ["#{registration.identifier} · State #{registration.state_code}", registration.id] },
+            { prompt: "Choose the claiming GSTIN", selected: params.dig(:purchase_bill, :tax_registration_id) },
+            required: true %>
+        </div>
+        <div class="form-group">
+          <%= form.label :external_reference, "Supplier invoice number" %>
+          <%= form.text_field :external_reference, maxlength: 100, required: true,
+            value: params.dig(:purchase_bill, :external_reference), placeholder: "For example, V-INV-1042" %>
+          <small>Must be unique for this vendor; Folio also allocates its own PB number.</small>
+        </div>
+        <div class="form-group">
+          <%= form.label :document_date, "Supplier invoice date" %>
+          <%= form.date_field :document_date, required: true,
+            value: params.dig(:purchase_bill, :document_date).presence || Date.current.iso8601 %>
+        </div>
+        <div class="form-group">
+          <%= form.label :due_date, "Due date" %>
+          <%= form.date_field :due_date, required: true,
+            value: params.dig(:purchase_bill, :due_date).presence || (Date.current + 30).iso8601 %>
+        </div>
+        <div class="form-group">
+          <%= form.label :place_of_supply_state_code, "Place of supply (state code)" %>
+          <%= form.select :place_of_supply_state_code,
+            Taxes::India::StateCodes::CODES.map { |code| ["#{code} · #{Taxes::India::StateCodes.name_for(code)}", code] },
+            { prompt: "Choose the place of supply", selected: params.dig(:purchase_bill, :place_of_supply_state_code) },
+            required: true %>
+          <small>This determines whether the supplier charged IGST or CGST plus SGST/UTGST.</small>
+        </div>
+      </div>
+      <div class="form-group">
+        <%= form.label :narration, "Bill note (optional)" %>
+        <%= form.text_field :narration, maxlength: 200,
+          value: params.dig(:purchase_bill, :narration), placeholder: "For example, July professional fees" %>
+      </div>
+    </section>
+
+    <section class="panel panel--table">
+      <div class="panel__header invoice-lines-heading">
+        <div><p class="eyebrow">Line items</p><h2>Expenses and prices</h2></div>
+        <small>Use up to five lines in this first purchase-bill flow.</small>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Purchase bill line input</caption>
+          <thead><tr><th scope="col">Product or service</th><th scope="col">Quantity</th>
+            <th scope="col">Unit price (<%= Current.tenant.functional_currency %>)</th><th scope="col">GST</th></tr></thead>
+          <tbody>
+            <% 5.times do |index| %>
+              <% submitted = @submitted_lines[index] || {} %>
+              <tr>
+                <td>
+                  <%= label_tag "purchase_bill_line_#{index}_item", "Product or service for line #{index + 1}", class: "sr-only" %>
+                  <%= select_tag "purchase_bill[lines][][item_id]",
+                    options_for_select(@items.map { |item| ["#{item.code} · #{item.name}", item.id] }, submitted[:item_id] || submitted["item_id"]),
+                    include_blank: index.zero? ? "Choose a product or service" : "Optional line",
+                    id: "purchase_bill_line_#{index}_item", required: index.zero? %>
+                </td>
+                <td>
+                  <%= label_tag "purchase_bill_line_#{index}_quantity", "Quantity for line #{index + 1}", class: "sr-only" %>
+                  <%= number_field_tag "purchase_bill[lines][][quantity]", submitted[:quantity] || submitted["quantity"],
+                    id: "purchase_bill_line_#{index}_quantity", min: "0.000001", step: "0.000001",
+                    inputmode: "decimal", placeholder: "1" %>
+                </td>
+                <td>
+                  <%= label_tag "purchase_bill_line_#{index}_unit_price", "Unit price for line #{index + 1}", class: "sr-only" %>
+                  <%= number_field_tag "purchase_bill[lines][][unit_price]", submitted[:unit_price] || submitted["unit_price"],
+                    id: "purchase_bill_line_#{index}_unit_price", min: "0", step: "0.01",
+                    inputmode: "decimal", placeholder: "0.00" %>
+                </td>
+                <td><small>Select a line to use its governed HSN/SAC and tax rate.</small></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="balance-note">
+      <span aria-hidden="true">₹</span>
+      <p><strong>Nothing posts yet.</strong> Folio resolves the supplier GST treatment, freezes every master snapshot, and shows the exact accounting preview first.</p>
+    </div>
+    <div class="form-actions">
+      <%= form.submit "Review bill", class: "button button--primary",
+        disabled: !@company_profile_complete || @parties.empty? || @buyer_registrations.empty? || @items.empty? %>
+      <%= link_to "Cancel", purchase_bills_path(tenant_route_options), class: "button button--quiet" %>
+    </div>
+  <% end %>
+</main>

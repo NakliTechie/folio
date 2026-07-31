@@ -50,6 +50,12 @@ Rails.application.routes.draw do
       post :post
     end
   end
+  resources :purchase_bills, path: "purchase-bills", only: %i[index show new create] do
+    member do
+      post :post
+      post :reverse
+    end
+  end
   get "reports/profit-and-loss", to: "reports#profit_and_loss", as: :profit_and_loss_report
   get "reports/balance-sheet", to: "reports#balance_sheet", as: :balance_sheet_report
   resource :reports, only: :show, controller: :reports
@@ -82,6 +88,12 @@ Rails.application.routes.draw do
       end
       resources :credit_notes, only: %i[index show create] do
         post :post, on: :member
+      end
+      resources :purchase_bills, only: %i[index show create] do
+        member do
+          post :post
+          post :reverse
+        end
       end
     end
   end

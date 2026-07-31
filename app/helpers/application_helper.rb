@@ -44,7 +44,9 @@ module ApplicationHelper
   end
 
   def browser_document_path(document)
-    if document.doc_type == "CN"
+    if document.doc_type == "PB"
+      purchase_bill_path(document, tenant_route_options)
+    elsif document.doc_type == "CN"
       credit_note_path(document, tenant_route_options)
     elsif document.doc_type == "SI"
       sales_invoice_path(document, tenant_route_options)

@@ -1,0 +1,51 @@
+<% content_for :title, "Purchase bills · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Purchases</p>
+      <h1>Purchase bills</h1>
+      <p>Record registered-vendor bills with frozen input GST, then post them to payables and the ledger.</p>
+    </div>
+    <% if permitted?("bills.create") %>
+      <%= link_to "New purchase bill", new_purchase_bill_path(tenant_route_options),
+        class: "button button--primary" %>
+    <% end %>
+  </header>
+
+  <% if @documents.any? %>
+    <section class="panel panel--table">
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Purchase bills for <%= Current.tenant.name %></caption>
+          <thead><tr><th scope="col">Folio bill</th><th scope="col">Supplier invoice</th>
+            <th scope="col">Date</th><th scope="col">Vendor</th><th scope="col">Total</th>
+            <th scope="col">State</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+          <tbody>
+            <% @documents.each do |document| %>
+              <tr>
+                <td><strong><%= document.document_number || "Draft ##{document.id}" %></strong></td>
+                <td><%= document.external_reference.presence || "—" %></td>
+                <td><%= document.document_date.to_fs(:long) %></td>
+                <td><%= document.party_snapshot&.fetch("name", nil) || document.party&.name || "—" %></td>
+                <td class="money"><%= money_amount(document.total_minor, currency: document.currency) %></td>
+                <td><span class="<%= status_class(document.state) %>"><%= document.state.humanize %></span></td>
+                <td><%= link_to "Open", purchase_bill_path(document, tenant_route_options), class: "text-link" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">↙</span>
+      <h2>No purchase bills yet</h2>
+      <p>Add a buyer GSTIN, a registered vendor, and a product or service before recording your first bill.</p>
+      <% if permitted?("bills.create") %>
+        <%= link_to "Record your first bill", new_purchase_bill_path(tenant_route_options),
+          class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% end %>
+</main>

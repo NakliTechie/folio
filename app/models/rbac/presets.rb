@@ -7,9 +7,9 @@ module Rbac
       "owner"      => { name: "Owner/Admin", caps: %w[*] },
       "accountant" => { name: "Accountant",
                         caps: %w[documents.post documents.reverse documents.simulate accounts.manage
-                                 masters.manage reports.read invoices.create payments.create] },
+                                 masters.manage reports.read invoices.create bills.create payments.create] },
       "operator"   => { name: "Operator",
-                        caps: %w[invoices.create payments.create documents.simulate reports.read] },
+                        caps: %w[invoices.create bills.create payments.create documents.simulate reports.read] },
       "ca_auditor" => { name: "CA/Auditor",
                         caps: %w[documents.post documents.reverse documents.simulate reports.read period.lock] },
       "viewer"     => { name: "Viewer", caps: %w[reports.read] }

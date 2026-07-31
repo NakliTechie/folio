@@ -10,7 +10,7 @@ class OnboardingTest < ActiveSupport::TestCase
     assert_equal "acme-consulting", r.tenant.slug
     assert_includes r.user.tenants, r.tenant
     assert_equal "owner", r.user.user_office_roles.first.role_template.code
-    assert_equal 9, Account.where(tenant_id: r.tenant.id).count
+    assert_equal 10, Account.where(tenant_id: r.tenant.id).count
     assert Account.where(tenant_id: r.tenant.id).exists?(code: "1000")
     assert DocumentType.where(tenant_id: r.tenant.id).exists?(code: "JV")
     entity = Entity.find_by!(tenant_id: r.tenant.id, code: "PRIMARY")

@@ -205,6 +205,77 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_text "SI/26-27/00001"
   end
 
+  test "service business records and reverses a governed purchase bill" do
+    org = Onboarding::SignUp.call(
+      email: "purchase-walkthrough@folio.invalid", password: PASSWORD, org_name: "Purchase Walkthrough"
+    )
+    entity = Entity.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office = Office.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office.update!(
+      address_line1: "1 Ledger Lane", city: "Mumbai", postal_code: "400001",
+      state_code: "27", country_code: "IN"
+    )
+    TaxRegistrations::Manage.create!(
+      tenant: org.tenant, entity: entity,
+      attributes: {
+        kind: "GSTIN", identifier: "27AAPFU0939F1ZV", jurisdiction: "IN-MH",
+        valid_from: Date.new(2026, 4, 1)
+      },
+      office_ids: [ office.id ], actor: org.user
+    )
+    Parties::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        party_number: "V-001", name: "Acme Vendor", state_code: "29", country_code: "IN",
+        address_line1: "2 Supplier Road", city: "Bengaluru", postal_code: "560001"
+      },
+      roles: [ "vendor" ],
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "29AAAAA0300L1Z8", valid_from: Date.new(2026, 4, 1)
+      },
+      actor: org.user
+    )
+    Items::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        code: "LEGAL", name: "Legal services", item_type: "service",
+        hsn_sac_code: "998211", unit_of_measure: "OTH", tax_rate_basis_points: 1800,
+        cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000"
+      },
+      actor: org.user
+    )
+
+    visit new_session_path
+    fill_in "Email", with: org.user.email_address
+    fill_in "Password", with: PASSWORD
+    click_button "Sign in"
+    click_link "Purchases"
+    click_link "New purchase bill"
+    select "V-001 · Acme Vendor", from: "Vendor"
+    select "27AAPFU0939F1ZV · State 27", from: "Buyer GSTIN"
+    fill_in "Supplier invoice number", with: "V-INV-1042"
+    set_date_field "Supplier invoice date", "2026-07-31"
+    set_date_field "Due date", "2026-08-30"
+    select "27 · Maharashtra", from: "Place of supply (state code)"
+    select "LEGAL · Legal services", from: "Product or service for line 1"
+    fill_in "Quantity for line 1", with: "2"
+    fill_in "Unit price for line 1", with: "50.00"
+    click_button "Review bill"
+
+    assert_selector "h2", text: "Input GST calculated and ready to post"
+    assert_text "IGST input credit"
+    assert_text "INR 118.00"
+    click_button "Post bill"
+
+    assert_selector "h1", text: "PB/26-27/00001"
+    assert_selector "[role=status]", text: /posted.*Payables.*input GST/i
+    accept_confirm("Reverse this unsettled bill with a compensating entry?") do
+      click_button "Reverse bill"
+    end
+    assert_selector "[role=status]", text: /reversed.*open payable cleared/i
+    assert_selector ".status-badge--danger", text: "Reversed"
+  end
+
   test "every RBAC preset can enter and leave its authenticated landing" do
     org = Onboarding::SignUp.call(
       email: "role-owner@folio.invalid", password: PASSWORD, org_name: "Role Walkthrough"

@@ -6,6 +6,7 @@ module Onboarding
   module Seeds
     COA = [
       [ "1000", "Cash", "asset" ], [ "1010", "Bank", "asset" ], [ "1200", "Sundry Debtors", "asset" ],
+      [ "1210", "GST Input Credit", "asset" ],
       [ "2000", "Sundry Creditors", "liability" ], [ "2100", "GST Payable", "liability" ],
       [ "3000", "Capital", "equity" ],
       [ "4000", "Sales", "income" ], [ "5000", "Purchases", "expense" ], [ "5100", "Expenses", "expense" ]
@@ -32,6 +33,9 @@ module Onboarding
       end
       DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "CN") do |d|
         d.label = "Credit Note"; d.posting_rule = "credit_note"; d.number_prefix = "CN/"
+      end
+      DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "PB") do |d|
+        d.label = "Purchase Bill"; d.posting_rule = "purchase_bill"; d.number_prefix = "PB/"
       end
     end
 

@@ -72,6 +72,8 @@
             class: navigation_class("journal_vouchers") %>
           <%= link_to "Sales invoices", sales_invoices_path(tenant_route_options),
             class: navigation_class("sales_invoices") %>
+          <%= link_to "Purchases", purchase_bills_path(tenant_route_options),
+            class: navigation_class("purchase_bills") %>
           <%= link_to "Chart of accounts", accounts_path(tenant_route_options),
             class: navigation_class("accounts") %>
           <%= link_to "Customers & vendors", parties_path(tenant_route_options),
