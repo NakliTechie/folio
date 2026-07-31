@@ -1,0 +1,86 @@
+<% content_for :title, "Tax invoice #{@document.document_number || "draft"} · #{Current.tenant.name} · Folio" %>
+<% seller = @document.tax_registration_snapshot %>
+<% customer = @document.party_snapshot %>
+
+<main id="main-content" class="page-shell invoice-print-shell">
+  <div class="action-row print-actions">
+    <%= link_to "← Back to invoice", sales_invoice_path(@document, tenant_route_options), class: "button button--quiet" %>
+    <button type="button" class="button button--primary" data-print-page>Print / save PDF</button>
+  </div>
+
+  <article class="invoice-document" aria-label="Tax invoice <%= @document.document_number %>">
+    <header class="invoice-document__header">
+      <div>
+        <p class="eyebrow">Tax invoice</p>
+        <h1><%= seller.fetch("legalName") %></h1>
+        <address>
+          <%= seller.fetch("addressLine1") %><br>
+          <% if seller["addressLine2"].present? %><%= seller["addressLine2"] %><br><% end %>
+          <%= seller.fetch("city") %>, <%= Taxes::India::StateCodes.name_for(seller.fetch("stateCode")) %>
+          <%= seller.fetch("postalCode") %><br>
+          GSTIN: <strong><%= seller.fetch("identifier") %></strong>
+        </address>
+      </div>
+      <dl class="invoice-document__identity">
+        <div><dt>Invoice number</dt><dd><strong><%= @document.document_number || "DRAFT" %></strong></dd></div>
+        <div><dt>Invoice date</dt><dd><%= @document.document_date.to_fs(:long) %></dd></div>
+        <div><dt>Due date</dt><dd><%= @document.due_date.to_fs(:long) %></dd></div>
+        <div><dt>Reverse charge</dt><dd>No</dd></div>
+      </dl>
+    </header>
+
+    <section class="invoice-document__parties">
+      <div>
+        <h2>Bill to</h2>
+        <strong><%= customer.fetch("name") %></strong>
+        <address>
+          <% if customer["addressLine1"].present? %><%= customer["addressLine1"] %><br><% end %>
+          <% if customer["addressLine2"].present? %><%= customer["addressLine2"] %><br><% end %>
+          <% if customer["city"].present? %><%= customer["city"] %><% end %>
+          <% if customer["postalCode"].present? %> <%= customer["postalCode"] %><% end %><br>
+          GSTIN: <strong><%= customer.fetch("gstin") %></strong>
+        </address>
+      </div>
+      <dl>
+        <div><dt>Place of supply</dt><dd><%= Taxes::India::StateCodes.name_for(@document.place_of_supply_state_code) %> (<%= @document.place_of_supply_state_code %>)</dd></div>
+        <div><dt>Supply</dt><dd><%= seller.fetch("stateCode") == @document.place_of_supply_state_code ? "Intra-state" : "Inter-state" %></dd></div>
+        <div><dt>Customer reference</dt><dd><%= @document.external_reference.presence || "—" %></dd></div>
+      </dl>
+    </section>
+
+    <div class="table-wrap">
+      <table class="invoice-document__lines">
+        <caption class="sr-only">Tax invoice line items</caption>
+        <thead><tr><th scope="col">Description</th><th scope="col">SAC</th><th scope="col">Qty</th>
+          <th scope="col">Rate</th><th scope="col">Taxable value</th><th scope="col">GST</th></tr></thead>
+        <tbody>
+          <% @document.document_lines.each do |line| %>
+            <tr>
+              <td><strong><%= line.item_snapshot.fetch("name") %></strong></td>
+              <td><%= line.hsn_sac_code %></td>
+              <td><%= line.quantity.to_s("F") %> <%= line.item_snapshot.fetch("unitOfMeasure") %></td>
+              <td class="money"><%= money_amount(line.unit_price_minor, currency: @document.currency) %></td>
+              <td class="money"><%= money_amount(line.taxable_minor, currency: @document.currency) %></td>
+              <td><%= basis_points_percentage(line.tax_rate_basis_points) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+
+    <section class="invoice-document__totals">
+      <dl>
+        <div><dt>Taxable value</dt><dd><%= money_amount(@document.subtotal_minor, currency: @document.currency) %></dd></div>
+        <% @document.tax_breakdown.sort.each do |component, amount| %>
+          <div><dt><%= component.upcase %></dt><dd><%= money_amount(amount, currency: @document.currency) %></dd></div>
+        <% end %>
+        <div class="invoice-document__grand-total"><dt>Total</dt><dd><%= money_amount(@document.total_minor, currency: @document.currency) %></dd></div>
+      </dl>
+    </section>
+
+    <footer class="invoice-document__footer">
+      <div><strong>Notes</strong><p><%= @document.narration.presence || "Thank you for your business." %></p></div>
+      <div class="invoice-document__signature"><span>For <%= seller.fetch("legalName") %></span><strong>Authorised signatory</strong></div>
+    </footer>
+  </article>
+</main>

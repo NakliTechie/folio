@@ -7,10 +7,13 @@
       <h1>Sales invoices</h1>
       <p>Create B2B service invoices with a frozen GST preview, then post them to receivables and the ledger.</p>
     </div>
-    <% if permitted?("invoices.create") %>
-      <%= link_to "New sales invoice", new_sales_invoice_path(tenant_route_options),
-        class: "button button--primary" %>
-    <% end %>
+    <div class="action-row">
+      <%= link_to "Credit notes", credit_notes_path(tenant_route_options), class: "button button--secondary" %>
+      <% if permitted?("invoices.create") %>
+        <%= link_to "New sales invoice", new_sales_invoice_path(tenant_route_options),
+          class: "button button--primary" %>
+      <% end %>
+    </div>
   </header>
 
   <% if @documents.any? %>

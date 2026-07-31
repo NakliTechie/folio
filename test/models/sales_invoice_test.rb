@@ -13,6 +13,10 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     )
     @entity = Entity.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
     @office = Office.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    @office.update!(
+      address_line1: "1 Ledger Lane", city: "Mumbai", postal_code: "400001",
+      state_code: "27", country_code: "IN"
+    )
     @seller_registration = TaxRegistrations::Manage.create!(
       tenant: @org.tenant,
       entity: @entity,
@@ -26,7 +30,8 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     @customer = Parties::Manage.create!(
       tenant: @org.tenant,
       attributes: {
-        party_number: "C-001", name: "Acme Customer", state_code: "27", country_code: "IN"
+        party_number: "C-001", name: "Acme Customer", state_code: "27", country_code: "IN",
+        address_line1: "2 Customer Road", city: "Mumbai", postal_code: "400002"
       },
       roles: [ "customer" ],
       tax_registration_attributes: {
@@ -60,7 +65,9 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     assert_equal 4, simulation[:lines].size
 
     entry = Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
-    assert_equal "SI/1", invoice.reload.document_number
+    assert_equal "SI/26-27/00001", invoice.reload.document_number
+    assert_operator invoice.document_number.length, :<=, 16
+    assert_equal "Sales Invoice Model", invoice.tax_registration_snapshot.fetch("legalName")
     assert_equal [ "1200", "4000", "2100", "2100" ], entry.entry_lines.order(:line_no).pluck(:account_code)
 
     receivable = entry.entry_lines.find_by!(account_code: "1200")
@@ -161,6 +168,16 @@ class SalesInvoiceTest < ActiveSupport::TestCase
       )
     end
     assert_match(/India\/INR/, error.message)
+  end
+
+  test "an invoice cannot be issued before company legal address setup is complete" do
+    @office.update_columns(address_line1: nil, city: nil, postal_code: nil, state_code: nil, country_code: nil)
+
+    error = assert_raises(SalesInvoices::InvalidInvoice) { build_invoice }
+    assert_match(/complete India company details/, error.message)
+    assert_no_difference "Document.count" do
+      assert_raises(SalesInvoices::InvalidInvoice) { build_invoice }
+    end
   end
 
   test "a posted invoice reverses from snapshots after its masters are deactivated" do

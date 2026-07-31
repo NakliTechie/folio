@@ -7,8 +7,12 @@
       <h1>Tax registrations</h1>
       <p>Effective-dated registrations are linked to legal entities and the offices that use them.</p>
     </div>
-    <%= link_to "Add registration", new_tax_registration_path(tenant_route_options),
-      class: "button button--primary" %>
+    <div class="action-row">
+      <%= link_to "Company details", edit_business_profile_path(tenant_route_options),
+        class: "button button--secondary" %>
+      <%= link_to "Add registration", new_tax_registration_path(tenant_route_options),
+        class: "button button--primary" %>
+    </div>
   </header>
 
   <section class="panel panel--table">

@@ -23,6 +23,10 @@ module Posting
                  document.tax_registration_snapshot["id"].to_i == document.tax_registration_id
             raise Documents::InvalidDocument, "sales invoice master snapshots do not match their identities"
           end
+          seller_fields = %w[legalName addressLine1 city postalCode stateCode countryCode]
+          if seller_fields.any? { |field| document.tax_registration_snapshot[field].blank? }
+            raise Documents::InvalidDocument, "sales invoice seller snapshot is incomplete"
+          end
 
           validate_lines!(document, lines)
         end

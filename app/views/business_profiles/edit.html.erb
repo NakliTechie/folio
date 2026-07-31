@@ -1,0 +1,71 @@
+<% content_for :title, "Company details · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow">Company setup</p>
+    <h1>Legal and invoice details</h1>
+    <p>These details are frozen into each new statutory document. Changing them never rewrites posted history.</p>
+  </header>
+
+  <section class="panel form-panel">
+    <%= form_with scope: :business_profile, url: business_profile_path(tenant_route_options),
+      method: :patch, class: "stacked-form" do |form| %>
+      <fieldset class="profile-fieldset">
+        <legend>Legal entity</legend>
+        <div class="form-group">
+          <%= label_tag "business_profile_entity_legal_name", "Legal business name" %>
+          <%= text_field_tag "business_profile[entity][legal_name]", @entity.legal_name,
+            id: "business_profile_entity_legal_name", required: true, maxlength: 200 %>
+        </div>
+      </fieldset>
+
+      <fieldset class="profile-fieldset">
+        <legend>Issuing office and legal address</legend>
+        <div class="form-grid form-grid--two">
+          <div class="form-group">
+            <%= label_tag "business_profile_office_name", "Office name" %>
+            <%= text_field_tag "business_profile[office][name]", @office.name,
+              id: "business_profile_office_name", required: true, maxlength: 120 %>
+          </div>
+          <div class="form-group">
+            <%= label_tag "business_profile_office_address_line1", "Address line 1" %>
+            <%= text_field_tag "business_profile[office][address_line1]", @office.address_line1,
+              id: "business_profile_office_address_line1", required: true, maxlength: 200 %>
+          </div>
+          <div class="form-group">
+            <%= label_tag "business_profile_office_address_line2", "Address line 2 (optional)" %>
+            <%= text_field_tag "business_profile[office][address_line2]", @office.address_line2,
+              id: "business_profile_office_address_line2", maxlength: 200 %>
+          </div>
+          <div class="form-group">
+            <%= label_tag "business_profile_office_city", "City" %>
+            <%= text_field_tag "business_profile[office][city]", @office.city,
+              id: "business_profile_office_city", required: true, maxlength: 100 %>
+          </div>
+          <div class="form-group">
+            <%= label_tag "business_profile_office_postal_code", "PIN code" %>
+            <%= text_field_tag "business_profile[office][postal_code]", @office.postal_code,
+              id: "business_profile_office_postal_code", required: true,
+              inputmode: "numeric", pattern: "[0-9]{6}", maxlength: 6 %>
+          </div>
+          <div class="form-group">
+            <%= label_tag "business_profile_office_state_code", "GST state code" %>
+            <%= select_tag "business_profile[office][state_code]",
+              options_for_select(Taxes::India::StateCodes::CODES, @office.state_code),
+              include_blank: "Choose the state code", id: "business_profile_office_state_code", required: true %>
+          </div>
+          <div class="form-group">
+            <%= label_tag "business_profile_office_country_code", "Country code" %>
+            <%= text_field_tag "business_profile[office][country_code]", @office.country_code || "IN",
+              id: "business_profile_office_country_code", required: true, maxlength: 2 %>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="form-actions">
+        <%= form.submit "Save company details", class: "button button--primary" %>
+        <%= link_to "Cancel", root_path(tenant_route_options), class: "button button--quiet" %>
+      </div>
+    <% end %>
+  </section>
+</main>

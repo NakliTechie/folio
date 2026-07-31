@@ -110,7 +110,8 @@ class WalkthroughTest < ApplicationSystemTestCase
     Parties::Manage.create!(
       tenant: org.tenant,
       attributes: {
-        party_number: "C-001", name: "Acme Customer", state_code: "29", country_code: "IN"
+        party_number: "C-001", name: "Acme Customer", state_code: "29", country_code: "IN",
+        address_line1: "2 Customer Road", city: "Bengaluru", postal_code: "560001"
       },
       roles: [ "customer" ],
       tax_registration_attributes: {
@@ -132,12 +133,22 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Email", with: org.user.email_address
     fill_in "Password", with: PASSWORD
     click_button "Sign in"
+    click_link "Tax setup"
+    click_link "Company details"
+    fill_in "Address line 1", with: "1 Ledger Lane"
+    fill_in "City", with: "Mumbai"
+    fill_in "PIN code", with: "400001"
+    select "27", from: "GST state code"
+    fill_in "Country code", with: "IN"
+    click_button "Save company details"
+    assert_selector "[role=status]", text: /Company details updated/
+
     click_link "Sales invoices"
     click_link "New sales invoice"
     select "C-001 · Acme Customer", from: "Customer"
     select "27AAPFU0939F1ZV · State 27", from: "Seller GSTIN"
-    fill_in "Invoice date", with: "2026-07-31"
-    fill_in "Due date", with: "2026-08-30"
+    set_date_field "Invoice date", "2026-07-31"
+    set_date_field "Due date", "2026-08-30"
     select "29 · GST state/UT", from: "Place of supply (state code)"
     select "CONSULT · Consulting services", from: "Product or service for line 1"
     fill_in "Quantity for line 1", with: "2"
@@ -149,14 +160,49 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_text "INR 118.00"
     click_button "Post invoice"
 
-    assert_selector "h1", text: "SI/1"
+    assert_selector "h1", text: "SI/26-27/00001"
     assert_selector "[role=status]", text: /posted.*receivables.*GST/i
+    click_link "Print invoice"
+    assert_selector ".invoice-document", text: /TAX INVOICE/
+    assert_selector ".invoice-document", text: /SI\/26-27\/00001/
+    assert_text "Karnataka (29)"
+    click_link "← Back to invoice"
     accept_confirm("Reverse this unsettled invoice with a compensating entry?") do
       click_button "Reverse invoice"
     end
 
     assert_selector "[role=status]", text: /reversed.*open receivable cleared/i
     assert_selector ".status-badge--danger", text: "Reversed"
+  end
+
+  test "owner issues and prints a partial credit note" do
+    setup = create_posted_invoice("credit-walkthrough@folio.invalid", "Credit Walkthrough")
+
+    visit new_session_path
+    fill_in "Email", with: setup.fetch(:org).user.email_address
+    fill_in "Password", with: PASSWORD
+    click_button "Sign in"
+    assert_text "Signed in as #{setup.fetch(:org).user.email_address}.", wait: 5
+    visit sales_invoice_path(
+      setup.fetch(:invoice), tenant_id: setup.fetch(:org).tenant.id
+    )
+    click_link "Issue credit note"
+    set_date_field "Credit-note date", "2026-08-01"
+    select "Service deficiency", from: "Reason"
+    fill_in "Explanation", with: "Service-level adjustment"
+    fill_in "Quantity to credit for line 1", with: "0.5"
+    click_button "Review credit note"
+
+    assert_selector "h2", text: "Balanced and ready to post"
+    assert_text "INR 29.50"
+    click_button "Post credit note"
+
+    assert_selector "h1", text: "CN/26-27/00001"
+    assert_selector "[role=status]", text: /posted.*applied.*receivable/i
+    click_link "Print credit note"
+    assert_selector ".invoice-document", text: /CREDIT NOTE/
+    assert_selector ".invoice-document", text: /CN\/26-27\/00001/
+    assert_text "SI/26-27/00001"
   end
 
   test "every RBAC preset can enter and leave its authenticated landing" do
@@ -187,5 +233,63 @@ class WalkthroughTest < ApplicationSystemTestCase
       click_button "Sign out"
       assert_current_path new_session_path
     end
+  end
+
+  private
+
+  def set_date_field(label, value)
+    field = find_field(label)
+    page.execute_script(<<~JS, field.native, value)
+      arguments[0].value = arguments[1];
+      arguments[0].dispatchEvent(new Event("input", { bubbles: true }));
+      arguments[0].dispatchEvent(new Event("change", { bubbles: true }));
+    JS
+  end
+
+  def create_posted_invoice(email, org_name)
+    org = Onboarding::SignUp.call(email: email, password: PASSWORD, org_name: org_name)
+    entity = Entity.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office = Office.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office.update!(
+      address_line1: "1 Ledger Lane", city: "Mumbai", postal_code: "400001",
+      state_code: "27", country_code: "IN"
+    )
+    registration = TaxRegistrations::Manage.create!(
+      tenant: org.tenant, entity: entity,
+      attributes: {
+        kind: "GSTIN", identifier: "27AAPFU0939F1ZV", jurisdiction: "IN-MH",
+        valid_from: Date.new(2026, 4, 1)
+      },
+      office_ids: [ office.id ], actor: org.user
+    )
+    customer = Parties::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        party_number: "C-001", name: "Acme Customer", state_code: "27", country_code: "IN",
+        address_line1: "2 Customer Road", city: "Mumbai", postal_code: "400002"
+      },
+      roles: [ "customer" ],
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "27AAPFU0939F1ZV", valid_from: Date.new(2026, 4, 1)
+      },
+      actor: org.user
+    )
+    service = Items::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        code: "CONSULT", name: "Consulting services", item_type: "service",
+        hsn_sac_code: "998311", unit_of_measure: "OTH", tax_rate_basis_points: 1800,
+        cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000"
+      },
+      actor: org.user
+    )
+    invoice = SalesInvoices::BuildDraft.call(
+      tenant: org.tenant, party_id: customer.id, tax_registration_id: registration.id,
+      document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
+      place_of_supply_state_code: "27",
+      lines: [ { item_id: service.id, quantity: "2", unit_price: "50.00" } ]
+    )
+    Documents::Post.call(invoice, actor: "u:#{org.user.id}")
+    { org: org, invoice: invoice }
   end
 end

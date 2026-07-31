@@ -8,11 +8,12 @@
     <p>Choose the statutory identities and service lines. Folio calculates GST and freezes the complete preview before posting.</p>
   </header>
 
-  <% if @parties.empty? || @seller_registrations.empty? || @items.empty? %>
+  <% unless @company_profile_complete && @parties.any? && @seller_registrations.any? && @items.any? %>
     <section class="panel">
       <h2>Finish invoice setup</h2>
-      <p>A sales invoice needs an active seller GSTIN, a customer with an in-force GSTIN, and an active product or service.</p>
+      <p>A sales invoice needs complete company details, an active seller GSTIN, a customer with an in-force GSTIN, and an active product or service.</p>
       <div class="action-row">
+        <%= link_to "Company details", edit_business_profile_path(tenant_route_options), class: "button button--secondary" if permitted?("masters.manage") %>
         <%= link_to "Tax setup", tax_registrations_path(tenant_route_options), class: "button button--secondary" if permitted?("masters.manage") %>
         <%= link_to "Customers", parties_path(tenant_route_options), class: "button button--secondary" %>
         <%= link_to "Products & services", items_path(tenant_route_options), class: "button button--secondary" %>
@@ -115,7 +116,7 @@
     </div>
     <div class="form-actions">
       <%= form.submit "Review invoice", class: "button button--primary",
-        disabled: @parties.empty? || @seller_registrations.empty? || @items.empty? %>
+        disabled: !@company_profile_complete || @parties.empty? || @seller_registrations.empty? || @items.empty? %>
       <%= link_to "Cancel", sales_invoices_path(tenant_route_options), class: "button button--quiet" %>
     </div>
   <% end %>

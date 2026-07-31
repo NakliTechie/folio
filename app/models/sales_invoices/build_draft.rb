@@ -17,10 +17,16 @@ module SalesInvoices
         raise InvalidInvoice, "sales invoices currently require an India/INR accounting profile"
       end
       office = Office.find_by!(tenant_id: tenant.id, entity_id: entity.id, code: "PRIMARY")
+      unless office.statutory_address_complete? && office.country_code == "IN"
+        raise InvalidInvoice, "complete India company details are required before issuing an invoice"
+      end
       type = DocumentType.where(tenant_id: tenant.id, active: true).find_by!(code: "SI", posting_rule: "sales_invoice")
       party = Party.active.includes(:party_roles, :party_tax_registrations)
         .where(tenant_id: tenant.id).find(party_id)
       raise InvalidInvoice, "the selected party is not a customer" unless party.role_codes.include?("customer")
+      unless party.statutory_address_complete? && party.country_code == "IN"
+        raise InvalidInvoice, "the selected customer needs a complete India billing address"
+      end
 
       party_registration = party.party_tax_registrations.in_force_on(invoice_date)
         .where(kind: "GSTIN").order(valid_from: :desc).first
@@ -33,6 +39,9 @@ module SalesInvoices
           office_tax_registrations: { office_id: office.id, tenant_id: tenant.id }
         ).first
       raise InvalidInvoice, "the selected seller GSTIN is unavailable for this office and date" unless seller_registration
+      unless seller_registration.state_code == office.state_code
+        raise InvalidInvoice, "the issuing office state must match the selected seller GSTIN"
+      end
 
       place_state = place_of_supply_state_code.to_s
       unless Taxes::India::StateCodes.valid?(place_state)
@@ -63,7 +72,7 @@ module SalesInvoices
           currency: currency, minor_unit_exponent: exponent,
           subtotal_minor: subtotal, tax_minor: tax_total, total_minor: subtotal + tax_total,
           party_snapshot: party_snapshot(party, party_registration),
-          tax_registration_snapshot: registration_snapshot(seller_registration),
+          tax_registration_snapshot: registration_snapshot(seller_registration, entity, office),
           tax_breakdown: breakdown
         )
         normalized_lines.each_with_index do |line, index|
@@ -138,13 +147,17 @@ module SalesInvoices
       }.compact
     end
 
-    def registration_snapshot(registration)
+    def registration_snapshot(registration, entity, office)
       {
         "id" => registration.id, "kind" => registration.kind,
         "identifier" => registration.identifier, "jurisdiction" => registration.jurisdiction,
         "stateCode" => registration.state_code,
         "validFrom" => registration.valid_from.iso8601,
-        "validTo" => registration.valid_to&.iso8601
+        "validTo" => registration.valid_to&.iso8601,
+        "legalName" => entity.legal_name, "officeName" => office.name,
+        "addressLine1" => office.address_line1, "addressLine2" => office.address_line2,
+        "city" => office.city, "postalCode" => office.postal_code,
+        "countryCode" => office.country_code
       }.compact
     end
 

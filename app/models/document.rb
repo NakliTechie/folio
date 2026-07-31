@@ -10,10 +10,13 @@ class Document < ApplicationRecord
   belongs_to :document_type
   belongs_to :party, optional: true
   belongs_to :tax_registration, optional: true
+  belongs_to :credit_note_for, class_name: "Document", foreign_key: :credit_note_for_document_id, optional: true
   belongs_to :reverses, class_name: "Document", foreign_key: :reverses_document_id, optional: true
   belongs_to :reversed_by, class_name: "Document", foreign_key: :reversed_by_document_id, optional: true
   has_many :document_lines, -> { order(:line_no) }, dependent: :destroy
   has_many :entries, dependent: :nullify
+  has_many :credit_notes, class_name: "Document", foreign_key: :credit_note_for_document_id,
+    dependent: :restrict_with_exception
 
   validates :tenant_id, :entity_id, :office_id, :doc_type, :fiscal_year,
     :document_date, :posting_date, presence: true
@@ -23,7 +26,19 @@ class Document < ApplicationRecord
 
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
-  def reversible? = posted? && reversed_by_document_id.nil?
+  def reversible?
+    posted? && reversed_by_document_id.nil? && doc_type != "CN" &&
+      !credit_notes.where(state: %w[posted reversed]).exists?
+  end
+
+  def statutory_printable?
+    return false unless %w[SI CN].include?(doc_type)
+
+    seller_fields = %w[legalName addressLine1 city postalCode stateCode countryCode identifier]
+    customer_fields = %w[name addressLine1 city postalCode stateCode countryCode gstin]
+    seller_fields.all? { |field| tax_registration_snapshot&.fetch(field, nil).present? } &&
+      customer_fields.all? { |field| party_snapshot&.fetch(field, nil).present? }
+  end
 
   private
 

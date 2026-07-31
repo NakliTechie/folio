@@ -139,6 +139,7 @@ CREATE TABLE public.document_lines (
     cess_rate_basis_points integer,
     tax_components jsonb,
     item_snapshot jsonb,
+    credited_document_line_id bigint,
     CONSTRAINT chk_document_lines_cess_rate CHECK (((cess_rate_basis_points IS NULL) OR ((cess_rate_basis_points >= 0) AND (cess_rate_basis_points <= 10000)))),
     CONSTRAINT chk_document_lines_invoice_amounts CHECK (((item_id IS NULL) OR ((quantity > (0)::numeric) AND (unit_price_minor >= 0) AND (taxable_minor > 0)))),
     CONSTRAINT chk_document_lines_tax_rate CHECK (((tax_rate_basis_points IS NULL) OR ((tax_rate_basis_points >= 0) AND (tax_rate_basis_points <= 4000))))
@@ -237,6 +238,9 @@ CREATE TABLE public.documents (
     party_snapshot jsonb,
     tax_registration_snapshot jsonb,
     tax_breakdown jsonb,
+    credit_note_for_document_id bigint,
+    reason_code character varying,
+    CONSTRAINT chk_documents_credit_note_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying])::text[])))),
     CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
     CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
     CONSTRAINT chk_documents_supply_type CHECK (((supply_type IS NULL) OR ((supply_type)::text = ANY ((ARRAY['B2B'::character varying, 'B2C'::character varying])::text[]))))
@@ -859,7 +863,13 @@ CREATE TABLE public.offices (
     name character varying NOT NULL,
     default_place_of_supply character varying,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    address_line1 character varying,
+    address_line2 character varying,
+    city character varying,
+    postal_code character varying,
+    state_code character varying,
+    country_code character varying(2)
 );
 
 
@@ -1817,6 +1827,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_documents_credit_note_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_documents_credit_note_source ON public.documents USING btree (tenant_id, credit_note_for_document_id, state);
+
+
+--
 -- Name: idx_documents_tenant_party_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1954,6 +1971,13 @@ CREATE UNIQUE INDEX index_accounts_on_tenant_id_and_code ON public.accounts USIN
 --
 
 CREATE UNIQUE INDEX index_dimensions_on_tenant_id_and_code ON public.dimensions USING btree (tenant_id, code);
+
+
+--
+-- Name: index_document_lines_on_credited_document_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_document_lines_on_credited_document_line_id ON public.document_lines USING btree (credited_document_line_id);
 
 
 --
@@ -2517,6 +2541,8 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731232000'),
+('20260731231000'),
 ('20260731230000'),
 ('20260731220000'),
 ('20260731100000'),

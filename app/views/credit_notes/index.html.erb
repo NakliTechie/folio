@@ -1,0 +1,42 @@
+<% content_for :title, "Credit notes · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Sales adjustments</p>
+      <h1>Credit notes</h1>
+      <p>Reduce invoice value and output GST with a linked, numbered document that applies to receivables.</p>
+    </div>
+    <%= link_to "Sales invoices", sales_invoices_path(tenant_route_options), class: "button button--secondary" %>
+  </header>
+
+  <% if @documents.any? %>
+    <section class="panel panel--table">
+      <div class="table-wrap"><table>
+        <caption class="sr-only">Credit notes for <%= Current.tenant.name %></caption>
+        <thead><tr><th scope="col">Credit note</th><th scope="col">Date</th><th scope="col">Invoice</th>
+          <th scope="col">Reason</th><th scope="col">Total</th><th scope="col">State</th><th scope="col"></th></tr></thead>
+        <tbody>
+          <% @documents.each do |note| %>
+            <tr>
+              <td><strong><%= note.document_number || "Draft ##{note.id}" %></strong></td>
+              <td><%= note.document_date.to_fs(:long) %></td>
+              <td><%= note.credit_note_for.document_number %></td>
+              <td><%= credit_note_reason_label(note.reason_code) %></td>
+              <td class="money"><%= money_amount(note.total_minor, currency: note.currency) %></td>
+              <td><span class="<%= status_class(note.state) %>"><%= note.state.humanize %></span></td>
+              <td><%= link_to "Open", credit_note_path(note, tenant_route_options), class: "text-link" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table></div>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">↙</span>
+      <h2>No credit notes yet</h2>
+      <p>Open a posted sales invoice to issue a partial or full credit note.</p>
+      <%= link_to "Open sales invoices", sales_invoices_path(tenant_route_options), class: "button button--primary" %>
+    </section>
+  <% end %>
+</main>

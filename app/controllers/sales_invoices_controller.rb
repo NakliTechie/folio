@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 class SalesInvoicesController < BrowserController
-  before_action -> { require_capability!("reports.read") }, only: %i[index show]
+  before_action -> { require_capability!("reports.read") }, only: %i[index show print]
   before_action -> { require_capability!("invoices.create") }, only: %i[new create post]
   before_action -> { require_capability!("documents.reverse") }, only: :reverse
-  before_action :set_document, only: %i[show post reverse]
+  before_action :set_document, only: %i[show print post reverse]
 
   def index
     @documents = document_scope.includes(:party).order(document_date: :desc, created_at: :desc)
@@ -12,6 +12,13 @@ class SalesInvoicesController < BrowserController
 
   def show
     @simulation = Documents::Simulate.call(@document) if @document.postable?
+  end
+
+  def print
+    return if @document.statutory_printable?
+
+    redirect_to sales_invoice_path(@document, tenant_route_options),
+      alert: "Print is unavailable because this historical draft predates complete statutory snapshots."
   end
 
   def new
@@ -88,6 +95,7 @@ class SalesInvoicesController < BrowserController
         office_tax_registrations: { office_id: primary_office.id, tenant_id: Current.tenant.id }
       ).distinct.order(:identifier)
     @items = Item.active.where(tenant_id: Current.tenant.id).order(:name)
+    @company_profile_complete = primary_office.statutory_address_complete?
     @submitted_lines = Array(params.dig(:sales_invoice, :lines))
   end
 

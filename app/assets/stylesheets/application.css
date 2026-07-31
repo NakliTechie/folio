@@ -1653,6 +1653,132 @@ fieldset {
   }
 }
 
+.invoice-print-shell {
+  width: min(100%, 980px);
+  margin-inline: auto;
+}
+
+.print-actions {
+  justify-content: flex-end;
+}
+
+.invoice-document {
+  padding: clamp(1.5rem, 4vw, 3rem);
+  border: 1px solid var(--line);
+  background: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.invoice-document address {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.invoice-document__header,
+.invoice-document__parties,
+.invoice-document__footer {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: 1.35fr 0.65fr;
+}
+
+.invoice-document__header,
+.invoice-document__parties {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.invoice-document__parties,
+.invoice-document__footer {
+  padding-top: 1.5rem;
+}
+
+.invoice-document__identity,
+.invoice-document__parties dl,
+.invoice-document__totals dl {
+  margin: 0;
+}
+
+.invoice-document__identity div,
+.invoice-document__parties dl div,
+.invoice-document__totals dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.3rem;
+}
+
+.invoice-document dt {
+  color: var(--muted);
+}
+
+.invoice-document dd {
+  margin: 0;
+  text-align: right;
+}
+
+.invoice-document__lines {
+  margin-block: 1.5rem;
+}
+
+.invoice-document__totals {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.invoice-document__totals dl {
+  width: min(100%, 360px);
+}
+
+.invoice-document__grand-total {
+  margin-top: 0.5rem;
+  border-top: 2px solid var(--ink);
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.invoice-document__footer {
+  margin-top: 2rem;
+  border-top: 1px solid var(--line);
+}
+
+.invoice-document__signature {
+  display: flex;
+  min-height: 100px;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  text-align: right;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  .app-header,
+  .site-footer,
+  .notification-stack,
+  .print-actions {
+    display: none !important;
+  }
+
+  .page-frame,
+  .page-shell,
+  .invoice-print-shell {
+    width: 100%;
+    padding: 0;
+    margin: 0;
+  }
+
+  .invoice-document {
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

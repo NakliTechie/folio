@@ -11,6 +11,10 @@ class SalesInvoiceFlowsTest < ActionDispatch::IntegrationTest
     )
     @entity = Entity.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
     @office = Office.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    @office.update!(
+      address_line1: "1 Ledger Lane", city: "Mumbai", postal_code: "400001",
+      state_code: "27", country_code: "IN"
+    )
     @seller_registration = TaxRegistrations::Manage.create!(
       tenant: @org.tenant,
       entity: @entity,
@@ -24,7 +28,8 @@ class SalesInvoiceFlowsTest < ActionDispatch::IntegrationTest
     @customer = Parties::Manage.create!(
       tenant: @org.tenant,
       attributes: {
-        party_number: "C-001", name: "Acme Customer", state_code: "29", country_code: "IN"
+        party_number: "C-001", name: "Acme Customer", state_code: "29", country_code: "IN",
+        address_line1: "2 Customer Road", city: "Bengaluru", postal_code: "560001"
       },
       roles: [ "customer" ],
       tax_registration_attributes: {
@@ -69,12 +74,20 @@ class SalesInvoiceFlowsTest < ActionDispatch::IntegrationTest
     post post_sales_invoice_path(invoice)
     assert_redirected_to sales_invoice_path(invoice, tenant_id: @org.tenant.id)
     assert_equal "posted", invoice.reload.state
-    assert_equal "SI/1", invoice.document_number
+    assert_equal "SI/26-27/00001", invoice.document_number
     assert_equal 4, Entry.find(invoice.posted_entry_id).entry_lines.count
+
+    get print_sales_invoice_path(invoice)
+    assert_response :success
+    assert_select ".invoice-document", text: /Sales Invoice Flow/
+    assert_select ".invoice-document", text: /SI\/26-27\/00001/
+    assert_select ".invoice-document", text: /Maharashtra/
+    assert_select ".invoice-document", text: /CGST/
+    assert_select "button[data-print-page]", text: "Print / save PDF"
 
     get sales_invoices_path
     assert_response :success
-    assert_select "td", text: /SI\/1/
+    assert_select "td", text: /SI\/26-27\/00001/
     assert_select "td", text: /Acme Customer/
   end
 
@@ -134,7 +147,7 @@ class SalesInvoiceFlowsTest < ActionDispatch::IntegrationTest
     assert_response :success
     posted = JSON.parse(response.body).fetch("sales_invoice")
     assert_equal "posted", posted.fetch("state")
-    assert_equal "SI/1", posted.fetch("document_number")
+    assert_equal "SI/26-27/00001", posted.fetch("document_number")
 
     other = Onboarding::SignUp.call(
       email: "sales-invoice-other@folio.invalid",

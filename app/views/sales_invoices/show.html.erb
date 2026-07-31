@@ -63,6 +63,14 @@
     </section>
   <% else %>
     <div class="action-row">
+      <% if @document.statutory_printable? %>
+        <%= link_to "Print invoice", print_sales_invoice_path(@document, tenant_route_options),
+          class: "button button--secondary" %>
+      <% end %>
+      <% if @document.state == "posted" && permitted?("invoices.create") %>
+        <%= link_to "Issue credit note", new_credit_note_path(tenant_route_options.merge(invoice_id: @document.id)),
+          class: "button button--secondary" %>
+      <% end %>
       <%= link_to "View reports", reports_path(tenant_route_options), class: "button button--primary" if permitted?("reports.read") %>
       <% if @document.reversible? && permitted?("documents.reverse") %>
         <%= button_to "Reverse invoice", reverse_sales_invoice_path(@document, tenant_route_options),

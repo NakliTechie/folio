@@ -15,11 +15,17 @@ class Party < ApplicationRecord
   validates :party_number, uniqueness: { scope: :tenant_id }
   validates :country_code, length: { is: 2 }
   validates :email, format: { with: URI::MailTo::EMAIL_REGEXP }, allow_blank: true
+  validates :postal_code, format: { with: /\A\d{6}\z/ }, allow_blank: true,
+    if: -> { country_code == "IN" }
   validate :party_number_stays_immutable_after_use, on: :update
 
   scope :active, -> { where(active: true) }
 
   def role_codes = party_roles.order(:role).pluck(:role)
+
+  def statutory_address_complete?
+    [ address_line1, city, postal_code, state_code, country_code ].all?(&:present?)
+  end
 
   def referenced?
     EntryLine.where(tenant_id: tenant_id, party_id: id).exists?

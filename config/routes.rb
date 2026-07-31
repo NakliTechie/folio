@@ -24,6 +24,7 @@ Rails.application.routes.draw do
       patch :reactivate
     end
   end
+  resource :business_profile, path: "company-details", only: %i[edit update]
   resources :journal_vouchers, path: "transactions", only: %i[index show new create] do
     member do
       post :post
@@ -38,8 +39,15 @@ Rails.application.routes.draw do
   end
   resources :sales_invoices, path: "sales-invoices", only: %i[index show new create] do
     member do
+      get :print
       post :post
       post :reverse
+    end
+  end
+  resources :credit_notes, path: "credit-notes", only: %i[index show new create] do
+    member do
+      get :print
+      post :post
     end
   end
   get "reports/profit-and-loss", to: "reports#profit_and_loss", as: :profit_and_loss_report
@@ -53,6 +61,7 @@ Rails.application.routes.draw do
       resources :parties, only: %i[index show create update]
       resources :items, only: %i[index show create update]
       resources :tax_registrations, only: %i[index show create update]
+      resource :business_profile, only: %i[show update]
       resources :document_types, only: :index
       get "reports/trial_balance", to: "reports#trial_balance"
       get "reports/account_type_totals", to: "reports#account_type_totals"
@@ -70,6 +79,9 @@ Rails.application.routes.draw do
           post :post
           post :reverse
         end
+      end
+      resources :credit_notes, only: %i[index show create] do
+        post :post, on: :member
       end
     end
   end

@@ -1,0 +1,74 @@
+<% content_for :title, "Credit note #{@document.document_number || "draft"} · #{Current.tenant.name} · Folio" %>
+<% seller = @document.tax_registration_snapshot %>
+<% customer = @document.party_snapshot %>
+<% invoice = @document.credit_note_for %>
+
+<main id="main-content" class="page-shell invoice-print-shell">
+  <div class="action-row print-actions">
+    <%= link_to "← Back to credit note", credit_note_path(@document, tenant_route_options), class: "button button--quiet" %>
+    <button type="button" class="button button--primary" data-print-page>Print / save PDF</button>
+  </div>
+
+  <article class="invoice-document" aria-label="Credit note <%= @document.document_number %>">
+    <header class="invoice-document__header">
+      <div>
+        <p class="eyebrow">Credit note</p>
+        <h1><%= seller.fetch("legalName") %></h1>
+        <address>
+          <%= seller.fetch("addressLine1") %><br>
+          <% if seller["addressLine2"].present? %><%= seller["addressLine2"] %><br><% end %>
+          <%= seller.fetch("city") %>, <%= Taxes::India::StateCodes.name_for(seller.fetch("stateCode")) %>
+          <%= seller.fetch("postalCode") %><br>
+          GSTIN: <strong><%= seller.fetch("identifier") %></strong>
+        </address>
+      </div>
+      <dl class="invoice-document__identity">
+        <div><dt>Credit-note number</dt><dd><strong><%= @document.document_number || "DRAFT" %></strong></dd></div>
+        <div><dt>Date</dt><dd><%= @document.document_date.to_fs(:long) %></dd></div>
+        <div><dt>Invoice number</dt><dd><%= invoice.document_number %></dd></div>
+        <div><dt>Invoice date</dt><dd><%= invoice.document_date.to_fs(:long) %></dd></div>
+      </dl>
+    </header>
+
+    <section class="invoice-document__parties">
+      <div><h2>Issued to</h2><strong><%= customer.fetch("name") %></strong>
+        <address>
+          <% if customer["addressLine1"].present? %><%= customer["addressLine1"] %><br><% end %>
+          <% if customer["city"].present? %><%= customer["city"] %> <% end %><%= customer["postalCode"] %><br>
+          GSTIN: <strong><%= customer.fetch("gstin") %></strong>
+        </address>
+      </div>
+      <dl>
+        <div><dt>Reason</dt><dd><%= credit_note_reason_label(@document.reason_code) %></dd></div>
+        <div><dt>Place of supply</dt><dd><%= Taxes::India::StateCodes.name_for(@document.place_of_supply_state_code) %> (<%= @document.place_of_supply_state_code %>)</dd></div>
+      </dl>
+    </section>
+
+    <div class="table-wrap"><table class="invoice-document__lines">
+      <caption class="sr-only">Credit-note line items</caption>
+      <thead><tr><th scope="col">Description</th><th scope="col">SAC</th><th scope="col">Qty</th>
+        <th scope="col">Taxable credit</th><th scope="col">GST</th></tr></thead>
+      <tbody>
+        <% @document.document_lines.each do |line| %>
+          <tr><td><strong><%= line.item_snapshot.fetch("name") %></strong></td><td><%= line.hsn_sac_code %></td>
+            <td><%= line.quantity.to_s("F") %> <%= line.item_snapshot.fetch("unitOfMeasure") %></td>
+            <td class="money"><%= money_amount(line.taxable_minor, currency: @document.currency) %></td>
+            <td><%= basis_points_percentage(line.tax_rate_basis_points) %></td></tr>
+        <% end %>
+      </tbody>
+    </table></div>
+
+    <section class="invoice-document__totals"><dl>
+      <div><dt>Taxable credit</dt><dd><%= money_amount(@document.subtotal_minor, currency: @document.currency) %></dd></div>
+      <% @document.tax_breakdown.sort.each do |component, amount| %>
+        <div><dt><%= component.upcase %></dt><dd><%= money_amount(amount, currency: @document.currency) %></dd></div>
+      <% end %>
+      <div class="invoice-document__grand-total"><dt>Total credit</dt><dd><%= money_amount(@document.total_minor, currency: @document.currency) %></dd></div>
+    </dl></section>
+
+    <footer class="invoice-document__footer">
+      <div><strong>Explanation</strong><p><%= @document.narration %></p></div>
+      <div class="invoice-document__signature"><span>For <%= seller.fetch("legalName") %></span><strong>Authorised signatory</strong></div>
+    </footer>
+  </article>
+</main>
