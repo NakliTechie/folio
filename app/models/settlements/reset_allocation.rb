@@ -4,7 +4,8 @@ module Settlements
   module ResetAllocation
     module_function
 
-    def call(document:, allocation_id:, actor:, reset_on: Date.current)
+    def call(document:, allocation_id:, actor:, reset_on: nil)
+      reset_on ||= Tenant.find(document.tenant_id).business_date
       ActiveRecord::Base.transaction do
         LedgerEvent.acquire_tenant_lock!(document.tenant_id)
         document.lock!

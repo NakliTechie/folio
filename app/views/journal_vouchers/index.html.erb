@@ -4,15 +4,15 @@
   <header class="page-heading">
     <div>
       <p class="eyebrow">Transactions</p>
-      <h1>Journal vouchers</h1>
-      <p>Draft, review, post, and reverse balanced entries without losing their audit trail.</p>
+      <h1>Business events</h1>
+      <p>Record familiar events or advanced journals, then review the balanced accounting entry before posting.</p>
     </div>
     <div class="action-row">
       <% if permitted?("accounts.manage") && permitted?("documents.post") %>
         <%= link_to "Opening balances", opening_balances_path(tenant_route_options), class: "button button--secondary" %>
       <% end %>
       <% if permitted?("documents.post") %>
-        <%= link_to "New journal voucher", new_journal_voucher_path(tenant_route_options),
+        <%= link_to "Record business event", new_journal_voucher_path(tenant_route_options),
           class: "button button--primary" %>
       <% end %>
     </div>
@@ -48,10 +48,10 @@
   <% else %>
     <section class="panel empty-state">
       <span class="empty-state__icon" aria-hidden="true">↗</span>
-      <h2>No journal vouchers yet</h2>
-      <p>Start with a simple debit and credit. Folio previews the balance before posting.</p>
+      <h2>No business events yet</h2>
+      <p>Start with an owner deposit or expense. Folio derives and previews the balanced entry before posting.</p>
       <% if permitted?("documents.post") %>
-        <%= link_to "Record your first transaction", new_journal_voucher_path(tenant_route_options),
+        <%= link_to "Choose your first business event", new_journal_voucher_path(tenant_route_options),
           class: "button button--primary" %>
       <% end %>
     </section>

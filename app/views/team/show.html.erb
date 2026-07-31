@@ -19,6 +19,15 @@
             <span class="avatar" aria-hidden="true"><%= membership.user.email_address.first.upcase %></span>
             <span><strong><%= membership.user.email_address %></strong><small><%= assignment&.role_template&.name || "Member" %></small></span>
             <% if membership.user.verified? %><span class="status-badge status-badge--success">Verified</span><% end %>
+            <%= form_with url: update_team_role_path(membership.user_id, tenant_route_options),
+              method: :patch, class: "inline-form" do |form| %>
+              <%= form.label :role_code, "Role for #{membership.user.email_address}", class: "sr-only" %>
+              <%= form.select :role_code,
+                Rbac::Presets::MATRIX.map { |code, spec| [spec[:name], code] },
+                { selected: assignment&.role_template&.code },
+                aria: { label: "Role for #{membership.user.email_address}" } %>
+              <%= form.submit "Update role", class: "button button--compact button--quiet" %>
+            <% end %>
           </li>
         <% end %>
       </ul>
@@ -58,7 +67,7 @@
                 <td><span class="<%= status_class(invitation.delivery_state) %>"><%= delivery_state_label(invitation.delivery_state) %></span></td>
                 <td><%= invitation.pending? ? "Pending" : "Accepted #{time_ago_in_words(invitation.accepted_at)} ago" %></td>
                 <td>
-                  <% if invitation.pending? && %w[sent failed not_sent].include?(invitation.delivery_state) %>
+                  <% if invitation.delivery_retryable? %>
                     <%= button_to "Resend", resend_invitation_path(invitation, tenant_route_options),
                       method: :post, class: "button button--compact button--quiet" %>
                   <% end %>

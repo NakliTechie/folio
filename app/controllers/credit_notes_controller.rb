@@ -36,7 +36,10 @@ class CreditNotesController < BrowserController
     )
     redirect_to credit_note_path(@document, tenant_route_options),
       notice: "Draft credit note ready. Review the tax and receivable adjustment before posting."
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, CreditNotes::InvalidCreditNote,
+  rescue ActiveRecord::RecordNotFound
+    redirect_to sales_invoices_path(tenant_route_options),
+      alert: "That source invoice is unavailable. Choose a posted sales invoice."
+  rescue ActiveRecord::RecordInvalid, CreditNotes::InvalidCreditNote,
          Documents::InvalidDocument, Taxes::InvalidTaxInput => e
     load_form(credit_note_params[:invoice_id])
     flash.now[:alert] = e.respond_to?(:record) ? e.record.errors.full_messages.to_sentence : e.message

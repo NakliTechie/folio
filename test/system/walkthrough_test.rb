@@ -46,13 +46,13 @@ class WalkthroughTest < ApplicationSystemTestCase
 
     assert_current_path root_path, wait: 15
 
-    click_link "Record your first transaction"
-    set_date_field "Posting date", "2026-07-30"
-    fill_in "What is this transaction for?", with: "Owner capital introduced"
+    click_link "Choose your first business event"
+    click_link "Owner deposit"
+    set_date_field "Date", "2026-07-30"
     fill_in "Amount (INR)", with: "1250.50"
-    select "1000 · Cash", from: "Debit account"
-    select "3000 · Capital", from: "Credit account"
-    click_button "Review voucher"
+    select "Bank", from: "Where did the money arrive?"
+    fill_in "Who contributed it?", with: "Founder"
+    click_button "Review transaction"
 
     assert_selector "h2", text: "Balanced and ready to post"
     assert_text "INR 1,250.50"
@@ -60,7 +60,7 @@ class WalkthroughTest < ApplicationSystemTestCase
 
     assert_current_path reports_path, ignore_query: true
     assert_selector "h1", text: "Trial balance"
-    assert_selector "[role=status]", text: /posted.*trial balance/i
+    assert_selector "[role=status]", text: /Bank increased.*Capital increased/i
     assert_selector "tr.table-row--highlight", count: 2
 
     click_link "Period close"
@@ -81,6 +81,7 @@ class WalkthroughTest < ApplicationSystemTestCase
 
     assert_current_path root_path, wait: 15
 
+    open_primary_nav "Accounting"
     click_link "Chart of accounts"
     click_link "Opening balances"
     click_link "Enter opening balances"
@@ -145,7 +146,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Email", with: org.user.email_address
     fill_in "Password", with: PASSWORD
     click_button "Sign in"
-    click_link "Tax setup"
+    open_primary_nav "Settings"
     click_link "Company details"
     fill_in "Address line 1", with: "1 Ledger Lane"
     fill_in "City", with: "Mumbai"
@@ -155,6 +156,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     click_button "Save company details"
     assert_selector "[role=status]", text: /Company details updated/
 
+    open_primary_nav "Sales"
     click_link "Sales invoices"
     click_link "New sales invoice"
     select "C-001 · Acme Customer", from: "Customer"
@@ -270,7 +272,8 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Email", with: org.user.email_address
     fill_in "Password", with: PASSWORD
     click_button "Sign in"
-    click_link "Purchases"
+    open_primary_nav "Purchases"
+    click_link "Purchase bills"
     click_link "New purchase bill"
     select "V-001 · Acme Vendor", from: "Vendor"
     select "27AAPFU0939F1ZV · State 27", from: "Buyer GSTIN"
@@ -321,7 +324,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_selector "h1", text: "PC/26-27/00001"
     assert_selector "[role=status]", text: /posted.*applied.*purchase-bill payable/i
     assert_text "V-CN-1042"
-    click_link "Open source purchase bill"
+    click_link "Open source purchase document"
     assert_selector "h1", text: "PB/26-27/00001"
     assert_no_button "Reverse bill"
   end
@@ -338,8 +341,8 @@ class WalkthroughTest < ApplicationSystemTestCase
     click_link "Record supplier debit"
     fill_in "Supplier debit-note number", with: "V-DN-1042"
     set_date_field "Supplier debit-note date", "2026-08-01"
-    select "Additional charge", from: "Reason"
-    fill_in "Explanation", with: "Additional service charge"
+    select "Quantity underbilling", from: "Reason"
+    fill_in "Explanation", with: "Supplier corrected underbilled quantity"
     fill_in "Additional quantity for line 1", with: "0.5"
     click_button "Review supplier debit"
 
@@ -363,6 +366,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Email", with: setup.fetch(:org).user.email_address
     fill_in "Password", with: PASSWORD
     click_button "Sign in"
+    open_primary_nav "Accounting"
     click_link "Cash"
     click_link "Record receipt"
     set_date_field "Settlement date", "2026-08-15"
@@ -433,34 +437,45 @@ class WalkthroughTest < ApplicationSystemTestCase
 
       case role_code
       when "owner"
+        open_primary_nav "Settings"
         assert_link "Team"
-        assert_link "Tax setup"
+        assert_link "Tax registrations"
         click_link "Team"
         assert_selector "h1", text: "People and invitations"
-        fill_in "Work email", with: "role-invited@folio.invalid"
-        select "Viewer", from: "Role"
-        click_button "Queue invitation"
+        invitation_count = Invitation.where(tenant_id: org.tenant.id).count
+        within("section", text: "Send an invitation") do
+          fill_in "Work email", with: "role-invited@folio.invalid"
+          select "Viewer", from: "Role"
+          click_button "Queue invitation"
+        end
         assert_selector "[role=status]", text: /Invitation queued/
         assert_text "role-invited@folio.invalid"
+        assert_equal invitation_count + 1, Invitation.where(tenant_id: org.tenant.id).count
       when "accountant"
+        open_primary_nav "Settings"
         assert_no_link "Team"
-        assert_link "Tax setup"
+        assert_link "Tax registrations"
+        open_primary_nav "Accounting"
         click_link "Chart of accounts"
         assert_link "Add account"
         click_link "Add account"
+        account_count = Account.where(tenant_id: org.tenant.id).count
         fill_in "Account code", with: "5199"
         fill_in "Account name", with: "Role walkthrough expense"
         select "Expense", from: "Account type"
         click_button "Add account"
         assert_selector "[role=status]", text: /5199.*Role walkthrough expense added/
+        assert_equal account_count + 1, Account.where(tenant_id: org.tenant.id).count
         visit period_close_path(tenant_id: org.tenant.id)
         assert_selector "h1", text: "Period close"
         assert_no_button "Restrict to close team"
       when "operator"
+        open_primary_nav "Settings"
         assert_no_link "Team"
-        assert_no_link "Tax setup"
-        assert_no_link "Record your first transaction"
-        click_link "Purchases"
+        assert_no_link "Tax registrations"
+        assert_no_link "Choose your first business event"
+        open_primary_nav "Purchases"
+        click_link "Purchase bills"
         assert_link "New purchase bill"
         click_link "New purchase bill"
         select "V-ROLE · Role Walkthrough Vendor", from: "Vendor"
@@ -477,32 +492,40 @@ class WalkthroughTest < ApplicationSystemTestCase
         click_button "Post bill"
         assert_selector "h1", text: "PB/26-27/00001"
         assert_selector "[role=status]", text: /posted.*Payables.*input GST/i
+        account_count = Account.where(tenant_id: org.tenant.id).count
         visit new_account_path(tenant_id: org.tenant.id)
         assert_current_path root_path, ignore_query: true
         assert_selector "[role=alert]", text: /do not have permission/i
+        assert_equal account_count, Account.where(tenant_id: org.tenant.id).count
       when "ca_auditor"
+        open_primary_nav "Settings"
         assert_no_link "Team"
-        assert_no_link "Tax setup"
-        assert_link "Record your first transaction"
+        assert_no_link "Tax registrations"
+        assert_link "Choose your first business event"
         click_link "Reports"
         click_link "Period close"
         assert_button "Restrict to close team"
         click_button "Restrict to close team"
         assert_selector "[role=status]", text: /posting period is now restricted/i
         assert_selector ".status-badge", text: "Restricted"
+        party_count = Party.where(tenant_id: org.tenant.id).count
         visit new_party_path(tenant_id: org.tenant.id)
         assert_current_path root_path, ignore_query: true
         assert_selector "[role=alert]", text: /do not have permission/i
+        assert_equal party_count, Party.where(tenant_id: org.tenant.id).count
       when "viewer"
+        open_primary_nav "Settings"
         assert_no_link "Team"
-        assert_no_link "Tax setup"
-        assert_no_link "Record your first transaction"
+        assert_no_link "Tax registrations"
+        assert_no_link "Choose your first business event"
         click_link "Reports"
         assert_selector "h1", text: "Trial balance"
-        assert_no_link "Record your first transaction"
+        assert_no_link "Choose your first business event"
+        document_count = Document.where(tenant_id: org.tenant.id).count
         visit new_purchase_bill_path(tenant_id: org.tenant.id)
         assert_current_path root_path, ignore_query: true
         assert_selector "[role=alert]", text: /do not have permission/i
+        assert_equal document_count, Document.where(tenant_id: org.tenant.id).count
       end
 
       click_button "Sign out"
@@ -511,6 +534,10 @@ class WalkthroughTest < ApplicationSystemTestCase
   end
 
   private
+
+  def open_primary_nav(label)
+    find(".app-nav summary", text: label, exact_text: true).click
+  end
 
   def set_date_field(label, value)
     field = find_field(label)

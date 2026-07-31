@@ -2,8 +2,8 @@
 
 class PurchaseDebitNotesController < BrowserController
   before_action -> { require_capability!("reports.read") }, only: %i[index show]
-  before_action -> { require_capability!("bills.create") }, only: %i[new create post]
-  before_action :set_document, only: %i[show post]
+  before_action -> { require_capability!("bills.create") }, only: %i[new create post destroy]
+  before_action :set_document, only: %i[show post destroy]
 
   def index
     @documents = document_scope.includes(:debit_note_for).order(document_date: :desc, created_at: :desc)
@@ -30,7 +30,10 @@ class PurchaseDebitNotesController < BrowserController
     )
     redirect_to purchase_debit_note_path(@document, tenant_route_options),
       notice: "Draft supplier debit ready. Review the input-tax and payable increase before posting."
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound,
+  rescue ActiveRecord::RecordNotFound
+    redirect_to purchase_bills_path(tenant_route_options),
+      alert: "That source purchase bill is unavailable. Choose a posted purchase bill."
+  rescue ActiveRecord::RecordInvalid,
          PurchaseDebitNotes::InvalidDebitNote, Documents::InvalidDocument, Taxes::InvalidTaxInput => e
     load_form(debit_note_params[:purchase_bill_id])
     flash.now[:alert] = e.respond_to?(:record) ? e.record.errors.full_messages.to_sentence : e.message
@@ -49,6 +52,15 @@ class PurchaseDebitNotesController < BrowserController
   rescue Documents::Post::NotPostable, Documents::Post::NotPermitted, Posting::UnbalancedError,
          Posting::PeriodClosedError, Posting::PeriodRestrictedError, Documents::Post::InactiveAccount,
          Documents::InvalidDocument, Taxes::InvalidTaxInput => e
+    redirect_to purchase_debit_note_path(@document, tenant_route_options), alert: e.message
+  end
+
+  def destroy
+    reference = @document.external_reference
+    Documents::Discard.call!(@document)
+    redirect_to purchase_debit_notes_path(tenant_route_options),
+      notice: "Draft #{reference} discarded. Its supplier reference can be used again."
+  rescue Documents::Discard::NotDiscardable => e
     redirect_to purchase_debit_note_path(@document, tenant_route_options), alert: e.message
   end
 

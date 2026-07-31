@@ -126,15 +126,63 @@ class PurchaseDebitNoteTest < ActiveSupport::TestCase
     assert_equal 1_125, input_tax.dig(:tax, :sgst)
   end
 
+  test "a linked supplier credit corrects a posted debit across GL GST open items and rebuild" do
+    debit = build_debit(quantity: "0.5")
+    Documents::Post.call(debit, actor: actor)
+    correction = PurchaseCreditNotes::BuildDraft.call(
+      tenant: @org.tenant,
+      purchase_bill_id: debit.id,
+      document_date: DOCUMENT_DATE + 2,
+      external_reference: "V-CN-CORRECT-1",
+      reason_code: "value_reduction",
+      narration: "Supplier cancelled the quantity adjustment",
+      lines: [ { document_line_id: debit.document_lines.first.id, quantity: "0.5" } ]
+    )
+
+    correction_entry = Documents::Post.call(correction, actor: actor)
+    assert_equal debit.id, correction.credit_note_for_document_id
+    assert_equal [ 2_950, -2_500, -225, -225 ], transaction_amounts(correction_entry)
+    assert_equal 0, Posting::Clearing.open_amount(payable_for(debit))
+    assert_equal 0, Posting::Clearing.open_amount(payable_for(correction))
+
+    report = Reports::GstReturns.call(
+      tenant_id: @org.tenant.id, tax_registration_id: @buyer_registration.id,
+      from_date: DOCUMENT_DATE, to_date: DOCUMENT_DATE + 2
+    )
+    input_tax = report.dig(:gstr_3b, :table_4_a_5_book_input_tax_reference)
+    assert_equal 10_000, input_tax[:taxable_value_minor]
+    assert_equal 11_800, input_tax[:invoice_value_minor]
+    assert_equal 1, input_tax[:supplier_debit_note_count]
+    assert_equal 1, input_tax[:supplier_credit_note_count]
+
+    Posting.rebuild!(@org.tenant.id)
+    assert_equal debit.id, correction.reload.credit_note_for_document_id
+    debit.reload
+    assert_equal 0, Posting::Clearing.open_amount(payable_for(debit))
+    assert_equal 0, Posting::Clearing.open_amount(payable_for(correction))
+  end
+
+  test "supplier debit requires a bounded explanation and rejects non-finite quantity" do
+    error = assert_raises(PurchaseDebitNotes::InvalidDebitNote) do
+      build_debit(quantity: "0.5", narration: " ")
+    end
+    assert_match(/explanation is required/, error.message)
+
+    error = assert_raises(PurchaseDebitNotes::InvalidDebitNote) do
+      build_debit(quantity: "Infinity")
+    end
+    assert_match(/must be finite/, error.message)
+  end
+
   private
 
   def actor = "u:#{@org.user.id}"
 
-  def build_debit(quantity:, external_reference: "V-DN-001")
+  def build_debit(quantity:, external_reference: "V-DN-001", narration: "Quantity omitted from supplier bill")
     PurchaseDebitNotes::BuildDraft.call(
       tenant: @org.tenant, purchase_bill_id: @bill.id,
       document_date: DOCUMENT_DATE + 1, external_reference: external_reference,
-      reason_code: "additional_charge", narration: "Additional service charge",
+      reason_code: "quantity_underbilling", narration: narration,
       lines: [ { document_line_id: @bill.document_lines.first.id, quantity: quantity } ]
     )
   end

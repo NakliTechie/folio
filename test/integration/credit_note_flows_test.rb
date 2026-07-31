@@ -127,6 +127,15 @@ class CreditNoteFlowsTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  test "tampered source recovery redirects to a safe invoice choice" do
+    assert_no_difference "Document.count" do
+      post credit_notes_path, params: {
+        credit_note: api_params.merge(invoice_id: "missing")
+      }
+    end
+    assert_redirected_to sales_invoices_path(tenant_id: @org.tenant.id)
+  end
+
   private
 
   def browser_params

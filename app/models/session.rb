@@ -2,6 +2,7 @@ class Session < ApplicationRecord
   ABSOLUTE_LIFETIME = 24.hours
   IDLE_TIMEOUT = 1.hour
   ACTIVITY_WRITE_INTERVAL = 5.minutes
+  RETENTION_AFTER_EXPIRY = 30.days
 
   belongs_to :user
 
@@ -19,6 +20,11 @@ class Session < ApplicationRecord
     return if last_seen_at && last_seen_at > at - ACTIVITY_WRITE_INTERVAL
 
     update_column(:last_seen_at, at)
+  end
+
+  def self.prune_expired!(at: Time.current)
+    cutoff = at - RETENTION_AFTER_EXPIRY
+    where("expires_at <= ? OR last_seen_at <= ?", cutoff, cutoff - IDLE_TIMEOUT).delete_all
   end
 
   private

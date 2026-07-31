@@ -2,8 +2,8 @@
 
 class PurchaseCreditNotesController < BrowserController
   before_action -> { require_capability!("reports.read") }, only: %i[index show]
-  before_action -> { require_capability!("bills.create") }, only: %i[new create post]
-  before_action :set_document, only: %i[show post]
+  before_action -> { require_capability!("bills.create") }, only: %i[new create post destroy]
+  before_action :set_document, only: %i[show post destroy]
 
   def index
     @documents = document_scope.includes(:credit_note_for).order(document_date: :desc, created_at: :desc)
@@ -30,7 +30,10 @@ class PurchaseCreditNotesController < BrowserController
     )
     redirect_to purchase_credit_note_path(@document, tenant_route_options),
       notice: "Draft supplier credit ready. Review the input-tax and payable adjustment before posting."
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound,
+  rescue ActiveRecord::RecordNotFound
+    redirect_to purchase_bills_path(tenant_route_options),
+      alert: "That source purchase document is unavailable. Choose a posted bill or supplier debit."
+  rescue ActiveRecord::RecordInvalid,
          PurchaseCreditNotes::InvalidCreditNote, Documents::InvalidDocument, Taxes::InvalidTaxInput => e
     load_form(credit_note_params[:purchase_bill_id])
     flash.now[:alert] = e.respond_to?(:record) ? e.record.errors.full_messages.to_sentence : e.message
@@ -52,6 +55,15 @@ class PurchaseCreditNotesController < BrowserController
     redirect_to purchase_credit_note_path(@document, tenant_route_options), alert: e.message
   end
 
+  def destroy
+    reference = @document.external_reference
+    Documents::Discard.call!(@document)
+    redirect_to purchase_credit_notes_path(tenant_route_options),
+      notice: "Draft #{reference} discarded. Its supplier reference can be used again."
+  rescue Documents::Discard::NotDiscardable => e
+    redirect_to purchase_credit_note_path(@document, tenant_route_options), alert: e.message
+  end
+
   private
 
   def set_document
@@ -62,16 +74,16 @@ class PurchaseCreditNotesController < BrowserController
     Document.where(tenant_id: Current.tenant.id, doc_type: "PC")
   end
 
-  def bill_scope
-    Document.where(tenant_id: Current.tenant.id, doc_type: "PB", state: "posted")
-  end
-
   def load_form(purchase_bill_id)
-    @purchase_bill = bill_scope.includes(:document_lines).find(purchase_bill_id)
+    @purchase_bill = source_scope.includes(:document_lines).find(purchase_bill_id)
     @remaining_quantities = @purchase_bill.document_lines.to_h do |line|
       [ line.id, PurchaseCreditNotes::BuildDraft.remaining_quantity(line) ]
     end
     @submitted_lines = Array(params.dig(:purchase_credit_note, :lines))
+  end
+
+  def source_scope
+    Document.where(tenant_id: Current.tenant.id, doc_type: %w[PB PD], state: "posted")
   end
 
   def credit_note_params

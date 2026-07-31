@@ -144,12 +144,7 @@ module CreditNotes
     end
 
     def decimal!(value, label)
-      decimal = BigDecimal(value.to_s)
-      raise InvalidCreditNote, "#{label} may have no more than six decimal places" if decimal.scale > 6
-
-      decimal
-    rescue ArgumentError
-      raise InvalidCreditNote, "#{label} must be a number"
+      Documents::DecimalInput.parse!(value, label: label, scale: 6, error_class: InvalidCreditNote)
     end
 
     def parse_date!(value)

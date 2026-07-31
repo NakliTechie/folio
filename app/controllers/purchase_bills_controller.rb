@@ -2,9 +2,9 @@
 
 class PurchaseBillsController < BrowserController
   before_action -> { require_capability!("reports.read") }, only: %i[index show]
-  before_action -> { require_capability!("bills.create") }, only: %i[new create post]
+  before_action -> { require_capability!("bills.create") }, only: %i[new create post destroy]
   before_action -> { require_capability!("documents.reverse") }, only: :reverse
-  before_action :set_document, only: %i[show post reverse]
+  before_action :set_document, only: %i[show post reverse destroy]
 
   def index
     @documents = document_scope.includes(:party).order(document_date: :desc, created_at: :desc)
@@ -67,6 +67,15 @@ class PurchaseBillsController < BrowserController
     redirect_to purchase_bill_path(@document, tenant_route_options), alert: e.message
   end
 
+  def destroy
+    reference = @document.external_reference
+    Documents::Discard.call!(@document)
+    redirect_to purchase_bills_path(tenant_route_options),
+      notice: "Draft #{reference} discarded. Its supplier reference can be used again."
+  rescue Documents::Discard::NotDiscardable => e
+    redirect_to purchase_bill_path(@document, tenant_route_options), alert: e.message
+  end
+
   private
 
   def set_document
@@ -89,6 +98,14 @@ class PurchaseBillsController < BrowserController
       ).distinct.order(:identifier)
     @items = Item.active.where(tenant_id: Current.tenant.id).order(:name)
     @company_profile_complete = primary_office.statutory_address_complete?
+    @registered_vendor_ready = Party.active.joins(:party_roles, :party_tax_registrations)
+      .where(
+        tenant_id: Current.tenant.id,
+        party_roles: { role: "vendor" },
+        party_tax_registrations: { active: true, kind: "GSTIN" }
+      ).exists?
+    @purchase_setup_ready = @company_profile_complete && @buyer_registrations.any? &&
+      @registered_vendor_ready && @items.any?
     @submitted_lines = Array(params.dig(:purchase_bill, :lines))
   end
 

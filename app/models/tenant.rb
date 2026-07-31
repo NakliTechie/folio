@@ -6,6 +6,27 @@ class Tenant < ApplicationRecord
   has_many :memberships, dependent: :destroy
   has_many :users, through: :memberships
 
-  validates :name, :slug, :functional_currency, presence: true
+  validates :name, :slug, :functional_currency, :time_zone, presence: true
   validates :slug, uniqueness: true
+  validate :time_zone_must_be_valid
+
+  def self.enterable_by(user)
+    role_tenant_ids = UserOfficeRole.where(user_id: user.id, office_id: nil).select(:tenant_id)
+    joins(:memberships)
+      .where(memberships: { user_id: user.id })
+      .where(id: role_tenant_ids)
+      .distinct
+  end
+
+  def business_date(at: Time.current)
+    at.in_time_zone(time_zone).to_date
+  end
+
+  private
+
+  def time_zone_must_be_valid
+    Time.find_zone!(time_zone) if time_zone.present?
+  rescue ArgumentError
+    errors.add(:time_zone, "is not recognized")
+  end
 end

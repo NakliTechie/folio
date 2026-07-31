@@ -56,6 +56,7 @@ class OnboardingDeliveryJobsTest < ActiveJob::TestCase
       role_code: "viewer",
       invited_by: org.user
     )
+    invitation.update!(delivery_state: "queued", delivery_attempted_at: Time.current)
 
     InvitationDeliveryJob.perform_now(invitation.id)
     assert_equal "sent", invitation.reload.delivery_state
@@ -65,6 +66,46 @@ class OnboardingDeliveryJobsTest < ActiveJob::TestCase
       assert_raises(IOError) { InvitationDeliveryJob.perform_now(invitation.id) }
     end
     assert_equal "failed", invitation.reload.delivery_state
+  end
+
+  test "stale queued and sending leases can be recovered" do
+    user = User.create!(
+      email_address: "stale-verification@x.com", password: "correct-horse-battery",
+      verification_delivery_state: "sending",
+      verification_delivery_attempted_at: User::DELIVERY_LEASE.ago - 1.minute
+    )
+    assert_enqueued_jobs 1, only: VerificationDeliveryJob do
+      assert user.queue_verification_delivery!
+    end
+
+    org = Onboarding::SignUp.call(
+      email: "stale-invite-owner@x.com", password: "correct-horse-battery", org_name: "Lease Books"
+    )
+    invitation = Onboarding::Invite.create!(
+      tenant: org.tenant, email: "stale-invite@x.com", role_code: "viewer", invited_by: org.user
+    )
+    invitation.update!(delivery_state: "queued",
+      delivery_attempted_at: Invitation::DELIVERY_LEASE.ago - 1.minute)
+    assert invitation.delivery_retryable?
+    assert_enqueued_jobs 1, only: InvitationDeliveryJob do
+      assert invitation.queue_delivery!
+    end
+  end
+
+  test "enqueue failure becomes a visible retryable failure" do
+    user = User.create!(email_address: "enqueue-failure@x.com", password: "correct-horse-battery")
+    failing_adapter = Object.new
+    failing_adapter.define_singleton_method(:enqueue) { |_| raise IOError, "queue unavailable" }
+    failing_adapter.define_singleton_method(:enqueue_at) { |_, _| raise IOError, "queue unavailable" }
+    previous_adapter = ActiveJob::Base.queue_adapter
+    ActiveJob::Base.queue_adapter = failing_adapter
+    begin
+      refute user.queue_verification_delivery!
+    ensure
+      ActiveJob::Base.queue_adapter = previous_adapter
+    end
+    assert_equal "failed", user.reload.verification_delivery_state
+    assert user.verification_delivery_retryable?
   end
 
   test "verification queue suppresses duplicate deliveries and permits a cooled-down retry" do

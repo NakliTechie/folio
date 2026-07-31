@@ -27,17 +27,18 @@
     <% if authenticated? && Current.tenant %>
       <header class="app-header">
         <div class="app-header__bar">
-          <%= link_to root_path(tenant_route_options), class: "brand brand--app", aria: { label: "Folio overview" } do %>
+          <%= link_to root_path(tenant_route_options), class: "brand brand--app" do %>
             <span class="brand__mark" aria-hidden="true">F</span>
             <span>Folio</span>
           <% end %>
 
           <div class="tenant-context">
-            <% if Current.user.tenants.size > 1 %>
+            <% enterable_tenants = Current.user.enterable_tenants.order(:name).to_a %>
+            <% if enterable_tenants.size > 1 %>
               <%= form_with url: root_path, method: :get, class: "tenant-switcher" do |form| %>
                 <%= form.label :tenant_id, "Company", class: "sr-only" %>
                 <%= form.select :tenant_id,
-                  Current.user.tenants.order(:name).map { |tenant| [tenant.name, tenant.id] },
+                  enterable_tenants.map { |tenant| [tenant.name, tenant.id] },
                   { selected: Current.tenant.id },
                   aria: { label: "Current company" } %>
                 <%= form.submit "Switch", class: "button button--compact button--quiet" %>
@@ -67,38 +68,54 @@
         </div>
 
         <nav class="app-nav" aria-label="Primary navigation">
-          <%= link_to "Overview", root_path(tenant_route_options), class: navigation_class("home") %>
-          <%= link_to "Transactions", journal_vouchers_path(tenant_route_options),
-            class: navigation_class("journal_vouchers") %>
-          <%= link_to "Sales invoices", sales_invoices_path(tenant_route_options),
-            class: navigation_class("sales_invoices") %>
-          <%= link_to "Purchases", purchase_bills_path(tenant_route_options),
-            class: navigation_class("purchase_bills", "purchase_credit_notes", "purchase_debit_notes") %>
-          <%= link_to "Cash", settlements_path(tenant_route_options),
-            class: navigation_class("settlements") %>
-          <%= link_to "Chart of accounts", accounts_path(tenant_route_options),
-            class: navigation_class("accounts") %>
-          <%= link_to "Customers & vendors", parties_path(tenant_route_options),
-            class: navigation_class("parties") %>
-          <%= link_to "Products & services", items_path(tenant_route_options),
-            class: navigation_class("items") %>
-          <% if permitted?("masters.manage") %>
-            <%= link_to "Tax setup", tax_registrations_path(tenant_route_options),
-              class: navigation_class("tax_registrations") %>
-          <% end %>
+          <%= link_to "Home", root_path(tenant_route_options), class: navigation_class("home") %>
+
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("sales_invoices", "credit_notes", "parties") %>">
+            <summary>Sales</summary>
+            <div class="nav-group__menu">
+              <%= link_to "Sales invoices", sales_invoices_path(tenant_route_options), class: navigation_class("sales_invoices", "credit_notes") %>
+              <%= link_to "Customers", parties_path(tenant_route_options), class: navigation_class("parties") %>
+            </div>
+          </details>
+
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("purchase_bills", "purchase_credit_notes", "purchase_debit_notes") %>">
+            <summary>Purchases</summary>
+            <div class="nav-group__menu">
+              <%= link_to "Purchase bills", purchase_bills_path(tenant_route_options), class: navigation_class("purchase_bills") %>
+              <%= link_to "Supplier credits", purchase_credit_notes_path(tenant_route_options), class: navigation_class("purchase_credit_notes") %>
+              <%= link_to "Supplier debits", purchase_debit_notes_path(tenant_route_options), class: navigation_class("purchase_debit_notes") %>
+            </div>
+          </details>
+
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("journal_vouchers", "opening_balances", "settlements", "accounts") %>">
+            <summary>Accounting</summary>
+            <div class="nav-group__menu">
+              <%= link_to "Transactions", journal_vouchers_path(tenant_route_options), class: navigation_class("journal_vouchers") %>
+              <%= link_to "Cash", settlements_path(tenant_route_options), class: navigation_class("settlements") %>
+              <%= link_to "Opening balances", opening_balances_path(tenant_route_options), class: navigation_class("opening_balances") if permitted?("accounts.manage") %>
+              <%= link_to "Chart of accounts", accounts_path(tenant_route_options), class: navigation_class("accounts") %>
+            </div>
+          </details>
+
           <% if permitted?("reports.read") %>
-            <%= link_to "Reports", reports_path(tenant_route_options),
-              class: navigation_class("reports", "period_closes") %>
+            <%= link_to "Reports", reports_path(tenant_route_options), class: navigation_class("reports", "period_closes") %>
           <% end %>
-          <% if permitted?("users.manage") %>
-            <%= link_to "Team", team_path(tenant_route_options), class: navigation_class("team") %>
-          <% end %>
-          <%= link_to "Security", security_path(tenant_route_options), class: navigation_class("security") %>
+
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("business_profiles", "tax_registrations", "items", "team", "security") %>">
+            <summary>Settings</summary>
+            <div class="nav-group__menu">
+              <%= link_to "Company details", edit_business_profile_path(tenant_route_options), class: navigation_class("business_profiles") if permitted?("masters.manage") %>
+              <%= link_to "Tax registrations", tax_registrations_path(tenant_route_options), class: navigation_class("tax_registrations") if permitted?("masters.manage") %>
+              <%= link_to "Products & services", items_path(tenant_route_options), class: navigation_class("items") %>
+              <%= link_to "Team", team_path(tenant_route_options), class: navigation_class("team") if permitted?("users.manage") %>
+              <%= link_to "Security", security_path(tenant_route_options), class: navigation_class("security") %>
+            </div>
+          </details>
         </nav>
       </header>
     <% else %>
       <header class="public-header">
-        <%= link_to new_session_path, class: "brand", aria: { label: "Folio sign in" } do %>
+        <%= link_to new_session_path, class: "brand" do %>
           <span class="brand__mark" aria-hidden="true">F</span>
           <span>Folio</span>
         <% end %>

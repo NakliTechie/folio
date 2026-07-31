@@ -185,24 +185,15 @@ module PurchaseBills
     end
 
     def decimal!(value, label)
-      decimal = BigDecimal(value.to_s)
-      raise InvalidBill, "#{label} may have no more than six decimal places" if decimal.scale > 6
-
-      decimal
-    rescue ArgumentError
-      raise InvalidBill, "#{label} must be a number"
+      Documents::DecimalInput.parse!(value, label: label, scale: 6, error_class: InvalidBill)
     end
 
     def money_minor!(value, label)
-      decimal = BigDecimal(value.to_s)
+      decimal = Documents::DecimalInput.parse!(
+        value, label: label, scale: 2, minimum: 0, error_class: InvalidBill
+      )
       scaled = decimal * 100
-      unless decimal >= 0 && scaled.frac.zero?
-        raise InvalidBill, "#{label} must be non-negative with no more than two decimal places"
-      end
-
       scaled.to_i
-    rescue ArgumentError
-      raise InvalidBill, "#{label} must be a valid amount"
     end
 
     def value(hash, key) = hash[key] || hash[key.to_s]

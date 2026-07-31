@@ -82,14 +82,14 @@ class OpeningBalancesController < BrowserController
   end
 
   def account_scope
-    Account.active.where(tenant_id: Current.tenant.id)
+    Account.active.where(tenant_id: Current.tenant.id, account_type: %w[asset liability equity])
   end
 
   def load_form
     @accounts = account_scope.in_code_order
     @entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
     @submitted_lines = params.dig(:opening_balance, :lines)&.to_unsafe_h || {}
-    @default_posting_date = fiscal_year_start(Date.current)
+    @default_posting_date = fiscal_year_start(business_date)
   end
 
   def parsed_lines!

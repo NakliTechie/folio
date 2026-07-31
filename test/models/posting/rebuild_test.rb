@@ -33,6 +33,33 @@ class Posting::RebuildTest < ActiveSupport::TestCase
     assert_equal "(document_id IS NOT NULL)", document_index.where
   end
 
+  test "a broken event chain is rejected before the readable projection is touched" do
+    entry = Posting::PostEntry.post!(draft)
+    attributes = {
+      "hash_version" => Folio::KhataHash::HASH_VERSION,
+      "prev_hash" => "f" * 64,
+      "ts" => "2025-06-02",
+      "actor" => "test",
+      "action" => "probe",
+      "ref" => nil,
+      "origin" => "test",
+      "payload" => "{}"
+    }
+    LedgerEvent.insert_all!([ {
+      tenant_id: TENANT, seq: 2, prev_hash: attributes.fetch("prev_hash"),
+      hash_hex: Folio::KhataHash.row_hash(attributes),
+      hash_version: attributes.fetch("hash_version"), ts: attributes.fetch("ts"),
+      actor: attributes.fetch("actor"), action: attributes.fetch("action"),
+      origin: attributes.fetch("origin"), payload: attributes.fetch("payload"),
+      recorded_at: Time.current
+    } ])
+
+    error = assert_raises(Posting::IntegrityError) { Posting.rebuild!(TENANT) }
+    assert_match(/event chain is invalid/, error.message)
+    assert_equal entry.id, Entry.find_by!(tenant_id: TENANT).id
+    assert_equal %w[1000 4000], entry.entry_lines.order(:line_no).pluck(:account_code)
+  end
+
   private
 
   def draft

@@ -144,6 +144,17 @@ class PurchaseBillFlowsTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "discarding a draft purchase bill releases its supplier reference" do
+    bill = PurchaseBills::BuildDraft.call(**builder_attributes)
+    assert_difference -> { Document.where(id: bill.id).count }, -1 do
+      delete purchase_bill_path(bill)
+    end
+    assert_redirected_to purchase_bills_path(tenant_id: @org.tenant.id)
+
+    replacement = PurchaseBills::BuildDraft.call(**builder_attributes)
+    assert_equal "V-INV-001", replacement.external_reference
+  end
+
   private
 
   def browser_bill_params

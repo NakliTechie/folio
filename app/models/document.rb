@@ -31,9 +31,18 @@ class Document < ApplicationRecord
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
   def reversible?
-    posted? && reversed_by_document_id.nil? && !%w[CN PC PD RC PY].include?(doc_type) &&
+    posted? && reversed_by_document_id.nil? && !%w[CN PC PD RC PY RF].include?(doc_type) &&
+      !settlement_activity? &&
       !credit_notes.where(state: %w[posted reversed]).exists? &&
       !debit_notes.where(state: %w[posted reversed]).exists?
+  end
+
+  def settlement_activity?
+    return false unless posted_entry_id
+
+    EntryLine.where(entry_id: posted_entry_id, open_item: true)
+      .where("cleared_amount_minor > 0 OR cleared_on IS NOT NULL OR residual_of_line_id IS NOT NULL")
+      .exists?
   end
 
   def statutory_printable?

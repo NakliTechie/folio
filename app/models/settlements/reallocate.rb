@@ -4,7 +4,8 @@ module Settlements
   module Reallocate
     module_function
 
-    def call(document:, allocation_id:, target_entry_line_id:, clearing_mode:, actor:, applied_on: Date.current)
+    def call(document:, allocation_id:, target_entry_line_id:, clearing_mode:, actor:, applied_on: nil)
+      applied_on ||= Tenant.find(document.tenant_id).business_date
       ActiveRecord::Base.transaction do
         LedgerEvent.acquire_tenant_lock!(document.tenant_id)
         document.lock!

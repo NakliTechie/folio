@@ -60,6 +60,11 @@
         <%= button_to "Post bill", post_purchase_bill_path(@document, tenant_route_options),
           method: :post, class: "button button--primary" %>
       <% end %>
+      <% if permitted?("bills.create") %>
+        <%= button_to "Discard draft", purchase_bill_path(@document, tenant_route_options),
+          method: :delete, class: "button button--danger",
+          form: { data: { turbo_confirm: "Discard this draft and release its supplier reference?" } } %>
+      <% end %>
     </section>
   <% else %>
     <div class="action-row">

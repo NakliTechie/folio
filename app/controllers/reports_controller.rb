@@ -7,10 +7,12 @@ class ReportsController < BrowserController
     @trial_balance = Reports.trial_balance(Current.tenant.id)
     @account_type_totals = Reports.account_type_totals(Current.tenant.id)
     @highlight_codes = highlighted_account_codes
+    @posted_document = posted_document
+    @plain_outcome = Documents::PlainLanguageOutcome.for(@posted_document)
   end
 
   def profit_and_loss
-    @to_date = report_date(:to, Date.current)
+    @to_date = report_date(:to, business_date)
     @from_date = report_date(:from, fiscal_year_start(@to_date))
     raise ArgumentError, "From date must be on or before the to date" if @from_date > @to_date
 
@@ -22,7 +24,7 @@ class ReportsController < BrowserController
   end
 
   def balance_sheet
-    @as_of = report_date(:as_of, Date.current)
+    @as_of = report_date(:as_of, business_date)
     @statement = Reports.balance_sheet(Current.tenant.id, as_of: @as_of)
   rescue ArgumentError => e
     redirect_to balance_sheet_report_path(tenant_route_options), alert: e.message unless params[:as_of].blank?
@@ -44,7 +46,7 @@ class ReportsController < BrowserController
   end
 
   def day_book
-    @to_date = report_date(:to, Date.current)
+    @to_date = report_date(:to, business_date)
     @from_date = report_date(:from, @to_date.beginning_of_month)
     @day_book = Reports.day_book(Current.tenant.id, from_date: @from_date, to_date: @to_date)
   rescue ArgumentError => e
@@ -52,7 +54,7 @@ class ReportsController < BrowserController
   end
 
   def gst_summary
-    @to_date = report_date(:to, Date.current)
+    @to_date = report_date(:to, business_date)
     @from_date = report_date(:from, @to_date.beginning_of_month)
     @gst_registrations = TaxRegistration.where(tenant_id: Current.tenant.id, kind: "GSTIN")
       .order(:identifier, valid_from: :desc)
@@ -80,8 +82,13 @@ class ReportsController < BrowserController
   end
 
   def load_aged_report(role)
-    @aged_to = report_date(:aged_to, Date.current)
+    @aged_to = report_date(:aged_to, business_date)
     @aged_report = Reports.aged_open_items(Current.tenant.id, role: role, aged_to: @aged_to)
+    @bank_accounts = Account.active.where(
+      tenant_id: Current.tenant.id,
+      code: OpenItemCredits::BuildRefund::BANK_ACCOUNT_CODES,
+      account_type: "asset"
+    ).in_code_order
   rescue ArgumentError => e
     destination = role == "customer" ? aged_receivables_report_path : aged_payables_report_path
     redirect_to destination, alert: e.message unless params[:aged_to].blank?
@@ -95,9 +102,12 @@ class ReportsController < BrowserController
   end
 
   def highlighted_account_codes
-    return [] unless params[:posted_document_id].present?
+    posted_document&.document_lines&.pluck(:account_code) || []
+  end
 
-    Document.where(tenant_id: Current.tenant.id).find_by(id: params[:posted_document_id])
-      &.document_lines&.pluck(:account_code) || []
+  def posted_document
+    return unless params[:posted_document_id].present?
+
+    @posted_document ||= Document.where(tenant_id: Current.tenant.id).find_by(id: params[:posted_document_id])
   end
 end

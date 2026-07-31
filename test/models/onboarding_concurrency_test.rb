@@ -12,22 +12,27 @@ class OnboardingConcurrencyTest < ActiveSupport::TestCase
     user_ids = Array(@created_user_ids)
     role_ids = RoleTemplate.where(tenant_id: tenant_ids).pluck(:id)
 
-    Invitation.where(tenant_id: tenant_ids).delete_all
-    UserOfficeRole.where(tenant_id: tenant_ids).delete_all
-    RolePermission.where(role_template_id: role_ids).delete_all
-    RoleTemplate.where(id: role_ids).delete_all
-    Membership.where(tenant_id: tenant_ids).delete_all
-    FinancialStatementAssignment.where(tenant_id: tenant_ids).delete_all
-    FinancialStatementSection.where(tenant_id: tenant_ids).delete_all
-    FinancialStatementVersion.where(tenant_id: tenant_ids).delete_all
-    Account.where(tenant_id: tenant_ids).delete_all
-    DocumentType.where(tenant_id: tenant_ids).delete_all
-    Office.where(tenant_id: tenant_ids).delete_all
-    Entity.where(tenant_id: tenant_ids).delete_all
-    Ledger.where(tenant_id: tenant_ids).delete_all
-    Tenant.where(id: tenant_ids).delete_all
-    Session.where(user_id: user_ids).delete_all
-    User.where(id: user_ids).delete_all
+    # These tests deliberately commit across competing connections. Their exact, test-owned
+    # teardown must bypass the production last-owner trigger while removing the whole tenant;
+    # ordinary application writes never enter this block.
+    ActiveRecord::Base.connection.disable_referential_integrity do
+      Invitation.where(tenant_id: tenant_ids).delete_all
+      UserOfficeRole.where(tenant_id: tenant_ids).delete_all
+      RolePermission.where(role_template_id: role_ids).delete_all
+      RoleTemplate.where(id: role_ids).delete_all
+      Membership.where(tenant_id: tenant_ids).delete_all
+      FinancialStatementAssignment.where(tenant_id: tenant_ids).delete_all
+      FinancialStatementSection.where(tenant_id: tenant_ids).delete_all
+      FinancialStatementVersion.where(tenant_id: tenant_ids).delete_all
+      Account.where(tenant_id: tenant_ids).delete_all
+      DocumentType.where(tenant_id: tenant_ids).delete_all
+      Office.where(tenant_id: tenant_ids).delete_all
+      Entity.where(tenant_id: tenant_ids).delete_all
+      Ledger.where(tenant_id: tenant_ids).delete_all
+      Tenant.where(id: tenant_ids).delete_all
+      Session.where(user_id: user_ids).delete_all
+      User.where(id: user_ids).delete_all
+    end
   end
 
   def race

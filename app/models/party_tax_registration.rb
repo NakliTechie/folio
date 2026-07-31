@@ -14,6 +14,7 @@ class PartyTaxRegistration < ApplicationRecord
   validate :party_belongs_to_tenant
   validate :valid_dates_are_ordered
   validate :gstin_is_valid
+  validate :effective_period_does_not_overlap
 
   scope :active, -> { where(active: true) }
   scope :in_force_on, lambda { |date|
@@ -40,6 +41,17 @@ class PartyTaxRegistration < ApplicationRecord
     return if Taxes::India::Gstin.valid?(identifier)
 
     errors.add(:identifier, "is not a valid GSTIN")
+  end
+
+  def effective_period_does_not_overlap
+    return unless active? && party_id.present? && kind.present? && valid_from.present?
+
+    finish = valid_to || Date.new(9999, 12, 31)
+    overlap = self.class.where(party_id: party_id, kind: kind, active: true)
+      .where.not(id: id)
+      .where("valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)", finish, valid_from)
+      .exists?
+    errors.add(:base, "GST registration effective dates overlap another active registration") if overlap
   end
 
   def derive_gstin_state

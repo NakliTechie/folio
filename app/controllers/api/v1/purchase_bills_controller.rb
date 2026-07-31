@@ -4,9 +4,9 @@ module Api
   module V1
     class PurchaseBillsController < BaseController
       before_action -> { require_capability!("reports.read") }, only: %i[index show]
-      before_action -> { require_capability!("bills.create") }, only: %i[create post]
+      before_action -> { require_capability!("bills.create") }, only: %i[create post destroy]
       before_action -> { require_capability!("documents.reverse") }, only: :reverse
-      before_action :set_document, only: %i[show post reverse]
+      before_action :set_document, only: %i[show post reverse destroy]
 
       def index
         documents = document_scope.order(document_date: :desc, created_at: :desc)
@@ -48,6 +48,13 @@ module Api
         )
         render json: { purchase_bill: document_json(@document.reload) }
       rescue Documents::Reverse::NotReversible => e
+        render_error(e.message, :conflict)
+      end
+
+      def destroy
+        Documents::Discard.call!(@document)
+        head :no_content
+      rescue Documents::Discard::NotDiscardable => e
         render_error(e.message, :conflict)
       end
 

@@ -57,7 +57,7 @@ class SettlementsController < BrowserController
   def reset_allocation
     allocation = Settlements::ResetAllocation.call(
       document: @document, allocation_id: params[:allocation_id],
-      actor: "u:#{Current.user.id}", reset_on: [ Date.current, @document.document_date ].max
+      actor: "u:#{Current.user.id}", reset_on: [ business_date, @document.document_date ].max
     )
     redirect_to settlement_path(@document, tenant_route_options),
       notice: "Allocation #{allocation.line_no} reset. The cash is now unapplied and can be reassigned."
@@ -76,7 +76,7 @@ class SettlementsController < BrowserController
       document: @document, allocation_id: params[:allocation_id],
       target_entry_line_id: reallocation_params[:target_entry_line_id],
       clearing_mode: reallocation_params[:clearing_mode],
-      actor: "u:#{Current.user.id}", applied_on: [ Date.current, @document.document_date ].max
+      actor: "u:#{Current.user.id}", applied_on: [ business_date, @document.document_date ].max
     )
     redirect_to settlement_path(@document, tenant_route_options),
       notice: "Unapplied cash reallocated to #{allocation.target_snapshot.fetch("assignment")}."
@@ -91,7 +91,7 @@ class SettlementsController < BrowserController
   end
 
   def document_scope
-    Document.where(tenant_id: Current.tenant.id, doc_type: KINDS.values)
+    Document.where(tenant_id: Current.tenant.id, doc_type: [ *KINDS.values, "RF" ])
   end
 
   def load_form(kind)

@@ -84,6 +84,7 @@ module Posting
     # ---- POST path -------------------------------------------------------------------
     def self.post!(draft)
       lines = normalize_lines(draft)
+      assert_meaningful!(lines)
       offenders = balance_offenders(lines)
       raise UnbalancedError, offenders unless offenders.empty?
       assert_period_open!(draft, lines)
@@ -101,6 +102,15 @@ module Posting
         )
         replay!(event)
       end
+    end
+
+    def self.assert_meaningful!(lines)
+      effects = lines.select do |line|
+        Array(line[:amounts]).any? { |amount| Integer(amount.fetch(:amount_minor)).nonzero? }
+      end
+      return if effects.any?
+
+      raise ArgumentError, "entry must contain at least one non-zero ledger effect"
     end
 
     # ---- REPLAY path: PURE projection from a stored fat event ------------------------

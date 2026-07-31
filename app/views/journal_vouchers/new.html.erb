@@ -1,69 +1,150 @@
-<% content_for :title, "New journal voucher · #{Current.tenant.name} · Folio" %>
+<% content_for :title, "Record an event · #{Current.tenant.name} · Folio" %>
 
 <main id="main-content" class="page-shell page-shell--narrow">
   <%= link_to "← Back to transactions", journal_vouchers_path(tenant_route_options), class: "back-link" %>
-  <header class="page-heading page-heading--stacked">
-    <p class="eyebrow">New transaction</p>
-    <h1>Record a journal voucher</h1>
-    <p>Choose one account to debit and one to credit. You’ll review a balanced preview before posting.</p>
-  </header>
 
-  <section class="panel form-panel">
-    <%= form_with scope: :journal_voucher, url: journal_vouchers_path(tenant_route_options),
-      class: "stacked-form" do |form| %>
-      <div class="form-grid form-grid--two">
-        <div class="form-group">
-          <%= form.label :posting_date, "Posting date" %>
-          <%= form.date_field :posting_date, required: true,
-            value: params.dig(:journal_voucher, :posting_date).presence || Date.current.iso8601 %>
-        </div>
-        <div class="form-group">
-          <%= form.label :amount, "Amount (#{Current.tenant.functional_currency})" %>
-          <%= form.number_field :amount, required: true, min: "0.01", step: "0.01",
-            inputmode: "decimal", value: params.dig(:journal_voucher, :amount) %>
-        </div>
-      </div>
-      <div class="form-group">
-        <%= form.label :narration, "What is this transaction for?" %>
-        <%= form.text_field :narration, required: true, maxlength: 200,
-          placeholder: "For example, owner capital introduced",
-          value: params.dig(:journal_voucher, :narration) %>
-      </div>
+  <% if @event_kind.blank? %>
+    <header class="page-heading page-heading--stacked">
+      <p class="eyebrow">New accounting event</p>
+      <h1>What happened?</h1>
+      <p>Choose the familiar business event. Folio will derive the accounting entry and show it before anything posts.</p>
+    </header>
 
-      <fieldset class="entry-fieldset">
-        <legend>Entry lines</legend>
-        <div class="entry-line entry-line--debit">
-          <span class="entry-line__side">Debit</span>
+    <section class="event-choice-grid" aria-label="Business event choices">
+      <%= link_to new_journal_voucher_path(tenant_route_options.merge(event: "owner_deposit")), class: "panel event-choice event-choice--recommended" do %>
+        <span class="status-badge status-badge--success">Recommended first step</span>
+        <h2>Owner deposit</h2>
+        <p>Record money contributed to cash or bank and increase owner capital.</p>
+      <% end %>
+      <%= link_to new_journal_voucher_path(tenant_route_options.merge(event: "expense")), class: "panel event-choice" do %>
+        <h2>Record an expense</h2>
+        <p>Record an expense paid immediately from cash or bank.</p>
+      <% end %>
+      <%= link_to new_sales_invoice_path(tenant_route_options), class: "panel event-choice" do %>
+        <h2>Create an invoice</h2>
+        <p>Bill a customer and let Folio calculate GST.</p>
+      <% end %>
+      <%= link_to new_purchase_bill_path(tenant_route_options), class: "panel event-choice" do %>
+        <h2>Enter a bill</h2>
+        <p>Record a supplier invoice, input GST, and the payable.</p>
+      <% end %>
+      <%= link_to new_journal_voucher_path(tenant_route_options.merge(event: "journal")), class: "panel event-choice" do %>
+        <h2>Advanced journal</h2>
+        <p>Choose debit and credit accounts directly.</p>
+      <% end %>
+    </section>
+  <% else %>
+    <% values = @draft_values || {} %>
+    <% heading = @document&.persisted? ? "Edit draft voucher" : { "owner_deposit" => "Record an owner deposit", "expense" => "Record an expense", "journal" => "Record an advanced journal" }.fetch(@event_kind, "Record a transaction") %>
+    <header class="page-heading page-heading--stacked">
+      <p class="eyebrow"><%= @event_kind == "journal" ? "Accounting entry" : "Business event" %></p>
+      <h1><%= heading %></h1>
+      <p><%= @event_kind == "journal" ? "Choose one debit and one credit account." : "Answer the business questions; the debit and credit entry stays under accounting details." %></p>
+    </header>
+
+    <section class="panel form-panel">
+      <%= form_with scope: :journal_voucher,
+        url: @document&.persisted? ? journal_voucher_path(@document, tenant_route_options) : journal_vouchers_path(tenant_route_options),
+        method: @document&.persisted? ? :patch : :post, class: "stacked-form" do |form| %>
+        <%= form.hidden_field :event_kind, value: @event_kind %>
+        <div class="form-grid form-grid--two">
           <div class="form-group">
-            <%= form.label :debit_account_code, "Debit account" %>
-            <%= form.select :debit_account_code,
-              @accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
-              { prompt: "Choose the account receiving value",
-                selected: params.dig(:journal_voucher, :debit_account_code) },
-              required: true %>
+            <%= form.label :posting_date, "Date" %>
+            <%= form.date_field :posting_date, required: true,
+              value: params.dig(:journal_voucher, :posting_date).presence || values[:posting_date]&.iso8601 || business_date.iso8601 %>
+          </div>
+          <div class="form-group">
+            <%= form.label :amount, "Amount (#{Current.tenant.functional_currency})" %>
+            <%= form.number_field :amount, required: true, min: "0.01", step: "0.01",
+              inputmode: "decimal", value: params.dig(:journal_voucher, :amount).presence || values[:amount] %>
           </div>
         </div>
-        <div class="entry-line entry-line--credit">
-          <span class="entry-line__side">Credit</span>
-          <div class="form-group">
-            <%= form.label :credit_account_code, "Credit account" %>
-            <%= form.select :credit_account_code,
-              @accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
-              { prompt: "Choose the account giving value",
-                selected: params.dig(:journal_voucher, :credit_account_code) },
-              required: true %>
-          </div>
-        </div>
-      </fieldset>
 
-      <div class="balance-note">
-        <span aria-hidden="true">=</span>
-        <p><strong>Folio will keep this balanced.</strong> The same amount is debited and credited; nothing posts until you confirm the preview.</p>
-      </div>
-      <div class="form-actions">
-        <%= form.submit "Review voucher", class: "button button--primary" %>
-        <%= link_to "Cancel", journal_vouchers_path(tenant_route_options), class: "button button--quiet" %>
-      </div>
-    <% end %>
-  </section>
+        <% if @event_kind == "owner_deposit" %>
+          <div class="form-grid form-grid--two">
+            <div class="form-group">
+              <%= form.label :cash_account_code, "Where did the money arrive?" %>
+              <%= form.select :cash_account_code,
+                @cash_accounts.map { |account| [account.name, account.code] },
+                { selected: params.dig(:journal_voucher, :cash_account_code).presence || "1010" }, required: true %>
+            </div>
+            <div class="form-group">
+              <%= form.label :contributor, "Who contributed it?" %>
+              <%= form.text_field :contributor, required: true, maxlength: 100,
+                value: params.dig(:journal_voucher, :contributor), placeholder: "Owner or founder name" %>
+            </div>
+          </div>
+          <details class="accounting-details">
+            <summary>Accounting details</summary>
+            <p>Folio will debit the selected cash/bank account and credit 3000 · Capital for the same amount.</p>
+          </details>
+        <% elsif @event_kind == "expense" %>
+          <div class="form-grid form-grid--two">
+            <div class="form-group">
+              <%= form.label :expense_account_code, "What kind of expense?" %>
+              <%= form.select :expense_account_code,
+                @expense_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
+                { prompt: "Choose an expense", selected: params.dig(:journal_voucher, :expense_account_code) }, required: true %>
+            </div>
+            <div class="form-group">
+              <%= form.label :cash_account_code, "Paid from" %>
+              <%= form.select :cash_account_code,
+                @cash_accounts.map { |account| [account.name, account.code] },
+                { selected: params.dig(:journal_voucher, :cash_account_code).presence || "1010" }, required: true %>
+            </div>
+          </div>
+          <div class="form-group">
+            <%= form.label :narration, "What was the expense for?" %>
+            <%= form.text_field :narration, required: true, maxlength: 200,
+              value: params.dig(:journal_voucher, :narration), placeholder: "For example, office supplies" %>
+          </div>
+          <details class="accounting-details">
+            <summary>Accounting details</summary>
+            <p>Folio will debit the chosen expense account and credit the selected cash/bank account.</p>
+          </details>
+        <% else %>
+          <div class="form-group">
+            <%= form.label :narration, "What is this transaction for?" %>
+            <%= form.text_field :narration, required: true, maxlength: 200,
+              value: params.dig(:journal_voucher, :narration).presence || values[:narration],
+              placeholder: "Describe the business purpose" %>
+          </div>
+          <fieldset class="entry-fieldset">
+            <legend>Entry lines</legend>
+            <div class="entry-line entry-line--debit">
+              <span class="entry-line__side">Debit</span>
+              <div class="form-group">
+                <%= form.label :debit_account_code, "Debit account" %>
+                <%= form.select :debit_account_code,
+                  @accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
+                  { prompt: "Choose the account receiving value",
+                    selected: params.dig(:journal_voucher, :debit_account_code).presence || values[:debit_account_code] }, required: true %>
+              </div>
+            </div>
+            <div class="entry-line entry-line--credit">
+              <span class="entry-line__side">Credit</span>
+              <div class="form-group">
+                <%= form.label :credit_account_code, "Credit account" %>
+                <%= form.select :credit_account_code,
+                  @accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
+                  { prompt: "Choose the account giving value",
+                    selected: params.dig(:journal_voucher, :credit_account_code).presence || values[:credit_account_code] }, required: true %>
+              </div>
+            </div>
+          </fieldset>
+        <% end %>
+
+        <div class="balance-note">
+          <span aria-hidden="true">=</span>
+          <p><strong>Nothing posts yet.</strong> Folio derives a balanced preview that you can edit or discard.</p>
+        </div>
+        <div class="form-actions">
+          <%= form.submit @document&.persisted? ? "Update draft" : "Review transaction", class: "button button--primary" %>
+          <% unless @document&.persisted? %>
+            <%= link_to "Choose another event", new_journal_voucher_path(tenant_route_options), class: "button button--quiet" %>
+          <% end %>
+        </div>
+      <% end %>
+    </section>
+  <% end %>
 </main>

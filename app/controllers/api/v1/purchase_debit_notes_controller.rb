@@ -4,8 +4,8 @@ module Api
   module V1
     class PurchaseDebitNotesController < BaseController
       before_action -> { require_capability!("reports.read") }, only: %i[index show]
-      before_action -> { require_capability!("bills.create") }, only: %i[create post]
-      before_action :set_document, only: %i[show post]
+      before_action -> { require_capability!("bills.create") }, only: %i[create post destroy]
+      before_action :set_document, only: %i[show post destroy]
 
       def index
         render json: {
@@ -38,6 +38,13 @@ module Api
           required_capability: "bills.create"
         )
         render json: { purchase_debit_note: document_json(@document.reload), entry_id: entry.id }
+      end
+
+      def destroy
+        Documents::Discard.call!(@document)
+        head :no_content
+      rescue Documents::Discard::NotDiscardable => e
+        render_error(e.message, :conflict)
       end
 
       private
@@ -75,6 +82,7 @@ module Api
           source_purchase_bill_number: note.debit_note_for.document_number,
           document_date: note.document_date,
           reason_code: note.reason_code,
+          explanation: note.narration,
           currency: note.currency,
           subtotal_minor: note.subtotal_minor,
           tax_minor: note.tax_minor,

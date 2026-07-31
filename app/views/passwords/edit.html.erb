@@ -5,7 +5,8 @@
     <p class="eyebrow">Account recovery</p>
     <h1>Choose a new password</h1>
     <p>Enter the new password twice to protect against typing mistakes.</p>
-    <%= form_with url: password_path(params[:token]), method: :put, class: "stacked-form" do |form| %>
+    <%= form_with url: password_path, method: :put, class: "stacked-form" do |form| %>
+      <%= form.hidden_field :token, value: params[:token] %>
       <div class="form-group">
         <%= form.label :password, "New password" %>
         <%= form.password_field :password, required: true, autofocus: true,

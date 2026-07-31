@@ -1,11 +1,12 @@
 <% content_for :title, "Credit #{@purchase_bill.document_number} · #{Current.tenant.name} · Folio" %>
 
 <main id="main-content" class="page-shell">
-  <%= link_to "← Back to purchase bill", purchase_bill_path(@purchase_bill, tenant_route_options), class: "back-link" %>
+  <% source_path = @purchase_bill.doc_type == "PD" ? purchase_debit_note_path(@purchase_bill, tenant_route_options) : purchase_bill_path(@purchase_bill, tenant_route_options) %>
+  <%= link_to "← Back to source purchase document", source_path, class: "back-link" %>
   <header class="page-heading page-heading--stacked">
     <p class="eyebrow">New supplier credit</p>
     <h1>Credit <%= @purchase_bill.document_number %></h1>
-    <p>Enter the supplier's credit-note reference and quantities. Rates, GST identity, place of supply, and master snapshots remain tied to the purchase bill.</p>
+    <p>Enter the supplier's credit-note reference and quantities. Rates, GST identity, place of supply, and master snapshots remain tied to <%= @purchase_bill.document_number %>.</p>
   </header>
 
   <%= form_with scope: :purchase_credit_note, url: purchase_credit_notes_path(tenant_route_options), class: "stacked-form" do |form| %>
@@ -17,7 +18,7 @@
             value: params.dig(:purchase_credit_note, :external_reference), placeholder: "For example, V-CN-1042" %></div>
         <div class="form-group"><%= form.label :document_date, "Supplier credit-note date" %>
           <%= form.date_field :document_date, required: true, min: @purchase_bill.document_date.iso8601,
-            value: params.dig(:purchase_credit_note, :document_date).presence || Date.current.iso8601 %></div>
+            value: params.dig(:purchase_credit_note, :document_date).presence || business_date.iso8601 %></div>
         <div class="form-group"><%= form.label :reason_code, "Reason" %>
           <%= form.select :reason_code,
             PurchaseCreditNotes::BuildDraft::REASONS.map { |reason| [credit_note_reason_label(reason), reason] },

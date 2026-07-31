@@ -69,6 +69,11 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     assert_select "meta[name=description][content]"
     assert_select "main#main-content"
     assert_match "default-src 'self'", response.headers.fetch("Content-Security-Policy")
+    assert_match "style-src 'self'", response.headers.fetch("Content-Security-Policy")
+    refute_match "unsafe-inline", response.headers.fetch("Content-Security-Policy")
+    javascript = Rails.root.join("app/javascript/application.js").read
+    assert_includes javascript, "progressBarDelay = 60_000"
+    assert_includes javascript, 'classList.add("turbo-loading")'
 
     get "/favicon.ico"
     assert_redirected_to "/icon.png"

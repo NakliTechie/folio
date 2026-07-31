@@ -94,7 +94,9 @@ module FinancialStatements
     end
 
     def direct_amounts(version, statement_type, from_date:)
-      rows = mapped_scope(version, statement_type, from_date: from_date)
+      scope = mapped_scope(version, statement_type, from_date: from_date)
+      scope = scope.where.not(entries: { period_no: 0 }) if statement_type == "profit_and_loss"
+      rows = scope
         .group("statement_sections.id", "statement_sections.normal_balance")
         .pluck(
           Arel.sql("statement_sections.id"),

@@ -17,7 +17,8 @@ class RegistrationsController < ApplicationController
       org_name: params[:org_name],
       jurisdiction_profile: params[:jurisdiction_profile],
       functional_currency: params[:functional_currency],
-      fiscal_year_variant: params[:fiscal_year_variant]
+      fiscal_year_variant: params[:fiscal_year_variant],
+      time_zone: params[:time_zone]
     )
     start_new_session_for result.user
     result.user.queue_verification_delivery!

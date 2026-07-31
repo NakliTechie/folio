@@ -20,6 +20,8 @@ class OnboardingTest < ActiveSupport::TestCase
     assert_equal 5, RoleTemplate.where(tenant_id: r.tenant.id).count
     assert Authorization.permits?(user: r.user, tenant_id: r.tenant.id, capability: "documents.post"),
       "the new owner can post immediately"
+    assert_equal "Asia/Kolkata", r.tenant.time_zone
+    assert_equal Date.new(2026, 8, 1), r.tenant.business_date(at: Time.utc(2026, 7, 31, 21))
   end
 
   test "signup slugs de-duplicate across orgs with the same name" do
@@ -68,7 +70,7 @@ class OnboardingTest < ActiveSupport::TestCase
     assert u.reload.verified?
   end
 
-  test "an accepted invite explicitly updates an existing tenant role" do
+  test "an existing member must use the audited role-change path instead of an invitation" do
     org = Onboarding::SignUp.call(email: "role-owner@x.com", password: "correct-horse-battery", org_name: "Org")
     existing = Onboarding::Invite.accept!(
       token: Onboarding::Invite.create!(
@@ -76,17 +78,33 @@ class OnboardingTest < ActiveSupport::TestCase
       ).generate_token_for(:invite),
       password: "correct-horse-battery"
     )
-    invitation = Onboarding::Invite.create!(
-      tenant: org.tenant, email: existing.email_address, role_code: "accountant", invited_by: org.user
-    )
-
-    Onboarding::Invite.accept!(
-      token: invitation.generate_token_for(:invite),
-      password: "correct-horse-battery"
-    )
-
+    error = assert_raises(ActiveRecord::RecordInvalid) do
+      Onboarding::Invite.create!(
+        tenant: org.tenant, email: existing.email_address, role_code: "accountant", invited_by: org.user
+      )
+    end
+    assert_includes error.record.errors[:email], "already belongs to this company; change their role instead"
     assignment = UserOfficeRole.find_by!(user: existing, tenant_id: org.tenant.id, office_id: nil)
-    assert_equal "accountant", assignment.role_template.code
+    assert_equal "viewer", assignment.role_template.code
+  end
+
+  test "an invitation cannot mutate a member who joined after the invitation was issued" do
+    org = Onboarding::SignUp.call(email: "race-owner@x.com", password: "correct-horse-battery", org_name: "Race Org")
+    user = User.create!(email_address: "race-member@x.com", password: "correct-horse-battery")
+    invitation = Onboarding::Invite.create!(
+      tenant: org.tenant, email: user.email_address, role_code: "accountant", invited_by: org.user
+    )
+    Membership.create!(tenant: org.tenant, user: user)
+    UserOfficeRole.create!(tenant_id: org.tenant.id, user: user, office_id: nil,
+      role_template: Rbac::Presets.role_for(org.tenant, "viewer"))
+
+    assert_raises(Onboarding::Invite::AlreadyMember) do
+      Onboarding::Invite.accept!(
+        token: invitation.generate_token_for(:invite), password: "correct-horse-battery"
+      )
+    end
+    assert_equal "viewer", user.user_office_roles.find_by!(tenant_id: org.tenant.id).role_template.code
+    assert invitation.reload.pending?
   end
 
   test "only one pending invitation can exist for an email in a tenant" do
@@ -101,5 +119,19 @@ class OnboardingTest < ActiveSupport::TestCase
       )
     end
     assert_includes error.record.errors.full_messages, "Email already has a pending invitation"
+  end
+
+  test "users and invitations share a bounded server-side email policy" do
+    invalid_user = User.new(email_address: "not-an-email", password: "correct-horse-battery")
+    refute invalid_user.valid?
+    assert_includes invalid_user.errors[:email_address], "is not a valid email address"
+
+    org = Onboarding::SignUp.call(email: "email-owner@x.com", password: "correct-horse-battery", org_name: "Email Org")
+    invitation = Invitation.new(
+      tenant: org.tenant, invited_by: org.user, role_code: "viewer",
+      email: "a@#{'b' * 250}.com"
+    )
+    refute invitation.valid?
+    assert invitation.errors[:email].any? { |message| message.include?("too long") }
   end
 end

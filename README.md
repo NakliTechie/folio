@@ -135,16 +135,31 @@ engine logic, surfaced in Folio per-office / consolidated. Build once in the sha
 
 ## 12. Performance baseline
 
-Run `bin/performance-baseline` to create, post, report on, verify, and rebuild a realistic isolated
-tenant. The generated rows are rolled back, and the command prints machine-readable JSON. Adjust
-volume with `FOLIO_PERF_ENTRIES` and repetitions with `FOLIO_PERF_REPORT_RUNS`. Optional median
-budgets use names from the JSON, such as `FOLIO_PERF_BUDGET_REPORTS_DAY_BOOK_MS=500`.
+`bin/performance-baseline` is a journal-only rollback microbenchmark. It is useful for local
+comparisons, but deliberately excludes transaction commit/fsync cost and is not a production-load
+claim. `bin/release-baseline` instead commits a mixed workload of journals, GST invoices, purchase
+bills, receipts, and payments, retaining the generated tenant for inspection. It refuses to run
+unless the database name contains `performance` or `release_baseline` and
+`FOLIO_PERF_COMMITTED_CONFIRM` exactly matches that name.
+
+Both modes fail unless the event chain verifies and the semantic projection plus all measured
+reports are identical after rebuild. Adjust volume with `FOLIO_PERF_ENTRIES` and repetitions with
+`FOLIO_PERF_REPORT_RUNS`; optional median budgets use names from the JSON, such as
+`FOLIO_PERF_BUDGET_REPORTS_DAY_BOOK_MS=500`.
+
+```sh
+createdb folio_release_baseline_YYYYMMDD
+DATABASE_URL=postgresql:///folio_release_baseline_YYYYMMDD bin/rails db:prepare
+DATABASE_URL=postgresql:///folio_release_baseline_YYYYMMDD \
+  FOLIO_PERF_COMMITTED_CONFIRM=folio_release_baseline_YYYYMMDD \
+  FOLIO_PERF_ENTRIES=250 bin/release-baseline
+```
 
 ## 13. Product status and roadmap
 
 The current checkpoint includes the governed ledger, India B2B sales/purchases and linked supplier
 credits and debits,
-cash settlement/correction, current-state ageing and party ledgers, GST preparation/day book,
+cash settlement/correction plus customer/vendor credit netting and refunds, current-state ageing and party ledgers, GST preparation/day book,
 period controls, tenant-wide RBAC, replay recovery, and browser/API flows. The project planning
 workspace maintains the executable sequence and explicit deferrals: TDS, full-suite accounting,
 multi-office/multi-country enterprise depth, the complete `.khata` bridge, and production launch.
@@ -162,6 +177,11 @@ multi-office/multi-country enterprise depth, the complete `.khata` bridge, and p
 Production boots only with an explicit public host, sender, and SMTP account; placeholder delivery
 is not accepted. Configure these environment variables through the deployment secret store:
 
+- One Rails signing strategy: `RAILS_MASTER_KEY` for encrypted credentials containing
+  `secret_key_base`, or a generated `SECRET_KEY_BASE`. Never reuse development/test values.
+- Database topology: either `DATABASE_URL` and `QUEUE_DATABASE_URL`, or
+  `FOLIO_DATABASE_PASSWORD` with the configured `folio_production` and `folio_production_queue`
+  databases/users. The web and worker processes need the same signing secret.
 - `FOLIO_APP_HOST` — public hostname only, without a scheme.
 - `FOLIO_MAIL_FROM` — verified sender address.
 - `FOLIO_SMTP_ADDRESS`, `FOLIO_SMTP_USERNAME`, `FOLIO_SMTP_PASSWORD` — provider connection.
@@ -171,7 +191,26 @@ is not accepted. Configure these environment variables through the deployment se
 
 Production forces HTTPS/HSTS and secure cookies behind its trusted TLS proxy. Mail jobs use the
 durable Solid Queue database; run `bin/jobs` as a worker, or set `SOLID_QUEUE_IN_PUMA=1` for a
-single-server deployment. Prepare the primary and queue databases before booting the app.
+single-server deployment. SMTP submission requires STARTTLS and peer verification; a relay that
+does not advertise STARTTLS fails before authentication.
+
+Folio does not currently ship an attachment surface or a shared Rails cache. Active Storage and
+unused Solid Cache scaffolding are intentionally absent. Before a multi-process launch, choose and
+verify the shared rate-limit/cache topology recorded in the roadmap decision queue.
+
+Prepare and smoke-test all databases before booting the web or worker processes:
+
+```sh
+RAILS_ENV=production bin/rails db:prepare
+RAILS_ENV=production bin/rails runner 'puts Rails.application.config.x.mail_from'
+RAILS_ENV=production bin/rails runner 'abort "database unavailable" unless LedgerEvent.limit(1).count >= 0'
+```
+
+Configure the reverse proxy/access logger to omit query strings or redact the `token` parameter.
+Rails filters token query parameters, and verification/invitation/reset tokens are deliberately no
+longer embedded in path segments, but an upstream proxy must apply the same rule. Start the web
+process only after `db:prepare`; start `bin/jobs`, then exercise `/up`, signup, invitation, password
+reset, and one worker restart against the deployed mail provider.
 
 ---
 

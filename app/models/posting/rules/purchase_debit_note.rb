@@ -25,6 +25,9 @@ module Posting
           if document.external_reference.blank?
             raise Documents::InvalidDocument, "supplier debit-note number is missing"
           end
+          if document.narration.blank? || document.narration.length > 200
+            raise Documents::InvalidDocument, "supplier-debit explanation is missing or too long"
+          end
           unless document.document_date >= source.document_date && header_matches_source?(document, source)
             raise Documents::InvalidDocument, "supplier-debit identity does not match its purchase bill"
           end

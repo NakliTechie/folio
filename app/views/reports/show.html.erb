@@ -9,23 +9,40 @@
       <p>Posted ledger activity for <%= Current.tenant.name %>, shown in <%= Current.tenant.functional_currency %>.</p>
     </div>
     <% if permitted?("documents.post") %>
-      <%= link_to "Record transaction", new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
+      <%= link_to "Record business event", new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
     <% end %>
   </header>
+
+  <% if @plain_outcome %>
+    <section class="report-callout" role="status">
+      <span aria-hidden="true">✓</span>
+      <p>
+        <% if @plain_outcome[:kind] == "owner_deposit" %>
+          <strong><%= @plain_outcome[:debit_account].name %> increased by <%= money_amount(@plain_outcome[:amount_minor]) %>;</strong>
+          <%= @plain_outcome[:credit_account].name %> increased by the same amount.
+        <% else %>
+          <strong><%= @plain_outcome[:debit_account].name %> increased by <%= money_amount(@plain_outcome[:amount_minor]) %>;</strong>
+          <%= @plain_outcome[:credit_account].name %> decreased by the same amount.
+        <% end %>
+        The affected accounts are highlighted below.
+      </p>
+    </section>
+  <% end %>
 
   <% if @trial_balance.any? %>
     <section class="summary-strip" aria-label="Account type totals">
       <% @account_type_totals.each do |row| %>
         <div>
           <span><%= row["type"].humanize %></span>
-          <strong><%= money_amount(row["debit"] - row["credit"]) %></strong>
-          <small>Net balance</small>
+          <% signed_balance = row["debit"] - row["credit"] %>
+          <strong><%= money_amount(signed_balance.abs) %></strong>
+          <small><%= signed_balance.negative? ? "Credit balance" : signed_balance.positive? ? "Debit balance" : "Zero balance" %></small>
         </div>
       <% end %>
     </section>
 
     <section class="panel panel--table">
-      <% if @highlight_codes.any? %>
+      <% if @highlight_codes.any? && @plain_outcome.nil? %>
         <div class="report-callout" role="status">
           <span aria-hidden="true">✓</span>
           <p><strong>Voucher posted.</strong> The affected accounts are highlighted below.</p>
@@ -64,7 +81,7 @@
       <h2>Your trial balance is ready for its first entry</h2>
       <p>The starter chart is set up. Post a balanced journal voucher to see account balances here.</p>
       <% if permitted?("documents.post") %>
-        <%= link_to "Record your first transaction", new_journal_voucher_path(tenant_route_options),
+        <%= link_to "Choose your first business event", new_journal_voucher_path(tenant_route_options),
           class: "button button--primary" %>
       <% end %>
     </section>

@@ -25,7 +25,7 @@ Rails.application.routes.draw do
     end
   end
   resource :business_profile, path: "company-details", only: %i[edit update]
-  resources :journal_vouchers, path: "transactions", only: %i[index show new create] do
+  resources :journal_vouchers, path: "transactions", only: %i[index show new create edit update destroy] do
     member do
       post :post
       post :reverse
@@ -50,16 +50,16 @@ Rails.application.routes.draw do
       post :post
     end
   end
-  resources :purchase_bills, path: "purchase-bills", only: %i[index show new create] do
+  resources :purchase_bills, path: "purchase-bills", only: %i[index show new create destroy] do
     member do
       post :post
       post :reverse
     end
   end
-  resources :purchase_credit_notes, path: "purchase-credit-notes", only: %i[index show new create] do
+  resources :purchase_credit_notes, path: "purchase-credit-notes", only: %i[index show new create destroy] do
     post :post, on: :member
   end
-  resources :purchase_debit_notes, path: "purchase-debit-notes", only: %i[index show new create] do
+  resources :purchase_debit_notes, path: "purchase-debit-notes", only: %i[index show new create destroy] do
     post :post, on: :member
   end
   resources :settlements, path: "cash", only: %i[index show new create] do
@@ -71,6 +71,8 @@ Rails.application.routes.draw do
     as: :new_settlement_reallocation
   post "cash/:id/allocations/:allocation_id/reallocate", to: "settlements#reallocate",
     as: :settlement_reallocation
+  post "open-item-credits/net", to: "open_item_credits#net", as: :net_open_item_credit
+  post "open-item-credits/refund", to: "open_item_credits#refund", as: :refund_open_item_credit
   get "reports/profit-and-loss", to: "reports#profit_and_loss", as: :profit_and_loss_report
   get "reports/balance-sheet", to: "reports#balance_sheet", as: :balance_sheet_report
   get "reports/aged-receivables", to: "reports#aged_receivables", as: :aged_receivables_report
@@ -81,6 +83,7 @@ Rails.application.routes.draw do
   resource :period_close, path: "period-close", only: %i[show update]
   resource :reports, only: :show, controller: :reports
   resource :team, only: :show, controller: :team
+  patch "team/roles/:user_id", to: "team#update_role", as: :update_team_role
   namespace :api do
     namespace :v1 do
       get "tenant", to: "tenants#show"
@@ -116,16 +119,16 @@ Rails.application.routes.draw do
       resources :credit_notes, only: %i[index show create] do
         post :post, on: :member
       end
-      resources :purchase_bills, only: %i[index show create] do
+      resources :purchase_bills, only: %i[index show create destroy] do
         member do
           post :post
           post :reverse
         end
       end
-      resources :purchase_credit_notes, only: %i[index show create] do
+      resources :purchase_credit_notes, only: %i[index show create destroy] do
         post :post, on: :member
       end
-      resources :purchase_debit_notes, only: %i[index show create] do
+      resources :purchase_debit_notes, only: %i[index show create destroy] do
         post :post, on: :member
       end
       resources :settlements, only: %i[index show create] do
@@ -133,20 +136,22 @@ Rails.application.routes.draw do
       end
       post "settlements/:id/allocations/:allocation_id/reset", to: "settlements#reset"
       post "settlements/:id/allocations/:allocation_id/reallocate", to: "settlements#reallocate"
+      post "open_item_credits/net", to: "open_item_credits#net"
+      post "open_item_credits/refund", to: "open_item_credits#refund"
     end
   end
   resource :registration, only: %i[new create]
-  get "verify/:token", to: "registrations#verify", as: :verify_email
+  get "verify", to: "registrations#verify", as: :verify_email
   resource :verification_delivery, only: :create
   resources :invitations, only: :create do
     post :resend, on: :member
   end
-  get "invitations/:token/accept", to: "invitations#accept", as: :accept_invitation
-  post "invitations/:token/accept", to: "invitations#do_accept"
+  get "invitations/accept", to: "invitations#accept", as: :accept_invitation
+  post "invitations/accept", to: "invitations#do_accept"
   resource :security, only: :show, controller: :security
   resources :active_sessions, only: :destroy
   resource :session
-  resources :passwords, param: :token, only: %i[new create edit update]
+  resource :password, only: %i[new create edit update]
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.

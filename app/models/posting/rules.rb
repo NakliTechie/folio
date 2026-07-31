@@ -15,7 +15,8 @@ module Posting
       "purchase_bill" => "Posting::Rules::PurchaseBill",
       "purchase_credit_note" => "Posting::Rules::PurchaseCreditNote",
       "purchase_debit_note" => "Posting::Rules::PurchaseDebitNote",
-      "settlement" => "Posting::Rules::Settlement"
+      "settlement" => "Posting::Rules::Settlement",
+      "open_item_refund" => "Posting::Rules::OpenItemRefund"
     }.freeze
 
     def self.for(identifier)

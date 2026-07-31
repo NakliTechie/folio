@@ -95,9 +95,10 @@ class PartiesController < BrowserController
 
   def fiscal_year_start
     entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
-    return Date.new(Date.current.year, 1, 1) unless entity.fiscal_year_variant == "IN_APR_MAR"
+    today = business_date
+    return Date.new(today.year, 1, 1) unless entity.fiscal_year_variant == "IN_APR_MAR"
 
-    Date.new(Date.current.month >= 4 ? Date.current.year : Date.current.year - 1, 4, 1)
+    Date.new(today.month >= 4 ? today.year : today.year - 1, 4, 1)
   end
 
   def party_params

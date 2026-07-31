@@ -16,9 +16,10 @@ module Posting
 
         def validate_document!(document)
           source = document.credit_note_for
-          unless source && source.tenant_id == document.tenant_id && source.doc_type == "PB" && source.state == "posted"
+          unless source && source.tenant_id == document.tenant_id && %w[PB PD].include?(source.doc_type) &&
+                 source.state == "posted"
             raise Documents::InvalidDocument,
-              "a supplier credit note needs a posted purchase bill from the same company"
+              "a supplier credit note needs a posted purchase bill or supplier debit from the same company"
           end
           unless PurchaseCreditNotes::BuildDraft::REASONS.include?(document.reason_code)
             raise Documents::InvalidDocument, "supplier-credit reason is unavailable"
@@ -54,7 +55,8 @@ module Posting
             due_date: document.document_date,
             extra: {
               "partySnapshot" => document.party_snapshot,
-              "sourcePurchaseBillId" => document.credit_note_for_document_id,
+              "sourcePurchaseDocumentId" => document.credit_note_for_document_id,
+              "sourcePurchaseDocumentType" => document.credit_note_for.doc_type,
               "supplierCreditNoteNumber" => document.external_reference
             },
             amounts: [ amount.call(document.total_minor) ]
@@ -133,7 +135,7 @@ module Posting
             mode: applied == credit_outstanding ? :full : :partial,
             clearing_entry: entry,
             actor: actor,
-            reason: "applied to purchase bill #{document.credit_note_for_document_id}"
+            reason: "applied to purchase document #{document.credit_note_for_document_id}"
           )
         end
 

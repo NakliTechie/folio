@@ -155,6 +155,22 @@ class PurchaseBillTest < ActiveSupport::TestCase
     assert_equal reversal_entry.id, payable.cleared_by_entry_id
   end
 
+  test "a fully settled bill cannot reverse into hidden payables" do
+    bill = build_bill
+    entry = Documents::Post.call(bill, actor: "u:#{@org.user.id}")
+    payable = entry.entry_lines.find_by!(account_code: "2000")
+    Posting::Clearing.clear!(
+      item: payable, amount_minor: 11_800, cleared_on: BILL_DATE,
+      mode: :full, actor: "u:#{@org.user.id}"
+    )
+
+    refute bill.reload.reversible?
+    assert_raises(Documents::Reverse::NotReversible) do
+      Documents::Reverse.call(bill, actor: "u:#{@org.user.id}")
+    end
+    assert_equal "posted", bill.reload.state
+  end
+
   test "bills require a registered vendor and a supplier invoice number" do
     error = assert_raises(PurchaseBills::InvalidBill) { build_bill(external_reference: "") }
     assert_match(/supplier invoice number is required/, error.message)

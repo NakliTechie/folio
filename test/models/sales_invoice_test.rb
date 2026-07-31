@@ -250,6 +250,23 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     assert_equal documents_before, Document.where(tenant_id: @org.tenant.id).count
   end
 
+  test "a fully settled invoice cannot reverse into hidden receivables" do
+    invoice = build_invoice
+    entry = Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+    receivable = entry.entry_lines.find_by!(account_code: "1200")
+    Posting::Clearing.clear!(
+      item: receivable, amount_minor: 11_800, cleared_on: INVOICE_DATE,
+      mode: :full, actor: "u:#{@org.user.id}"
+    )
+
+    refute invoice.reload.reversible?
+    assert_raises(Documents::Reverse::NotReversible) do
+      Documents::Reverse.call(invoice, actor: "u:#{@org.user.id}")
+    end
+    assert_equal "posted", invoice.reload.state
+    assert_equal 1, Document.where(tenant_id: @org.tenant.id, doc_type: "SI").count
+  end
+
   private
 
   def build_invoice(place_of_supply_state_code: "27")

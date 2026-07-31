@@ -5,7 +5,7 @@
     <p class="eyebrow">Account recovery</p>
     <h1>Forgot your password?</h1>
     <p>Enter your Folio email and we’ll send a time-limited reset link if the account exists.</p>
-    <%= form_with url: passwords_path, class: "stacked-form" do |form| %>
+    <%= form_with url: password_path, class: "stacked-form" do |form| %>
       <div class="form-group">
         <%= form.label :email_address, "Email" %>
         <%= form.email_field :email_address, required: true, autofocus: true,

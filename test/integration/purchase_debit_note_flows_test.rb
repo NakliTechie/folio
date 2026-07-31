@@ -71,7 +71,9 @@ class PurchaseDebitNoteFlowsTest < ActionDispatch::IntegrationTest
     assert_select "h1", "Draft supplier debit"
     assert_select "th", text: /IGST input-tax increase/
     assert_select "td", text: /INR 29\.50/
+    assert_select "dd", text: "Quantity omitted from supplier bill"
     assert_select "button", text: "Post supplier debit"
+    assert_select "button", text: "Discard draft"
 
     post post_purchase_debit_note_path(note)
     assert_redirected_to purchase_debit_note_path(note, tenant_id: @org.tenant.id)
@@ -84,6 +86,9 @@ class PurchaseDebitNoteFlowsTest < ActionDispatch::IntegrationTest
     assert_select "td", text: /PD\/26-27\/00001/
     assert_select "td", text: /V-DN-001/
     assert_select "td", text: /Acme Vendor/
+
+    get purchase_debit_note_path(note)
+    assert_select "a", text: "Correct with supplier credit"
   end
 
   test "operator creates and posts supplier debits through the JSON API" do
@@ -97,12 +102,42 @@ class PurchaseDebitNoteFlowsTest < ActionDispatch::IntegrationTest
     assert_equal({ "igst" => 450 }, json.fetch("tax_breakdown"))
     assert_equal "V-DN-001", json.fetch("supplier_debit_note_number")
     assert_equal @bill.id, json.fetch("source_purchase_bill_id")
+    assert_equal "Quantity omitted from supplier bill", json.fetch("explanation")
 
     post "/api/v1/purchase_debit_notes/#{json.fetch("id")}/post"
     assert_response :success
     posted = JSON.parse(response.body).fetch("purchase_debit_note")
     assert_equal "PD/26-27/00001", posted.fetch("document_number")
     assert_equal "operator", RoleTemplate.find(Entry.find_by!(document_id: json.fetch("id")).role_template_id).code
+  end
+
+  test "a draft can be discarded and its supplier reference reused" do
+    note = PurchaseDebitNotes::BuildDraft.call(tenant: @org.tenant, **api_note_params)
+
+    assert_difference -> { Document.where(id: note.id).count }, -1 do
+      delete purchase_debit_note_path(note)
+    end
+    assert_redirected_to purchase_debit_notes_path(tenant_id: @org.tenant.id)
+
+    replacement = PurchaseDebitNotes::BuildDraft.call(tenant: @org.tenant, **api_note_params)
+    assert_equal "V-DN-001", replacement.external_reference
+  end
+
+  test "tampered source recovery redirects safely and non-finite API input is a validation error" do
+    assert_no_difference "Document.count" do
+      post purchase_debit_notes_path, params: {
+        purchase_debit_note: note_params.merge(purchase_bill_id: "missing")
+      }
+    end
+    assert_redirected_to purchase_bills_path(tenant_id: @org.tenant.id)
+
+    assert_no_difference "Document.count" do
+      post "/api/v1/purchase_debit_notes", params: api_note_params.merge(
+        lines: [ { document_line_id: @bill.document_lines.first.id, quantity: "Infinity" } ]
+      )
+    end
+    assert_response :unprocessable_entity
+    assert_match(/finite/, JSON.parse(response.body).fetch("error"))
   end
 
   test "viewer may inspect supplier debits but cannot create them and tenant access is isolated" do
@@ -141,8 +176,8 @@ class PurchaseDebitNoteFlowsTest < ActionDispatch::IntegrationTest
       purchase_bill_id: @bill.id,
       document_date: "2026-08-01",
       external_reference: "V-DN-001",
-      reason_code: "additional_charge",
-      narration: "Additional service charge",
+      reason_code: "quantity_underbilling",
+      narration: "Quantity omitted from supplier bill",
       lines: [ { document_line_id: @bill.document_lines.first.id, quantity: "0.5" } ]
     }
   end

@@ -51,21 +51,38 @@ module Parties
 
       values = attributes.to_h.symbolize_keys
       identifier = values[:identifier].to_s.strip
-      current = party.party_tax_registrations.order(valid_from: :desc).first
+      registrations = party.party_tax_registrations.where(kind: values[:kind].presence || "GSTIN")
+      current = registrations.order(valid_from: :desc, id: :desc).first
       if identifier.blank?
-        current&.update!(active: false) if current&.active?
+        registrations.active.update_all(active: false, updated_at: Time.current)
         return current
       end
 
       valid_from = values[:valid_from].presence
-      registration = party.party_tax_registrations.find_or_initialize_by(
+      registration = registrations.find_or_initialize_by(
         tenant_id: party.tenant_id,
-        kind: values[:kind].presence || "GSTIN",
         identifier: identifier,
         valid_from: valid_from
       )
       registration.assign_attributes(values.slice(:kind, :identifier, :valid_from, :valid_to, :active))
-      registration.active = true if registration.active.nil?
+      registration.active = true
+
+      if registration.valid_from.present?
+        other_active = registrations.active.where.not(id: registration.id)
+        other_active.where(valid_from: registration.valid_from).update_all(active: false, updated_at: Time.current)
+
+        other_active.where("valid_from < ?", registration.valid_from)
+          .where("valid_to IS NULL OR valid_to >= ?", registration.valid_from)
+          .find_each do |prior|
+            prior.update!(valid_to: registration.valid_from - 1.day)
+          end
+
+        next_start = other_active.where("valid_from > ?", registration.valid_from).minimum(:valid_from)
+        if next_start && (registration.valid_to.nil? || registration.valid_to >= next_start)
+          registration.valid_to = next_start - 1.day
+        end
+      end
+
       registration.save!
       if party.country_code == "IN" && party.state_code.present? && party.state_code != registration.state_code
         party.errors.add(:state_code, "must match the GSTIN state code #{registration.state_code}")

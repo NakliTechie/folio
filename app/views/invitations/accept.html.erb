@@ -6,7 +6,8 @@
     <p class="eyebrow">Team invitation</p>
     <h1>Join <%= @invitation.tenant.name %></h1>
     <p>You were invited as <strong><%= @invitation.role_code.humanize %></strong> using <%= @invitation.email %>.</p>
-    <%= form_with url: accept_invitation_path(@token), method: :post, class: "stacked-form" do |f| %>
+    <%= form_with url: accept_invitation_path, method: :post, class: "stacked-form" do |f| %>
+      <%= f.hidden_field :token, value: @token %>
       <% if @existing_account && Current.user&.email_address == @invitation.email %>
         <div class="inline-note"><p>You’re already signed in with the invited account.</p></div>
       <% else %>

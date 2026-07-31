@@ -14,7 +14,7 @@ module Api
       end
 
       def profit_and_loss
-        to_date = params[:to].present? ? Date.iso8601(params[:to]) : Date.current
+        to_date = params[:to].present? ? Date.iso8601(params[:to]) : business_date
         from_date = params[:from].present? ? Date.iso8601(params[:from]) : fiscal_year_start(to_date)
         raise ArgumentError, "from must be on or before to" if from_date > to_date
 
@@ -26,7 +26,7 @@ module Api
       end
 
       def balance_sheet
-        as_of = params[:as_of].present? ? Date.iso8601(params[:as_of]) : Date.current
+        as_of = params[:as_of].present? ? Date.iso8601(params[:as_of]) : business_date
         render json: { balance_sheet: Reports.balance_sheet(Current.tenant.id, as_of: as_of) }
       rescue Date::Error => e
         render_error(e.message, :unprocessable_entity)
@@ -49,7 +49,7 @@ module Api
       end
 
       def day_book
-        to_date = report_date(:to, Date.current)
+        to_date = report_date(:to, business_date)
         from_date = report_date(:from, to_date.beginning_of_month)
         render json: {
           day_book: Reports.day_book(Current.tenant.id, from_date: from_date, to_date: to_date)
@@ -59,7 +59,7 @@ module Api
       end
 
       def gst_summary
-        to_date = report_date(:to, Date.current)
+        to_date = report_date(:to, business_date)
         from_date = report_date(:from, to_date.beginning_of_month)
         raise ArgumentError, "tax_registration_id is required" if params[:tax_registration_id].blank?
 
@@ -87,7 +87,7 @@ module Api
       end
 
       def render_aged_open_items(role)
-        aged_to = params[:aged_to].present? ? Date.iso8601(params[:aged_to]) : Date.current
+        aged_to = params[:aged_to].present? ? Date.iso8601(params[:aged_to]) : business_date
         render json: {
           aged_open_items: Reports.aged_open_items(Current.tenant.id, role: role, aged_to: aged_to)
         }

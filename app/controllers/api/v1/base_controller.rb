@@ -53,6 +53,10 @@ module Api
         Current.session.user
       end
 
+      def business_date
+        Current.tenant.business_date
+      end
+
       # Guard a write action with a capability; halts with 403 if not permitted.
       def require_capability!(capability)
         return true if Authorization.permits?(user: current_user, tenant_id: Current.tenant.id, capability: capability)

@@ -8,7 +8,7 @@
       <p class="lede">Signed in as <%= Current.user.email_address %>. Keep the setup moving or pick up where your team left off.</p>
       <div class="action-row">
         <% if permitted?("documents.post") %>
-          <%= link_to @journal_posted_count.zero? ? "Record your first transaction" : "Record a transaction",
+          <%= link_to @journal_posted_count.zero? ? "Choose your first business event" : "Record a business event",
             new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
         <% end %>
         <% if permitted?("reports.read") %>
@@ -57,13 +57,15 @@
         </li>
         <li class="checklist__item checklist__item--done">
           <span aria-hidden="true">✓</span>
-          <div><strong>Chart ready</strong><small><%= @accounts_count %> starter accounts</small></div>
+          <div>
+            <strong>Starter chart created</strong><small><%= @accounts_count %> accounts grouped below for review</small>
+          </div>
         </li>
         <li class="checklist__item <%= "checklist__item--done" if @journal_posted_count.positive? %>">
           <span aria-hidden="true"><%= @journal_posted_count.positive? ? "✓" : "3" %></span>
           <div>
-            <strong>Post a journal voucher</strong>
-            <small><%= @journal_posted_count.positive? ? "Your ledger is active" : "Preview the balance before anything posts" %></small>
+            <strong>Record a business event</strong>
+            <small><%= @journal_posted_count.positive? ? "Your ledger is active" : "Owner deposit is the recommended first step" %></small>
           </div>
         </li>
         <li class="checklist__item <%= "checklist__item--done" if Current.user.verified? %>">
@@ -71,6 +73,16 @@
           <div><strong>Verify your email</strong><small>Keep account recovery dependable</small></div>
         </li>
       </ol>
+      <details class="starter-chart">
+        <summary>Review your starter chart</summary>
+        <% @accounts_by_type.each do |type, accounts| %>
+          <div class="starter-chart__group">
+            <strong><%= type.humanize %></strong>
+            <span><%= accounts.map { |account| "#{account.code} · #{account.name}" }.join(", ") %></span>
+          </div>
+        <% end %>
+        <%= link_to "Open full chart", accounts_path(tenant_route_options), class: "text-link" %>
+      </details>
     </section>
 
     <section class="panel">
@@ -99,7 +111,7 @@
         <div class="empty-state empty-state--compact">
           <span class="empty-state__icon" aria-hidden="true">↗</span>
           <h3>No accounting documents yet</h3>
-          <p>Your first journal or opening-balance document will appear here and feed the reports.</p>
+          <p>Your first owner deposit, expense, journal, or opening balance will appear here and feed the reports.</p>
         </div>
       <% end %>
     </section>
@@ -127,11 +139,13 @@
         <span class="<%= status_class(Current.user.verification_delivery_state) %>">
           <%= delivery_state_label(Current.user.verification_delivery_state) %>
         </span>
-        <%= button_to Current.user.verification_delivery_state == "not_sent" ? "Send verification" : "Resend verification",
-          verification_delivery_path,
-          method: :post,
-          params: tenant_route_options,
-          class: "button button--secondary" %>
+        <% if Current.user.verification_delivery_retryable? %>
+          <%= button_to Current.user.verification_delivery_state == "not_sent" ? "Send verification" : "Resend verification",
+            verification_delivery_path,
+            method: :post,
+            params: tenant_route_options,
+            class: "button button--secondary" %>
+        <% end %>
       </div>
     </section>
   <% end %>

@@ -85,9 +85,10 @@ class TaxRegistrationsController < BrowserController
   end
 
   def fiscal_year_start
-    return Date.new(Date.current.year, 1, 1) unless primary_entity.fiscal_year_variant == "IN_APR_MAR"
+    today = business_date
+    return Date.new(today.year, 1, 1) unless primary_entity.fiscal_year_variant == "IN_APR_MAR"
 
-    Date.new(Date.current.month >= 4 ? Date.current.year : Date.current.year - 1, 4, 1)
+    Date.new(today.month >= 4 ? today.year : today.year - 1, 4, 1)
   end
 
   def change_active!(active)

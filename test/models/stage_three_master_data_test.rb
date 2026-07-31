@@ -145,6 +145,80 @@ class StageThreeMasterDataTest < ActiveSupport::TestCase
     assert_nil party.reload.state_code
   end
 
+  test "party GSTIN rollover closes the prior period and never resurrects it after expiry" do
+    party = Parties::Manage.create!(
+      tenant: @org.tenant,
+      attributes: { party_number: "GST-ROLL", name: "GST Rollover", state_code: "29", country_code: "IN" },
+      roles: %w[customer],
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "29AAAAA0300L1Z8", valid_from: Date.new(2026, 4, 1)
+      },
+      actor: @org.user
+    )
+    prior = party.party_tax_registrations.first
+
+    Parties::Manage.update!(
+      party: party,
+      attributes: { state_code: "29" },
+      roles: party.role_codes,
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "29ABCDE1234F1ZW",
+        valid_from: Date.new(2027, 4, 1), valid_to: Date.new(2028, 3, 31)
+      },
+      actor: @org.user
+    )
+
+    assert_equal Date.new(2027, 3, 31), prior.reload.valid_to
+    assert_empty party.party_tax_registrations.in_force_on(Date.new(2028, 4, 1))
+    assert_equal "29ABCDE1234F1ZW",
+      party.party_tax_registrations.in_force_on(Date.new(2027, 7, 1)).sole.identifier
+  end
+
+  test "clearing a party GSTIN disables every historical active period" do
+    party = Parties::Manage.create!(
+      tenant: @org.tenant,
+      attributes: { party_number: "GST-CLEAR", name: "GST Clear", state_code: "29", country_code: "IN" },
+      roles: %w[vendor],
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "29AAAAA0300L1Z8", valid_from: Date.new(2026, 4, 1)
+      },
+      actor: @org.user
+    )
+    Parties::Manage.update!(
+      party: party, attributes: { state_code: "29" }, roles: party.role_codes,
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "29ABCDE1234F1ZW", valid_from: Date.new(2027, 4, 1)
+      }, actor: @org.user
+    )
+
+    Parties::Manage.update!(
+      party: party, attributes: { state_code: "29" }, roles: party.role_codes,
+      tax_registration_attributes: { kind: "GSTIN", identifier: "" }, actor: @org.user
+    )
+
+    assert_empty party.party_tax_registrations.active
+    assert_empty party.party_tax_registrations.in_force_on(Date.new(2026, 7, 1))
+    assert_empty party.party_tax_registrations.in_force_on(Date.new(2028, 7, 1))
+  end
+
+  test "party GSTIN active periods cannot overlap outside the managed service" do
+    party = Parties::Manage.create!(
+      tenant: @org.tenant,
+      attributes: { party_number: "GST-OVER", name: "GST Overlap" },
+      roles: %w[customer], actor: @org.user
+    )
+    party.party_tax_registrations.create!(
+      tenant_id: @org.tenant.id, kind: "GSTIN", identifier: "29AAAAA0300L1Z8",
+      valid_from: Date.new(2026, 4, 1)
+    )
+    overlapping = party.party_tax_registrations.new(
+      tenant_id: @org.tenant.id, kind: "GSTIN", identifier: "29ABCDE1234F1ZW",
+      valid_from: Date.new(2027, 4, 1)
+    )
+    refute overlapping.valid?
+    assert_includes overlapping.errors[:base], "GST registration effective dates overlap another active registration"
+  end
+
   test "managed service catalogue entries validate tax and account determination" do
     item = Items::Manage.create!(
       tenant: @org.tenant,

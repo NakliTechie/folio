@@ -35,7 +35,7 @@ module Documents
         effective_capabilities = (Array(capabilities) + role_capabilities).uniq
         raise Posting::UnbalancedError, sim[:offenders] unless sim[:balanced]
 
-        posting = document.posting_date || document.document_date || Date.current
+        posting = document.posting_date || document.document_date || Tenant.find(document.tenant_id).business_date
         number = allocate_number(document)
         entry = Posting::PostEntry.post!(
           tenant_id: document.tenant_id, entity_id: document.entity_id, office_id: document.office_id,

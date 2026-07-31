@@ -10,6 +10,20 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: btree_gist; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION btree_gist; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';
+
+
+--
 -- Name: folio_ledger_events_append_only(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -21,6 +35,65 @@ BEGIN
     'ledger_events is append-only: % on row id=% rejected',
     TG_OP, COALESCE(OLD.id, NEW.id)
     USING ERRCODE = 'restrict_violation';
+END;
+$$;
+
+
+--
+-- Name: folio_protect_last_tenant_owner(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_protect_last_tenant_owner() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  old_was_owner boolean;
+  new_is_same_tenant_owner boolean := false;
+  another_owner_exists boolean;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM role_templates
+    WHERE id = OLD.role_template_id
+      AND tenant_id = OLD.tenant_id
+      AND code = 'owner'
+  ) AND OLD.office_id IS NULL INTO old_was_owner;
+
+  IF NOT old_was_owner THEN
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    SELECT EXISTS (
+      SELECT 1 FROM role_templates
+      WHERE id = NEW.role_template_id
+        AND tenant_id = OLD.tenant_id
+        AND code = 'owner'
+    ) AND NEW.office_id IS NULL AND NEW.tenant_id = OLD.tenant_id
+    INTO new_is_same_tenant_owner;
+  END IF;
+
+  IF new_is_same_tenant_owner THEN
+    RETURN NEW;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(OLD.tenant_id);
+  SELECT EXISTS (
+    SELECT 1
+    FROM user_office_roles assignments
+    INNER JOIN role_templates roles ON roles.id = assignments.role_template_id
+    WHERE assignments.tenant_id = OLD.tenant_id
+      AND assignments.office_id IS NULL
+      AND assignments.id <> OLD.id
+      AND roles.tenant_id = OLD.tenant_id
+      AND roles.code = 'owner'
+  ) INTO another_owner_exists;
+
+  IF NOT another_owner_exists THEN
+    RAISE EXCEPTION 'a tenant must retain at least one owner'
+      USING ERRCODE = '23514', CONSTRAINT = 'tenant_requires_owner';
+  END IF;
+
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END;
 $$;
 
@@ -288,7 +361,7 @@ CREATE TABLE public.documents (
     credit_note_for_document_id bigint,
     reason_code character varying,
     debit_note_for_document_id bigint,
-    CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying, 'price_increase'::character varying, 'additional_charge'::character varying, 'underbilling'::character varying])::text[])))),
+    CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying, 'quantity_underbilling'::character varying])::text[])))),
     CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
     CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
     CONSTRAINT chk_documents_supply_type CHECK (((supply_type IS NULL) OR ((supply_type)::text = ANY ((ARRAY['B2B'::character varying, 'B2C'::character varying])::text[]))))
@@ -1328,7 +1401,8 @@ CREATE TABLE public.tenants (
     slug character varying NOT NULL,
     functional_currency character varying(3) DEFAULT 'INR'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    time_zone character varying DEFAULT 'UTC'::character varying NOT NULL
 );
 
 
@@ -1852,6 +1926,14 @@ ALTER TABLE ONLY public.party_roles
 
 
 --
+-- Name: party_tax_registrations party_tax_registrations_no_active_overlap; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.party_tax_registrations
+    ADD CONSTRAINT party_tax_registrations_no_active_overlap EXCLUDE USING gist (party_id WITH =, kind WITH =, daterange(valid_from, COALESCE(valid_to, 'infinity'::date), '[]'::text) WITH &&) WHERE (active);
+
+
+--
 -- Name: party_tax_registrations party_tax_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2036,6 +2118,20 @@ CREATE UNIQUE INDEX idx_on_tenant_id_kind_identifier_valid_from_f473959005 ON pu
 --
 
 CREATE UNIQUE INDEX idx_party_tax_registrations_identity ON public.party_tax_registrations USING btree (tenant_id, kind, identifier, valid_from);
+
+
+--
+-- Name: idx_posting_limits_id_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_posting_limits_id_tenant ON public.posting_limits USING btree (id, tenant_id);
+
+
+--
+-- Name: idx_role_templates_id_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_role_templates_id_tenant ON public.role_templates USING btree (id, tenant_id);
 
 
 --
@@ -2620,6 +2716,13 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 
 
 --
+-- Name: user_office_roles protect_last_tenant_owner; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER protect_last_tenant_owner BEFORE DELETE OR UPDATE ON public.user_office_roles FOR EACH ROW EXECUTE FUNCTION public.folio_protect_last_tenant_owner();
+
+
+--
 -- Name: office_tax_registrations fk_rails_019bb5b0bc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2756,12 +2859,33 @@ ALTER TABLE ONLY public.financial_statement_sections
 
 
 --
+-- Name: user_office_roles fk_user_limits_same_tenant; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_office_roles
+    ADD CONSTRAINT fk_user_limits_same_tenant FOREIGN KEY (posting_limit_id, tenant_id) REFERENCES public.posting_limits(id, tenant_id);
+
+
+--
+-- Name: user_office_roles fk_user_roles_same_tenant; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_office_roles
+    ADD CONSTRAINT fk_user_roles_same_tenant FOREIGN KEY (role_template_id, tenant_id) REFERENCES public.role_templates(id, tenant_id);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801008000'),
+('20260801007000'),
+('20260801006000'),
+('20260801005000'),
+('20260801004000'),
 ('20260801003000'),
 ('20260801002000'),
 ('20260801001000'),

@@ -16,10 +16,11 @@ module Documents
         LedgerEvent.acquire_tenant_lock!(document.tenant_id)
         document.lock!
         unless document.reversible?
-          raise NotReversible, "only a posted, not-yet-reversed document can be reversed"
+          raise NotReversible,
+            "only a posted, unsettled, not-yet-reversed document can be reversed; reset settlements or use a credit note"
         end
 
-        date = on || document.posting_date || Date.current
+        date = on || document.posting_date || Tenant.find(document.tenant_id).business_date
         entity = Entity.find_by!(tenant_id: document.tenant_id, id: document.entity_id)
         rev = Document.create!(
           tenant_id: document.tenant_id, entity_id: document.entity_id, office_id: document.office_id,

@@ -6,7 +6,8 @@ module PurchaseCreditNotes
 
     module_function
 
-    def call(tenant:, purchase_bill_id:, document_date:, external_reference:, reason_code:, lines:, narration: nil)
+    def call(tenant:, purchase_bill_id: nil, source_document_id: nil, document_date:, external_reference:,
+             reason_code:, lines:, narration: nil)
       date = parse_date!(document_date)
       reason = reason_code.to_s
       raise InvalidCreditNote, "choose a supported supplier-credit reason" unless REASONS.include?(reason)
@@ -15,21 +16,23 @@ module PurchaseCreditNotes
         raise InvalidCreditNote, "supplier credit-note number is required and may be no more than 100 characters"
       end
 
-      bill = Document.includes(:document_lines).where(
-        tenant_id: tenant.id, doc_type: "PB", state: "posted"
-      ).find(purchase_bill_id)
-      raise InvalidCreditNote, "supplier credit-note date cannot precede the purchase bill" if date < bill.document_date
+      source = Document.includes(:document_lines).where(
+        tenant_id: tenant.id, doc_type: %w[PB PD], state: "posted"
+      ).find(source_document_id.presence || purchase_bill_id)
+      if date < source.document_date
+        raise InvalidCreditNote, "supplier credit-note date cannot precede its source purchase document"
+      end
       if Document.where(
-        tenant_id: tenant.id, party_id: bill.party_id, doc_type: "PC", external_reference: supplier_reference
+        tenant_id: tenant.id, party_id: source.party_id, doc_type: "PC", external_reference: supplier_reference
       ).exists?
         raise InvalidCreditNote, "this supplier credit-note number is already recorded for the vendor"
       end
 
-      entity = Entity.find_by!(tenant_id: tenant.id, id: bill.entity_id)
+      entity = Entity.find_by!(tenant_id: tenant.id, id: source.entity_id)
       type = DocumentType.where(tenant_id: tenant.id, active: true).find_by!(
         code: "PC", posting_rule: "purchase_credit_note"
       )
-      normalized_lines = normalize_lines!(bill, lines)
+      normalized_lines = normalize_lines!(source, lines)
       subtotal = normalized_lines.sum { |line| line.fetch(:taxable_minor) }
       breakdown = normalized_lines.each_with_object(Hash.new(0)) do |line, result|
         line.fetch(:tax_components).each { |component, value| result[component] += value }
@@ -38,19 +41,19 @@ module PurchaseCreditNotes
 
       Document.transaction do
         note = Document.create!(
-          tenant_id: tenant.id, entity_id: bill.entity_id, office_id: bill.office_id,
+          tenant_id: tenant.id, entity_id: source.entity_id, office_id: source.office_id,
           doc_type: type.code, document_type: type,
           fiscal_year: Documents.fiscal_year(date, variant: entity.fiscal_year_variant),
           document_date: date, posting_date: date, due_date: date,
           external_reference: supplier_reference, state: "draft",
-          credit_note_for: bill, reason_code: reason, narration: narration,
-          party_id: bill.party_id, tax_registration_id: bill.tax_registration_id,
-          supply_type: bill.supply_type,
-          place_of_supply_state_code: bill.place_of_supply_state_code,
-          currency: bill.currency, minor_unit_exponent: bill.minor_unit_exponent,
+          credit_note_for: source, reason_code: reason, narration: narration,
+          party_id: source.party_id, tax_registration_id: source.tax_registration_id,
+          supply_type: source.supply_type,
+          place_of_supply_state_code: source.place_of_supply_state_code,
+          currency: source.currency, minor_unit_exponent: source.minor_unit_exponent,
           subtotal_minor: subtotal, tax_minor: tax_total, total_minor: subtotal + tax_total,
-          party_snapshot: bill.party_snapshot,
-          tax_registration_snapshot: bill.tax_registration_snapshot,
+          party_snapshot: source.party_snapshot,
+          tax_registration_snapshot: source.tax_registration_snapshot,
           tax_breakdown: breakdown
         )
         normalized_lines.each_with_index do |line, index|
@@ -59,7 +62,7 @@ module PurchaseCreditNotes
             tenant_id: tenant.id, line_no: index + 1,
             credited_document_line: source,
             account_code: source.account_code, amount_minor: -line.fetch(:taxable_minor),
-            currency: bill.currency, minor_unit_exponent: bill.minor_unit_exponent,
+            currency: source.currency, minor_unit_exponent: source.minor_unit_exponent,
             narration: source.narration, item_id: source.item_id,
             quantity: line.fetch(:quantity), unit_price_minor: source.unit_price_minor,
             taxable_minor: line.fetch(:taxable_minor), hsn_sac_code: source.hsn_sac_code,
@@ -77,13 +80,13 @@ module PurchaseCreditNotes
       raise InvalidCreditNote, "this supplier credit-note number is already recorded for the vendor"
     end
 
-    def normalize_lines!(bill, raw_lines)
+    def normalize_lines!(source_document, raw_lines)
       rows = Array(raw_lines).reject do |line|
         value(line, :document_line_id).blank? || value(line, :quantity).blank?
       end
       raise InvalidCreditNote, "add at least one supplier-credit line" if rows.empty?
 
-      source_lines = bill.document_lines.index_by { |line| line.id.to_s }
+      source_lines = source_document.document_lines.index_by { |line| line.id.to_s }
       rows.map do |line|
         source = source_lines[value(line, :document_line_id).to_s]
         raise InvalidCreditNote, "a selected line does not belong to the purchase bill" unless source
@@ -94,7 +97,7 @@ module PurchaseCreditNotes
           raise InvalidCreditNote,
             "credit quantity for line #{source.line_no} must be positive and no more than #{remaining.fetch(:quantity).to_s("F")}"
         end
-        values = credit_values(bill, source, quantity, remaining)
+        values = credit_values(source_document, source, quantity, remaining)
         {
           source: source, quantity: quantity,
           taxable_minor: values.fetch(:taxable_minor),
@@ -126,7 +129,7 @@ module PurchaseCreditNotes
       }
     end
 
-    def credit_values(bill, source, quantity, remaining)
+    def credit_values(source_document, source, quantity, remaining)
       if quantity == remaining.fetch(:quantity)
         return {
           taxable_minor: remaining.fetch(:taxable_minor),
@@ -139,8 +142,8 @@ module PurchaseCreditNotes
         taxable_minor: taxable,
         rate_basis_points: source.tax_rate_basis_points,
         cess_rate_basis_points: source.cess_rate_basis_points,
-        supplier_state_code: bill.party_snapshot.fetch("gstinStateCode"),
-        place_of_supply_state_code: bill.place_of_supply_state_code
+        supplier_state_code: source_document.party_snapshot.fetch("gstinStateCode"),
+        place_of_supply_state_code: source_document.place_of_supply_state_code
       )
       components = tax.components.transform_keys(&:to_s)
       if taxable > remaining.fetch(:taxable_minor) || components.any? do |component, amount|
@@ -152,12 +155,7 @@ module PurchaseCreditNotes
     end
 
     def decimal!(value, label)
-      decimal = BigDecimal(value.to_s)
-      raise InvalidCreditNote, "#{label} may have no more than six decimal places" if decimal.scale > 6
-
-      decimal
-    rescue ArgumentError
-      raise InvalidCreditNote, "#{label} must be a number"
+      Documents::DecimalInput.parse!(value, label: label, scale: 6, error_class: InvalidCreditNote)
     end
 
     def parse_date!(value)

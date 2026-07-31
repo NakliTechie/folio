@@ -9,18 +9,20 @@ module Onboarding
     module_function
 
     def call(email:, password:, org_name:, jurisdiction_profile: nil, functional_currency: nil,
-             fiscal_year_variant: nil)
+             fiscal_year_variant: nil, time_zone: nil)
       profile = AccountingProfile.resolve(
         jurisdiction_profile: jurisdiction_profile,
         functional_currency: functional_currency,
-        fiscal_year_variant: fiscal_year_variant
+        fiscal_year_variant: fiscal_year_variant,
+        time_zone: time_zone
       )
 
       ActiveRecord::Base.transaction do
         user = User.create!(email_address: email, password: password)
         tenant = create_tenant!(
           name: org_name.presence || "My Company",
-          functional_currency: profile.functional_currency
+          functional_currency: profile.functional_currency,
+          time_zone: profile.time_zone
         )
         Membership.create!(user: user, tenant: tenant)
         Rbac::Presets.seed_for!(tenant)
@@ -40,14 +42,15 @@ module Onboarding
 
     # The unique database index is the final authority. A savepoint keeps a slug collision
     # from poisoning the outer all-or-nothing signup transaction.
-    def create_tenant!(name:, functional_currency:)
+    def create_tenant!(name:, functional_currency:, time_zone:)
       loop do
         tenant = nil
         Tenant.transaction(requires_new: true) do
           tenant = Tenant.create!(
             name: name,
             slug: Onboarding.slugify(name),
-            functional_currency: functional_currency
+            functional_currency: functional_currency,
+            time_zone: time_zone
           )
         end
         return tenant

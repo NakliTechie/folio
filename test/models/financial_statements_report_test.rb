@@ -80,6 +80,41 @@ class FinancialStatementsReportTest < ActiveSupport::TestCase
     assert_equal 250_000, report[:equity_liabilities_minor]
   end
 
+  test "period-zero income and expense rows never contaminate profit and loss" do
+    ledger = Ledger.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    entity = Entity.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    office = Office.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    Posting::PostEntry.post!(
+      tenant_id: @org.tenant.id, actor: "legacy-import", origin: "test",
+      document_date: Date.new(2026, 4, 1), posting_date: Date.new(2026, 4, 1),
+      entered_at: Time.utc(2026, 4, 1), fiscal_year: 2026, period_no: 0,
+      lines: [
+        { line_no: 1, account_code: "1000", ledger_id: ledger.id,
+          entity_id: entity.id, office_id: office.id,
+          amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2,
+                       amount_minor: 50_000 } ] },
+        { line_no: 2, account_code: "4000", ledger_id: ledger.id,
+          entity_id: entity.id, office_id: office.id,
+          amounts: [ { slot_role: "transaction", currency: "INR", minor_unit_exponent: 2,
+                       amount_minor: -50_000 } ] }
+      ]
+    )
+
+    report = Reports.profit_and_loss(
+      @org.tenant.id, from_date: Date.new(2026, 4, 1), to_date: Date.new(2027, 3, 31)
+    )
+    assert_equal 0, report[:income_minor]
+    assert_equal 0, report[:net_income_minor]
+  end
+
+  test "opening-balance posting rejects profit-and-loss accounts" do
+    document = assert_raises(Documents::InvalidDocument) do
+      post_journal(date: Date.new(2026, 4, 1), debit: "1000", credit: "4000",
+        amount: 25_000, doc_type: "OB")
+    end
+    assert_match(/only asset, liability, and equity/, document.message)
+  end
+
   test "published layouts are immutable and future changes use a cloned version" do
     original = FinancialStatementVersion.resolve!(tenant_id: @org.tenant.id, on: Date.new(2026, 4, 1))
     refute original.update(name: "Rewritten history")

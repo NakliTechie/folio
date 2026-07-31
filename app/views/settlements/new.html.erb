@@ -28,6 +28,7 @@
     </section>
   <% end %>
 
+  <% if @open_items.any? %>
   <%= form_with scope: :settlement, url: settlements_path(tenant_route_options), class: "stacked-form" do |form| %>
     <%= form.hidden_field :kind, value: @kind %>
     <section class="panel form-panel">
@@ -35,7 +36,7 @@
         <div class="form-group">
           <%= form.label :document_date, "Settlement date" %>
           <%= form.date_field :document_date, required: true,
-            value: params.dig(:settlement, :document_date).presence || Date.current.iso8601 %>
+            value: params.dig(:settlement, :document_date).presence || business_date.iso8601 %>
         </div>
         <div class="form-group">
           <%= form.label :bank_account_code, "Cash or bank account" %>
@@ -100,5 +101,6 @@
       <%= form.submit "Review #{label}", class: "button button--primary", disabled: @open_items.empty? %>
       <%= link_to "Cancel", settlements_path(tenant_route_options), class: "button button--quiet" %>
     </div>
+  <% end %>
   <% end %>
 </main>

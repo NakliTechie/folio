@@ -11,6 +11,21 @@
     <span class="<%= status_class(@document.state) %>"><%= @document.state.humanize %></span>
   </header>
 
+  <% if @plain_outcome %>
+    <section class="report-callout" role="status">
+      <span aria-hidden="true">↗</span>
+      <p>
+        <% if @plain_outcome[:kind] == "owner_deposit" %>
+          <strong><%= @plain_outcome[:debit_account].name %> will increase by <%= money_amount(@plain_outcome[:amount_minor]) %>;</strong>
+          <%= @plain_outcome[:credit_account].name %> will increase by the same amount.
+        <% else %>
+          <strong><%= @plain_outcome[:debit_account].name %> will increase by <%= money_amount(@plain_outcome[:amount_minor]) %>;</strong>
+          <%= @plain_outcome[:credit_account].name %> will decrease by the same amount.
+        <% end %>
+      </p>
+    </section>
+  <% end %>
+
   <section class="panel voucher-card">
     <dl class="metadata-grid">
       <div><dt>Posting date</dt><dd><%= @document.posting_date.to_fs(:long) %></dd></div>
@@ -54,6 +69,14 @@
       <% if @simulation[:balanced] && permitted?("documents.post") %>
         <%= button_to "Post voucher", post_journal_voucher_path(@document, tenant_route_options),
           method: :post, class: "button button--primary" %>
+      <% end %>
+      <% if permitted?("documents.post") %>
+        <div class="action-row">
+          <%= link_to "Edit draft", edit_journal_voucher_path(@document, tenant_route_options), class: "button button--secondary" %>
+          <%= button_to "Discard draft", journal_voucher_path(@document, tenant_route_options),
+            method: :delete, class: "button button--danger",
+            form: { data: { turbo_confirm: "Discard this unposted voucher draft?" } } %>
+        </div>
       <% end %>
     </section>
   <% else %>

@@ -36,20 +36,22 @@ class InvitationsController < ApplicationController
 
   def do_accept
     authenticated?
-    user = Onboarding::Invite.accept!(
+    acceptance = Onboarding::Invite.accept_with_context!(
       token: params[:token],
       password: params[:password],
       authenticated_user: Current.user
     )
-    return redirect_to(new_session_path, alert: "That invitation is invalid or has expired.") unless user
-    start_new_session_for(user) unless Current.user == user
-    redirect_to root_path, notice: "You've joined the team."
+    return redirect_to(new_session_path, alert: "That invitation is invalid or has expired.") unless acceptance
+    start_new_session_for(acceptance.user) unless Current.user == acceptance.user
+    redirect_to root_path(tenant_id: acceptance.tenant.id), notice: "You've joined the team."
   rescue Onboarding::Invite::AlreadyAccepted
     redirect_to new_session_path, alert: "That invitation was already used."
   rescue Onboarding::Invite::AuthenticationRequired => e
-    redirect_to accept_invitation_path(params[:token]), alert: e.message
+    redirect_to accept_invitation_path(token: params[:token]), alert: e.message
+  rescue Onboarding::Invite::AlreadyMember => e
+    redirect_to root_path, alert: e.message
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to accept_invitation_path(params[:token]), alert: e.record.errors.full_messages.to_sentence
+    redirect_to accept_invitation_path(token: params[:token]), alert: e.record.errors.full_messages.to_sentence
   end
 
   def resend

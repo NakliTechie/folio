@@ -9,6 +9,8 @@
 # and can be wiped and rebuilt from the log at any time. That is what makes replay the
 # integrity guarantee it is.
 module Posting
+  IntegrityError = Class.new(StandardError)
+
   module_function
 
   # Project ONE event into the read model, dispatched by action. Bahi's thin corpus events
@@ -30,6 +32,11 @@ module Posting
   def rebuild!(tenant_id)
     ActiveRecord::Base.transaction do
       LedgerEvent.acquire_tenant_lock!(tenant_id)
+      verification = LedgerEvent.verify_chain(tenant_id)
+      unless verification.fetch(:ok)
+        raise IntegrityError,
+          "event chain is invalid at sequence #{verification[:broken_at]} (#{verification[:reason]})"
+      end
       Document.where(tenant_id: tenant_id).update_all(posted_entry_id: nil)
       Entry.where(tenant_id: tenant_id).destroy_all
       LedgerEvent.for_tenant(tenant_id).in_order.each { |event| project!(event) }

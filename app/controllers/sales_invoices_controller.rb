@@ -96,6 +96,14 @@ class SalesInvoicesController < BrowserController
       ).distinct.order(:identifier)
     @items = Item.active.where(tenant_id: Current.tenant.id).order(:name)
     @company_profile_complete = primary_office.statutory_address_complete?
+    @registered_customer_ready = Party.active.joins(:party_roles, :party_tax_registrations)
+      .where(
+        tenant_id: Current.tenant.id,
+        party_roles: { role: "customer" },
+        party_tax_registrations: { active: true, kind: "GSTIN" }
+      ).exists?
+    @invoice_setup_ready = @company_profile_complete && @seller_registrations.any? &&
+      @registered_customer_ready && @items.any?
     @submitted_lines = Array(params.dig(:sales_invoice, :lines))
   end
 

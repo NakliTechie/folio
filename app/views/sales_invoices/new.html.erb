@@ -8,18 +8,32 @@
     <p>Choose the statutory identities and service lines. Folio calculates GST and freezes the complete preview before posting.</p>
   </header>
 
-  <% unless @company_profile_complete && @parties.any? && @seller_registrations.any? && @items.any? %>
+  <% unless @invoice_setup_ready %>
+    <% setup_steps = [
+      { label: "Company details", detail: "Legal name and statutory address", done: @company_profile_complete, path: edit_business_profile_path(tenant_route_options) },
+      { label: "GST registration", detail: "An active seller GSTIN for the issuing office", done: @seller_registrations.any?, path: new_tax_registration_path(tenant_route_options) },
+      { label: "Registered customer", detail: "Customer address and in-force GSTIN", done: @registered_customer_ready, path: new_party_path(tenant_route_options) },
+      { label: "Product or service", detail: "HSN/SAC, GST rate, and income account", done: @items.any?, path: new_item_path(tenant_route_options) }
+    ] %>
+    <% next_step = setup_steps.find { |step| !step[:done] } %>
     <section class="panel">
-      <h2>Finish invoice setup</h2>
-      <p>A sales invoice needs complete company details, an active seller GSTIN, a customer with an in-force GSTIN, and an active product or service.</p>
-      <div class="action-row">
-        <%= link_to "Company details", edit_business_profile_path(tenant_route_options), class: "button button--secondary" if permitted?("masters.manage") %>
-        <%= link_to "Tax setup", tax_registrations_path(tenant_route_options), class: "button button--secondary" if permitted?("masters.manage") %>
-        <%= link_to "Customers", parties_path(tenant_route_options), class: "button button--secondary" %>
-        <%= link_to "Products & services", items_path(tenant_route_options), class: "button button--secondary" %>
-      </div>
+      <div class="panel__header"><div><p class="eyebrow">Ordered setup</p><h2>Finish invoice setup</h2></div></div>
+      <p>Complete these once, in order. The invoice editor appears when every prerequisite is ready.</p>
+      <ol class="checklist setup-checklist">
+        <% setup_steps.each_with_index do |step, index| %>
+          <li class="checklist__item <%= "checklist__item--done" if step[:done] %>">
+            <span aria-hidden="true"><%= step[:done] ? "✓" : index + 1 %></span>
+            <div><strong><%= step[:label] %></strong><small><%= step[:done] ? "Complete" : step[:detail] %></small></div>
+          </li>
+        <% end %>
+      </ol>
+      <% if permitted?("masters.manage") %>
+        <%= link_to "Continue setup: #{next_step[:label]}", next_step[:path], class: "button button--primary" %>
+      <% else %>
+        <div class="notification" role="status">Ask a company owner or accountant with master-data access to complete <%= next_step[:label] %>.</div>
+      <% end %>
     </section>
-  <% end %>
+  <% else %>
 
   <%= form_with scope: :sales_invoice, url: sales_invoices_path(tenant_route_options), class: "stacked-form" do |form| %>
     <section class="panel form-panel">
@@ -41,12 +55,12 @@
         <div class="form-group">
           <%= form.label :document_date, "Invoice date" %>
           <%= form.date_field :document_date, required: true,
-            value: params.dig(:sales_invoice, :document_date).presence || Date.current.iso8601 %>
+            value: params.dig(:sales_invoice, :document_date).presence || business_date.iso8601 %>
         </div>
         <div class="form-group">
           <%= form.label :due_date, "Due date" %>
           <%= form.date_field :due_date, required: true,
-            value: params.dig(:sales_invoice, :due_date).presence || (Date.current + 30).iso8601 %>
+            value: params.dig(:sales_invoice, :due_date).presence || (business_date + 30).iso8601 %>
         </div>
         <div class="form-group">
           <%= form.label :place_of_supply_state_code, "Place of supply (state code)" %>
@@ -119,5 +133,6 @@
         disabled: !@company_profile_complete || @parties.empty? || @seller_registrations.empty? || @items.empty? %>
       <%= link_to "Cancel", sales_invoices_path(tenant_route_options), class: "button button--quiet" %>
     </div>
+  <% end %>
   <% end %>
 </main>

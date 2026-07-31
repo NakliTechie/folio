@@ -135,6 +135,15 @@ class PurchaseCreditNoteFlowsTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "tampered source recovery redirects to a safe purchase-bill choice" do
+    assert_no_difference "Document.count" do
+      post purchase_credit_notes_path, params: {
+        purchase_credit_note: note_params.merge(purchase_bill_id: "missing")
+      }
+    end
+    assert_redirected_to purchase_bills_path(tenant_id: @org.tenant.id)
+  end
+
   private
 
   def note_params

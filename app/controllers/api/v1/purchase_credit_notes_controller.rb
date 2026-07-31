@@ -4,8 +4,8 @@ module Api
   module V1
     class PurchaseCreditNotesController < BaseController
       before_action -> { require_capability!("reports.read") }, only: %i[index show]
-      before_action -> { require_capability!("bills.create") }, only: %i[create post]
-      before_action :set_document, only: %i[show post]
+      before_action -> { require_capability!("bills.create") }, only: %i[create post destroy]
+      before_action :set_document, only: %i[show post destroy]
 
       def index
         render json: {
@@ -40,6 +40,13 @@ module Api
         render json: { purchase_credit_note: document_json(@document.reload), entry_id: entry.id }
       end
 
+      def destroy
+        Documents::Discard.call!(@document)
+        head :no_content
+      rescue Documents::Discard::NotDiscardable => e
+        render_error(e.message, :conflict)
+      end
+
       private
 
       def set_document
@@ -66,13 +73,17 @@ module Api
       end
 
       def document_json(note)
+        source = note.credit_note_for
         {
           id: note.id,
           state: note.state,
           document_number: note.document_number,
           supplier_credit_note_number: note.external_reference,
-          source_purchase_bill_id: note.credit_note_for_document_id,
-          source_purchase_bill_number: note.credit_note_for.document_number,
+          source_purchase_document_id: source.id,
+          source_purchase_document_type: source.doc_type,
+          source_purchase_document_number: source.document_number,
+          source_purchase_bill_id: source.doc_type == "PB" ? source.id : nil,
+          source_purchase_bill_number: source.doc_type == "PB" ? source.document_number : nil,
           document_date: note.document_date,
           reason_code: note.reason_code,
           currency: note.currency,

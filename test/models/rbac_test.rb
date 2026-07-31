@@ -100,6 +100,69 @@ class RbacTest < ActiveSupport::TestCase
     refute Authorization.permits?(user: @owner, tenant_id: @tenant.id, capability: "documents.post", amount_minor: 6_000_000)
   end
 
+  test "role changes are audited and cannot remove the final owner" do
+    error = assert_raises(TeamRoles::LastOwner) do
+      TeamRoles::Change.call!(tenant: @tenant, user: @owner, role_code: "viewer", actor: @owner)
+    end
+    assert_match(/another owner/, error.message)
+    assert_equal "owner", Authorization.role_for(user: @owner, tenant_id: @tenant.id).role_template.code
+
+    second_owner = user_with("second-owner@x.com", "owner")
+    assignment = assert_difference -> { LedgerEvent.for_tenant(@tenant.id).count }, 1 do
+      TeamRoles::Change.call!(tenant: @tenant, user: @owner, role_code: "accountant", actor: second_owner)
+    end
+    assert_equal "accountant", assignment.role_template.code
+    event = LedgerEvent.for_tenant(@tenant.id).in_order.last
+    assert_equal "team.role_changed", event.action
+    assert LedgerEvent.verify_chain(@tenant.id)[:ok]
+  end
+
+  test "the database independently protects the final owner" do
+    assignment = Authorization.role_for(user: @owner, tenant_id: @tenant.id)
+    viewer = Rbac::Presets.role_for(@tenant, "viewer")
+
+    error = assert_raises(ActiveRecord::StatementInvalid) do
+      UserOfficeRole.transaction(requires_new: true) do
+        assignment.update_columns(role_template_id: viewer.id)
+      end
+    end
+    assert_match(/retain at least one owner/, error.message)
+    assert_equal "owner", assignment.reload.role_template.code
+  end
+
+  test "role templates and posting limits cannot cross tenant boundaries" do
+    other = Tenant.create!(name: "Foreign", slug: "foreign-role-links")
+    Rbac::Presets.seed_for!(other)
+    foreign_role = Rbac::Presets.role_for(other, "owner")
+    foreign_limit = PostingLimit.create!(tenant_id: other.id, name: "Foreign", amount_minor: 1_000)
+    assignment = Authorization.role_for(user: @owner, tenant_id: @tenant.id)
+
+    assignment.role_template = foreign_role
+    refute assignment.valid?
+    assert_includes assignment.errors[:role_template], "must belong to the same company"
+
+    assignment.role_template = Rbac::Presets.role_for(@tenant, "owner")
+    assignment.posting_limit = foreign_limit
+    refute assignment.valid?
+    assert_includes assignment.errors[:posting_limit], "must belong to the same company"
+
+    assert_raises(ActiveRecord::InvalidForeignKey) do
+      assignment.update_columns(posting_limit_id: foreign_limit.id)
+    end
+  end
+
+  test "enterable companies require both membership and a tenant-wide role" do
+    roleless = Tenant.create!(name: "Roleless", slug: "roleless-company")
+    Membership.create!(user: @owner, tenant: roleless)
+    office_only = Tenant.create!(name: "Office only", slug: "office-only-company")
+    Rbac::Presets.seed_for!(office_only)
+    Membership.create!(user: @owner, tenant: office_only)
+    UserOfficeRole.create!(user: @owner, tenant_id: office_only.id, office_id: 42,
+      role_template: Rbac::Presets.role_for(office_only, "viewer"))
+
+    assert_equal [ @tenant.id ], @owner.enterable_tenants.pluck(:id)
+  end
+
   test "Documents::Post enforces RBAC and stamps the authority on the entry (§11)" do
     doc = build_jv
     assert_raises(Documents::Post::NotPermitted) do

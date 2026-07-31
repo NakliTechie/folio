@@ -49,6 +49,9 @@ module Onboarding
       DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "PY") do |d|
         d.label = "Vendor Payment"; d.posting_rule = "settlement"; d.number_prefix = "PY/"
       end
+      DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "RF") do |d|
+        d.label = "Open-item Refund"; d.posting_rule = "open_item_refund"; d.number_prefix = "RF/"
+      end
     end
 
     def financial_statements!(tenant)

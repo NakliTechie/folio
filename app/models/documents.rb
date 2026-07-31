@@ -26,7 +26,7 @@ module Documents
     return 0 if document.doc_type == "OB"
 
     entity = Entity.find_by(tenant_id: document.tenant_id, id: document.entity_id)
-    period_no(document.posting_date || document.document_date || Date.current,
+    period_no(document.posting_date || document.document_date || Tenant.find(document.tenant_id).business_date,
       variant: entity&.fiscal_year_variant || "IN_APR_MAR")
   end
 end

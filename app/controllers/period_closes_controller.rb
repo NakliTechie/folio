@@ -32,7 +32,7 @@ class PeriodClosesController < BrowserController
 
   def load_period
     entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
-    today = Date.current
+    today = business_date
     default_year = Documents.fiscal_year(today, variant: entity.fiscal_year_variant)
     default_period = Documents.period_no(today, variant: entity.fiscal_year_variant)
     @fiscal_year = integer_param(:fiscal_year, default_year)

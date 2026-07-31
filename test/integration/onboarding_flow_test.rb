@@ -17,6 +17,14 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_equal "queued", User.find_by!(email_address: "founder@acme.com").verification_delivery_state
   end
 
+  test "signup preserves source-order keyboard orientation and an exact brand name" do
+    get new_registration_path
+    assert_response :success
+    assert_select "input[autofocus]", count: 0
+    assert_select "a.brand[aria-label]", count: 0
+    assert_select "a.brand", text: /Folio/
+  end
+
   test "signup provisions the accounting profile the user confirmed" do
     post registration_path, params: {
       org_name: "Pacific Co",
@@ -24,16 +32,30 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
       password: "correct-horse-battery",
       jurisdiction_profile: "US",
       functional_currency: "USD",
-      fiscal_year_variant: "CAL"
+      fiscal_year_variant: "CAL",
+      time_zone: "America/Los_Angeles"
     }
 
     assert_redirected_to root_path
     tenant = Tenant.find_by!(slug: "pacific-co")
     entity = Entity.find_by!(tenant_id: tenant.id, code: "PRIMARY")
     assert_equal "USD", tenant.functional_currency
+    assert_equal "America/Los_Angeles", tenant.time_zone
     assert_equal "US", entity.jurisdiction_profile
     assert_equal "CAL", entity.fiscal_year_variant
     assert Account.where(tenant_id: tenant.id).exists?(code: "2100", name: "Tax Payable")
+  end
+
+  test "signup rejects an unsupported company time zone" do
+    assert_no_difference [ "Tenant.count", "User.count" ] do
+      post registration_path, params: {
+        org_name: "Time Travel Co", email_address: "time@example.com",
+        password: "correct-horse-battery", time_zone: "Mars/Olympus"
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_select "[role=alert]", "Time zone is not supported"
   end
 
   test "unsupported accounting defaults are rejected without creating a company" do
@@ -89,13 +111,13 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     inv = Onboarding::Invite.create!(tenant: org.tenant, email: "joiner@x.com", role_code: "viewer", invited_by: org.user)
     token = inv.generate_token_for(:invite)
 
-    get accept_invitation_path(token)
+    get accept_invitation_path(token: token)
     assert_response :success
 
     assert_difference "User.count", 1 do
-      post accept_invitation_path(token), params: { password: "correct-horse-battery" }
+      post accept_invitation_path, params: { token: token, password: "correct-horse-battery" }
     end
-    assert_redirected_to root_path
+    assert_redirected_to root_path(tenant_id: org.tenant.id)
     joiner = User.find_by(email_address: "joiner@x.com")
     assert_equal [ org.tenant.id ], joiner.tenants.pluck(:id)
   end
@@ -104,15 +126,23 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     org = Onboarding::SignUp.call(email: "o3@x.com", password: "correct-horse-battery", org_name: "Org3")
     token = Onboarding::Invite.create!(tenant: org.tenant, email: "j3@x.com", role_code: "viewer",
       invited_by: org.user).generate_token_for(:invite)
-    post accept_invitation_path(token), params: { password: "" }
-    assert_redirected_to accept_invitation_path(token)
+    post accept_invitation_path, params: { token: token, password: "" }
+    assert_redirected_to accept_invitation_path(token: token)
     assert_nil User.find_by(email_address: "j3@x.com")
   end
 
   test "the email-verification link marks the user verified" do
     user = User.create!(email_address: "v@x.com", password: "correct-horse-battery")
-    get verify_email_path(user.generate_token_for(:email_verification))
+    get verify_email_path(token: user.generate_token_for(:email_verification))
     assert user.reload.verified?
+  end
+
+  test "bearer tokens are query parameters rather than raw request-path segments" do
+    token = "sensitive-signed-token"
+    assert_equal "/verify", URI.parse(verify_email_url(token: token)).path
+    assert_equal "/invitations/accept", URI.parse(accept_invitation_url(token: token)).path
+    assert_equal "/password/edit", URI.parse(edit_password_url(token: token)).path
+    assert Rails.application.config.filter_parameters.any? { |filter| filter.to_s.include?("token") }
   end
 
   test "an existing account must authenticate before accepting an invitation" do
@@ -124,14 +154,14 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     token = invitation.generate_token_for(:invite)
 
     assert_no_difference "Membership.count" do
-      post accept_invitation_path(token), params: { password: "wrong-password" }
+      post accept_invitation_path, params: { token: token, password: "wrong-password" }
     end
-    assert_redirected_to accept_invitation_path(token)
+    assert_redirected_to accept_invitation_path(token: token)
 
     assert_difference "Membership.count", 1 do
-      post accept_invitation_path(token), params: { password: "existing-password" }
+      post accept_invitation_path, params: { token: token, password: "existing-password" }
     end
-    assert_redirected_to root_path
+    assert_redirected_to root_path(tenant_id: org.tenant.id)
     follow_redirect!
     assert_response :success
     assert_select "body", text: /Signed in as #{Regexp.escape(existing.email_address)}/

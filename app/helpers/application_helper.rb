@@ -9,6 +9,12 @@ module ApplicationHelper
     "#{currency_code} #{minor.negative? ? '-' : ''}#{digits}"
   end
 
+  def money_input_value(amount_minor, currency: Current.tenant&.functional_currency || "INR")
+    exponent = CurrencyProfile.exponent_for!(currency.to_s.upcase)
+    whole, fraction = Integer(amount_minor || 0).abs.divmod(10**exponent)
+    exponent.positive? ? "#{whole}.#{fraction.to_s.rjust(exponent, '0')}" : whole.to_s
+  end
+
   def basis_points_percentage(basis_points)
     number_to_percentage(basis_points.to_i / 100.0, precision: 2, strip_insignificant_zeros: true)
   end
@@ -24,10 +30,7 @@ module ApplicationHelper
 
   def debit_note_reason_label(reason_code)
     {
-      "price_increase" => "Price increase",
-      "additional_charge" => "Additional charge",
-      "underbilling" => "Underbilling",
-      "other" => "Other"
+      "quantity_underbilling" => "Quantity underbilling"
     }.fetch(reason_code.to_s, reason_code.to_s.humanize)
   end
 
@@ -58,6 +61,10 @@ module ApplicationHelper
     controllers.flatten.include?(controller_name) ? "app-nav__link app-nav__link--active" : "app-nav__link"
   end
 
+  def navigation_group_active?(*controllers)
+    controllers.flatten.include?(controller_name)
+  end
+
   def browser_document_path(document)
     if %w[RC PY].include?(document.doc_type)
       settlement_path(document, tenant_route_options)
@@ -80,7 +87,7 @@ module ApplicationHelper
 
   def settlement_kind_label(document_or_code)
     code = document_or_code.respond_to?(:doc_type) ? document_or_code.doc_type : document_or_code.to_s
-    { "RC" => "Customer receipt", "PY" => "Vendor payment" }.fetch(code, code)
+    { "RC" => "Customer receipt", "PY" => "Vendor payment", "RF" => "Open-item refund" }.fetch(code, code)
   end
 
   def age_bucket_label(bucket)

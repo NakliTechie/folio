@@ -24,8 +24,7 @@ module TenantScoped
     user = Current.session&.user
     return nil unless user
 
-    tenant_wide_roles = UserOfficeRole.where(user_id: user.id, office_id: nil).select(:tenant_id)
-    authorized_tenants = user.tenants.where(id: tenant_wide_roles)
+    authorized_tenants = user.enterable_tenants
     requested = params[:tenant_id].presence || request.headers["X-Tenant"].presence
     if requested
       authorized_tenants.find_by(id: requested)

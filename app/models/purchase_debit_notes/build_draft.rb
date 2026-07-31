@@ -4,7 +4,7 @@ module PurchaseDebitNotes
   # Builds an increasing-liability adjustment from immutable purchase-bill lines. The
   # supplier's debit-note reference remains external; Folio allocates a separate PD number.
   module BuildDraft
-    REASONS = %w[price_increase additional_charge underbilling other].freeze
+    REASONS = %w[quantity_underbilling].freeze
 
     module_function
 
@@ -12,6 +12,10 @@ module PurchaseDebitNotes
       date = parse_date!(document_date)
       reason = reason_code.to_s
       raise InvalidDebitNote, "choose a supported supplier-debit reason" unless REASONS.include?(reason)
+      explanation = narration.to_s.strip
+      if explanation.blank? || explanation.length > 200
+        raise InvalidDebitNote, "explanation is required and may be no more than 200 characters"
+      end
       supplier_reference = external_reference.to_s.strip.upcase
       if supplier_reference.blank? || supplier_reference.length > 100
         raise InvalidDebitNote, "supplier debit-note number is required and may be no more than 100 characters"
@@ -45,7 +49,7 @@ module PurchaseDebitNotes
           fiscal_year: Documents.fiscal_year(date, variant: entity.fiscal_year_variant),
           document_date: date, posting_date: date, due_date: date,
           external_reference: supplier_reference, state: "draft",
-          debit_note_for: bill, reason_code: reason, narration: narration,
+          debit_note_for: bill, reason_code: reason, narration: explanation,
           party_id: bill.party_id, tax_registration_id: bill.tax_registration_id,
           supply_type: bill.supply_type,
           place_of_supply_state_code: bill.place_of_supply_state_code,
@@ -110,12 +114,7 @@ module PurchaseDebitNotes
     end
 
     def decimal!(value, label)
-      decimal = BigDecimal(value.to_s)
-      raise InvalidDebitNote, "#{label} may have no more than six decimal places" if decimal.scale > 6
-
-      decimal
-    rescue ArgumentError
-      raise InvalidDebitNote, "#{label} must be a number"
+      Documents::DecimalInput.parse!(value, label: label, scale: 6, error_class: InvalidDebitNote)
     end
 
     def parse_date!(value)

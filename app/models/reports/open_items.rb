@@ -23,10 +23,10 @@ module Reports
 
       rows = lines.filter_map do |line|
         transaction_amount = line.amounts.find { |amount| amount.slot_role == "transaction" }&.amount_minor.to_i
-        next unless transaction_amount * config.fetch(:direction) > 0
-
         outstanding = Posting::Clearing.open_amount(line)
         next unless outstanding.positive?
+
+        normal = transaction_amount * config.fetch(:direction) > 0
 
         age_days = (date - line.baseline_date).to_i
         {
@@ -42,18 +42,26 @@ module Reports
           due_date: line.due_date,
           age_days: age_days,
           bucket: bucket_for(age_days),
-          outstanding_minor: outstanding
+          outstanding_minor: outstanding,
+          position: normal ? (role.to_s == "customer" ? "receivable" : "payable") : "credit",
+          signed_outstanding_minor: normal ? outstanding : -outstanding
         }
       end
-      totals = BUCKETS.to_h { |bucket| [ bucket, rows.sum { |row| row[:bucket] == bucket ? row[:outstanding_minor] : 0 } ] }
+      charges, credits = rows.partition { |row| row[:position] != "credit" }
+      totals = BUCKETS.to_h do |bucket|
+        [ bucket, charges.sum { |row| row[:bucket] == bucket ? row[:outstanding_minor] : 0 } ]
+      end
 
       {
         role: role.to_s,
         aged_to: date,
         basis: "current_open_items",
-        rows: rows,
+        rows: charges,
+        credits: credits,
         totals: totals,
-        total_minor: rows.sum { |row| row[:outstanding_minor] }
+        total_minor: charges.sum { |row| row[:outstanding_minor] },
+        credit_total_minor: credits.sum { |row| row[:outstanding_minor] },
+        net_total_minor: rows.sum { |row| row[:signed_outstanding_minor] }
       }
     end
 

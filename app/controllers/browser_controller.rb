@@ -4,7 +4,8 @@
 class BrowserController < ApplicationController
   include TenantScoped
 
-  helper_method :current_tenant, :current_role_assignment, :permitted?, :tenant_route_options
+  helper_method :current_tenant, :current_role_assignment, :permitted?, :tenant_route_options,
+    :business_date
 
   private
 
@@ -35,6 +36,10 @@ class BrowserController < ApplicationController
 
   def tenant_route_options
     { tenant_id: Current.tenant.id }
+  end
+
+  def business_date
+    Current.tenant.business_date
   end
 
   def render_no_tenant

@@ -31,7 +31,8 @@
               <small><%= allocation.target_snapshot.fetch("assignment") %></small></td>
             <td><%= Date.iso8601(allocation.target_snapshot.fetch("dueDate")).to_fs(:long) %></td>
             <td class="money"><%= money_amount(allocation.amount_minor, currency: @document.currency) %></td>
-            <td><%= allocation.clearing_mode == "residual" ? "Reset remaining ageing" : "Preserve original ageing" %></td>
+            <td><%= @document.doc_type == "RF" ? "Cash refund" :
+              (allocation.clearing_mode == "residual" ? "Reset remaining ageing" : "Preserve original ageing") %></td>
             <td>
               <% if allocation.settlement_reallocation %>
                 Reapplied to <%= allocation.settlement_reallocation.target_snapshot["sourceDocumentNumber"] || allocation.settlement_reallocation.target_snapshot["assignment"] %>
@@ -66,7 +67,7 @@
     <div class="action-row">
       <%= link_to "View reports", reports_path(tenant_route_options), class: "button button--primary" %>
     </div>
-    <% if permitted?("payments.create") %>
+    <% if permitted?("payments.create") && %w[RC PY].include?(@document.doc_type) %>
       <% @document.document_allocations.each do |allocation| %>
         <div class="action-row">
           <% if allocation.applied? %>

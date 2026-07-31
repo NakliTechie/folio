@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class JournalVouchersController < BrowserController
-  before_action -> { require_capability!("documents.post") }, only: %i[new create post]
+  before_action -> { require_capability!("documents.post") }, only: %i[new create edit update destroy post]
   before_action -> { require_capability!("documents.reverse") }, only: :reverse
-  before_action :set_document, only: %i[show post reverse]
+  before_action :set_document, only: %i[show edit update destroy post reverse]
 
   def index
     @documents = document_scope.includes(:document_lines).order(created_at: :desc)
@@ -11,30 +11,31 @@ class JournalVouchersController < BrowserController
 
   def show
     @simulation = Documents::Simulate.call(@document) if @document.postable?
+    @plain_outcome = Documents::PlainLanguageOutcome.for(@document)
   end
 
   def new
+    @event_kind = params[:event].presence
     load_form
   end
 
-  def create
-    load_form
-    debit = account_scope.find_by!(code: voucher_params[:debit_account_code])
-    credit = account_scope.find_by!(code: voucher_params[:credit_account_code])
-    raise ArgumentError, "Debit and credit accounts must be different" if debit == credit
+  def edit
+    @event_kind = "journal"
+    load_form(@document)
+    render :new
+  end
 
-    amount_minor = amount_minor!(voucher_params[:amount])
-    posting_date = Date.iso8601(voucher_params[:posting_date])
+  def create
+    @event_kind = voucher_params[:event_kind].presence || "journal"
+    load_form
+    attributes = journal_attributes
     @document = Documents::BuildDraft.call(
       tenant: Current.tenant,
       doc_type: "JV",
-      document_date: posting_date,
-      posting_date: posting_date,
-      narration: voucher_params[:narration],
-      lines: [
-        { account_code: debit.code, amount_minor: amount_minor },
-        { account_code: credit.code, amount_minor: -amount_minor }
-      ]
+      document_date: attributes.fetch(:posting_date),
+      posting_date: attributes.fetch(:posting_date),
+      narration: attributes.fetch(:narration),
+      lines: attributes.fetch(:lines)
     )
 
     redirect_to journal_voucher_path(@document, tenant_route_options),
@@ -44,6 +45,31 @@ class JournalVouchersController < BrowserController
     load_form
     flash.now[:alert] = e.respond_to?(:record) ? e.record.errors.full_messages.to_sentence : e.message
     render :new, status: :unprocessable_entity
+  end
+
+  def update
+    @event_kind = voucher_params[:event_kind].presence || "journal"
+    load_form(@document)
+    attributes = journal_attributes
+    Documents::UpdateJournalDraft.call!(
+      document: @document,
+      posting_date: attributes.fetch(:posting_date),
+      narration: attributes.fetch(:narration),
+      lines: attributes.fetch(:lines)
+    )
+    redirect_to journal_voucher_path(@document, tenant_route_options), notice: "Draft updated. Review it before posting."
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, ArgumentError,
+         Documents::InvalidDocument, CurrencyProfile::UnsupportedCurrency => e
+    load_form(@document)
+    flash.now[:alert] = e.respond_to?(:record) ? e.record.errors.full_messages.to_sentence : e.message
+    render :new, status: :unprocessable_entity
+  end
+
+  def destroy
+    Documents::Discard.call!(@document)
+    redirect_to journal_vouchers_path(tenant_route_options), notice: "Draft voucher discarded."
+  rescue Documents::Discard::NotDiscardable => e
+    redirect_to journal_voucher_path(@document, tenant_route_options), alert: e.message
   end
 
   def post
@@ -82,13 +108,30 @@ class JournalVouchersController < BrowserController
     Account.active.where(tenant_id: Current.tenant.id)
   end
 
-  def load_form
+  def load_form(document = nil)
     @accounts = account_scope.in_code_order
+    @cash_accounts = @accounts.select { |account| account.account_type == "asset" && %w[1000 1010].include?(account.code) }
+    @expense_accounts = @accounts.select { |account| account.account_type == "expense" }
+    return unless document
+
+    debit = document.document_lines.find { |line| line.amount_minor&.positive? }
+    credit = document.document_lines.find { |line| line.amount_minor&.negative? }
+    @draft_values = {
+      posting_date: document.posting_date,
+      narration: document.narration,
+      amount: helpers.money_input_value(debit&.amount_minor, currency: Current.tenant.functional_currency),
+      debit_account_code: debit&.account_code,
+      credit_account_code: credit&.account_code
+    }
   end
 
   def voucher_params
     params.require(:journal_voucher).permit(
       :posting_date,
+      :event_kind,
+      :cash_account_code,
+      :expense_account_code,
+      :contributor,
       :narration,
       :debit_account_code,
       :credit_account_code,
@@ -96,15 +139,53 @@ class JournalVouchersController < BrowserController
     )
   end
 
-  def amount_minor!(raw_amount)
-    amount = BigDecimal(raw_amount.to_s)
-    scaled = amount * 100
-    unless amount.positive? && scaled.frac.zero?
-      raise ArgumentError, "Amount must be positive with no more than two decimal places"
-    end
+  def journal_attributes
+    amount_minor = amount_minor!(voucher_params[:amount])
+    posting_date = Date.iso8601(voucher_params[:posting_date])
+    event_kind = voucher_params[:event_kind].presence || "journal"
 
-    scaled.to_i
-  rescue ArgumentError
-    raise ArgumentError, "Amount must be positive with no more than two decimal places"
+    debit_code, credit_code, narration = case event_kind
+    when "owner_deposit"
+      contributor = voucher_params[:contributor].to_s.strip
+      raise ArgumentError, "Contributor name is required" if contributor.blank?
+
+      [ account_scope.find_by!(code: voucher_params[:cash_account_code]).code,
+        account_scope.find_by!(code: "3000").code,
+        "Owner deposit by #{contributor}" ]
+    when "expense"
+      explanation = voucher_params[:narration].to_s.strip
+      raise ArgumentError, "Expense explanation is required" if explanation.blank?
+
+      [ account_scope.where(account_type: "expense").find_by!(code: voucher_params[:expense_account_code]).code,
+        account_scope.find_by!(code: voucher_params[:cash_account_code]).code,
+        explanation ]
+    when "journal"
+      [ account_scope.find_by!(code: voucher_params[:debit_account_code]).code,
+        account_scope.find_by!(code: voucher_params[:credit_account_code]).code,
+        voucher_params[:narration].to_s.strip ]
+    else
+      raise ArgumentError, "Choose a supported business event"
+    end
+    raise ArgumentError, "Debit and credit accounts must be different" if debit_code == credit_code
+    raise ArgumentError, "Explanation is required" if narration.blank?
+    raise ArgumentError, "Explanation may be no more than 200 characters" if narration.length > 200
+
+    {
+      posting_date: posting_date,
+      narration: narration,
+      lines: [
+        { account_code: debit_code, amount_minor: amount_minor },
+        { account_code: credit_code, amount_minor: -amount_minor }
+      ]
+    }
+  rescue Date::Error
+    raise ArgumentError, "Posting date must be a valid date"
+  end
+
+  def amount_minor!(raw_amount)
+    amount = Documents::DecimalInput.parse!(
+      raw_amount, label: "Amount", scale: 2, minimum: BigDecimal("0.01"), error_class: ArgumentError
+    )
+    (amount * 100).to_i
   end
 end

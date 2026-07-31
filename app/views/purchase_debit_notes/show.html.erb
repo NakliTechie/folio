@@ -14,6 +14,7 @@
       <div><dt>Supplier debit note</dt><dd><%= @document.external_reference %></dd></div>
       <div><dt>Debit-note date</dt><dd><%= @document.document_date.to_fs(:long) %></dd></div>
       <div><dt>Purchase bill</dt><dd><%= @document.debit_note_for.document_number %></dd></div>
+      <div><dt>Explanation</dt><dd><%= @document.narration %></dd></div>
       <div><dt>Vendor</dt><dd><%= @document.party_snapshot.fetch("name") %></dd></div>
       <div><dt>Vendor GSTIN</dt><dd><%= @document.party_snapshot.fetch("gstin") %></dd></div>
       <div><dt>Buyer GSTIN</dt><dd><%= @document.tax_registration_snapshot.fetch("identifier") %></dd></div>
@@ -46,9 +47,17 @@
         <%= button_to "Post supplier debit", post_purchase_debit_note_path(@document, tenant_route_options),
           method: :post, class: "button button--primary" %>
       <% end %>
+      <% if permitted?("bills.create") %>
+        <%= button_to "Discard draft", purchase_debit_note_path(@document, tenant_route_options),
+          method: :delete, class: "button button--danger",
+          form: { data: { turbo_confirm: "Discard this draft and release its supplier reference?" } } %>
+      <% end %>
     </section>
   <% else %>
     <div class="action-row">
+      <%= link_to "Correct with supplier credit",
+        new_purchase_credit_note_path(tenant_route_options.merge(purchase_bill_id: @document.id)),
+        class: "button button--primary" if permitted?("bills.create") %>
       <%= link_to "Open source purchase bill", purchase_bill_path(@document.debit_note_for, tenant_route_options), class: "button button--secondary" %>
       <%= link_to "Vendor ledger", party_ledger_report_path(tenant_route_options.merge(party_id: @document.party_id)), class: "button button--secondary" %>
     </div>

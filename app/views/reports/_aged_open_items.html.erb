@@ -58,4 +58,63 @@
       <p><%= empty_description %></p>
     </section>
   <% end %>
+
+  <% if @aged_report[:credits].any? %>
+    <section class="panel panel--table">
+      <div class="page-heading page-heading--compact">
+        <div>
+          <p class="eyebrow">Unapplied credits</p>
+          <h2>Credits available to apply or refund</h2>
+          <p>These are opposite-sign open items. Apply one to another document for the same counterparty, or settle it through cash/bank.</p>
+        </div>
+        <strong><%= money_amount(@aged_report[:credit_total_minor]) %></strong>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Counterparty</th><th scope="col">Credit</th>
+          <th scope="col">Open amount</th><th scope="col">Action</th></tr></thead>
+        <tbody>
+          <% @aged_report[:credits].each do |credit| %>
+            <% targets = @aged_report[:rows].select { |row| row[:party_id] == credit[:party_id] } %>
+            <tr>
+              <td><strong><%= credit[:party_name] %></strong><br><small><%= credit[:party_number] %></small></td>
+              <td><%= credit[:source_document_number] || credit[:assignment] %></td>
+              <td class="money"><%= money_amount(credit[:outstanding_minor]) %></td>
+              <td>
+                <% if permitted?("payments.create") %>
+                  <% if targets.any? %>
+                    <%= form_with url: net_open_item_credit_path, method: :post, class: "inline-action-form" do |form| %>
+                      <%= form.hidden_field :tenant_id, value: Current.tenant.id %>
+                      <%= form.hidden_field :role, name: "open_item_credit[role]", value: @aged_report[:role] %>
+                      <%= form.hidden_field :credit_entry_line_id, name: "open_item_credit[credit_entry_line_id]", value: credit[:entry_line_id] %>
+                      <%= form.hidden_field :applied_on, name: "open_item_credit[applied_on]", value: business_date.iso8601 %>
+                      <%= form.select :target_entry_line_id,
+                        targets.map { |target| ["#{target[:source_document_number] || target[:assignment]} — #{money_amount(target[:outstanding_minor])}", target[:entry_line_id]] },
+                        {}, name: "open_item_credit[target_entry_line_id]", aria: { label: "Open item to credit" } %>
+                      <%= form.number_field :amount, name: "open_item_credit[amount]", min: "0.01", step: "0.01",
+                        value: money_input_value([credit[:outstanding_minor], targets.first[:outstanding_minor]].min),
+                        aria: { label: "Amount to apply" }, required: true %>
+                      <%= form.submit "Apply credit", class: "button button--secondary" %>
+                    <% end %>
+                  <% end %>
+                  <%= form_with url: refund_open_item_credit_path, method: :post, class: "inline-action-form" do |form| %>
+                    <%= form.hidden_field :tenant_id, value: Current.tenant.id %>
+                    <%= form.hidden_field :role, name: "open_item_credit[role]", value: @aged_report[:role] %>
+                    <%= form.hidden_field :credit_entry_line_id, name: "open_item_credit[credit_entry_line_id]", value: credit[:entry_line_id] %>
+                    <%= form.hidden_field :document_date, name: "open_item_credit[document_date]", value: business_date.iso8601 %>
+                    <%= form.select :bank_account_code, @bank_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
+                      {}, name: "open_item_credit[bank_account_code]", aria: { label: "Cash or bank account" } %>
+                    <%= form.number_field :amount, name: "open_item_credit[amount]", min: "0.01", step: "0.01",
+                      value: money_input_value(credit[:outstanding_minor]), aria: { label: "Refund amount" }, required: true %>
+                    <%= form.submit "Refund credit", class: "button button--secondary" %>
+                  <% end %>
+                <% else %>
+                  <small>Ask a payments user to apply or refund this credit.</small>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table></div>
+    </section>
+  <% end %>
 </main>

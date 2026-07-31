@@ -78,6 +78,13 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
     assert_equal 0, Entry.where(tenant_id: @tenant_id).count, "and projects nothing"
   end
 
+  test "post! rejects empty events at the low-level boundary" do
+    empty = draft(lines: [])
+    error = assert_raises(ArgumentError) { Posting::PostEntry.post!(empty) }
+    assert_match(/non-zero ledger effect/, error.message)
+    assert_empty LedgerEvent.for_tenant(@tenant_id)
+  end
+
   # ---- the fat-events guarantee: replay is a PURE function of the payload ----
   # Two independent teeth, because post! projects VIA replay! — so comparing a post
   # projection to a replay projection only proves determinism, not payload-faithfulness.

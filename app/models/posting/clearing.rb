@@ -40,7 +40,7 @@ module Posting
     # (source_event_id, ledger_id, line_no) key, so re-clearing a residual works and an assignment
     # reused across invoices can never mis-target.
     def self.clear!(item:, amount_minor:, cleared_on:, mode:, clearing_entry: nil,
-                    actor: "system", reason: nil)
+                    actor: "system", reason: nil, reference: nil)
       raise ArgumentError, "mode must be one of #{MODES}" unless MODES.include?(mode.to_s)
       raise ArgumentError, "item is not open" unless item.open_item? && item.cleared_on.nil?
       raise ArgumentError, "the item has no stable source_event_id to target" if item.source_event_id.blank?
@@ -63,6 +63,7 @@ module Posting
           "assignment" => item.assignment, "accountCode" => item.account_code,
           "amountMinor" => amt, "mode" => resolved, "clearedOn" => cleared_on.to_s,
           "clearingEventId" => clearing_entry&.ledger_event_id, "reason" => reason,
+          "reference" => reference,
           "residualBaselineDate" => ("residual" == resolved ? cleared_on.to_s : nil)
         }
       )
