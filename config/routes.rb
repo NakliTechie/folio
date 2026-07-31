@@ -59,6 +59,12 @@ Rails.application.routes.draw do
   resources :settlements, path: "cash", only: %i[index show new create] do
     post :post, on: :member
   end
+  post "cash/:id/allocations/:allocation_id/reset", to: "settlements#reset_allocation",
+    as: :reset_settlement_allocation
+  get "cash/:id/allocations/:allocation_id/reallocate", to: "settlements#new_reallocation",
+    as: :new_settlement_reallocation
+  post "cash/:id/allocations/:allocation_id/reallocate", to: "settlements#reallocate",
+    as: :settlement_reallocation
   get "reports/profit-and-loss", to: "reports#profit_and_loss", as: :profit_and_loss_report
   get "reports/balance-sheet", to: "reports#balance_sheet", as: :balance_sheet_report
   get "reports/aged-receivables", to: "reports#aged_receivables", as: :aged_receivables_report
@@ -107,6 +113,8 @@ Rails.application.routes.draw do
       resources :settlements, only: %i[index show create] do
         post :post, on: :member
       end
+      post "settlements/:id/allocations/:allocation_id/reset", to: "settlements#reset"
+      post "settlements/:id/allocations/:allocation_id/reallocate", to: "settlements#reallocate"
     end
   end
   resource :registration, only: %i[new create]

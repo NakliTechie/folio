@@ -2,4 +2,5 @@
 
 module Settlements
   InvalidSettlement = Class.new(ArgumentError)
+  InvalidReset = Class.new(ArgumentError)
 end

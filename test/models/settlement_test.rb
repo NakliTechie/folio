@@ -17,7 +17,7 @@ class SettlementTest < ActiveSupport::TestCase
       address_line1: "1 Ledger Lane", city: "Mumbai", postal_code: "400001",
       state_code: "27", country_code: "IN"
     )
-    registration = TaxRegistrations::Manage.create!(
+    @registration = TaxRegistrations::Manage.create!(
       tenant: @org.tenant, entity: entity,
       attributes: {
         kind: "GSTIN", identifier: "27AAPFU0939F1ZV", jurisdiction: "IN-MH",
@@ -29,7 +29,7 @@ class SettlementTest < ActiveSupport::TestCase
     @vendor = create_party(
       "V-001", "Vendor", "vendor", gstin: "29AAAAA0300L1Z8", state: "29"
     )
-    service = Items::Manage.create!(
+    @service = Items::Manage.create!(
       tenant: @org.tenant,
       attributes: {
         code: "CONSULT", name: "Consulting services", item_type: "service",
@@ -39,17 +39,17 @@ class SettlementTest < ActiveSupport::TestCase
       actor: @org.user
     )
     @invoice = SalesInvoices::BuildDraft.call(
-      tenant: @org.tenant, party_id: @customer.id, tax_registration_id: registration.id,
+      tenant: @org.tenant, party_id: @customer.id, tax_registration_id: @registration.id,
       document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
       place_of_supply_state_code: "27",
-      lines: [ { item_id: service.id, quantity: "2", unit_price: "50.00" } ]
+      lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
     )
     Documents::Post.call(@invoice, actor: "u:#{@org.user.id}")
     @bill = PurchaseBills::BuildDraft.call(
-      tenant: @org.tenant, party_id: @vendor.id, tax_registration_id: registration.id,
+      tenant: @org.tenant, party_id: @vendor.id, tax_registration_id: @registration.id,
       document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
       place_of_supply_state_code: "27", external_reference: "V-INV-001",
-      lines: [ { item_id: service.id, quantity: "2", unit_price: "50.00" } ]
+      lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
     )
     Documents::Post.call(@bill, actor: "u:#{@org.user.id}")
     @receivable = stable_item(@invoice, "1200")
@@ -184,6 +184,84 @@ class SettlementTest < ActiveSupport::TestCase
       )
     end
     assert_match(/specialized endpoint/, error.message)
+  end
+
+  test "reset appends compensating events and reopens both invoice and unapplied cash" do
+    receipt = build_settlement("RC", @receivable, amount: "40.00", mode: "partial")
+    Documents::Post.call(receipt, actor: "u:#{@org.user.id}")
+    allocation = receipt.document_allocations.first
+
+    Settlements::ResetAllocation.call(
+      document: receipt, allocation_id: allocation.id,
+      actor: "u:#{@org.user.id}", reset_on: Date.new(2026, 8, 20)
+    )
+
+    assert allocation.reload.reset?
+    assert_equal 11_800, Posting::Clearing.open_amount(allocation.target_item)
+    settlement_line = EntryLine.joins(:entry).find_by!(
+      entries: { document_id: receipt.id }, line_no: allocation.line_no + 1
+    )
+    assert_nil settlement_line.cleared_on
+    assert_equal 4_000, Posting::Clearing.open_amount(settlement_line)
+    assert_equal 2, LedgerEvent.where(
+      tenant_id: @org.tenant.id, action: "items.clearing_reset"
+    ).count
+
+    Posting.rebuild!(@org.tenant.id)
+    assert_equal 11_800, Posting::Clearing.open_amount(allocation.target_item)
+    rebuilt_settlement = EntryLine.joins(:entry).find_by!(
+      entries: { document_id: receipt.id }, line_no: allocation.line_no + 1
+    )
+    assert_equal 4_000, Posting::Clearing.open_amount(rebuilt_settlement)
+  end
+
+  test "a reset receipt can be governedly reapplied to another invoice for the same customer" do
+    second_invoice = SalesInvoices::BuildDraft.call(
+      tenant: @org.tenant, party_id: @customer.id, tax_registration_id: @registration.id,
+      document_date: Date.new(2026, 8, 1), due_date: Date.new(2026, 8, 31),
+      place_of_supply_state_code: "27",
+      lines: [ { item_id: @service.id, quantity: "1", unit_price: "50.00" } ]
+    )
+    Documents::Post.call(second_invoice, actor: "u:#{@org.user.id}")
+    second_receivable = stable_item(second_invoice, "1200")
+    receipt = build_settlement("RC", @receivable, amount: "40.00", mode: "partial")
+    Documents::Post.call(receipt, actor: "u:#{@org.user.id}")
+    allocation = receipt.document_allocations.first
+    Settlements::ResetAllocation.call(
+      document: receipt, allocation_id: allocation.id,
+      actor: "u:#{@org.user.id}", reset_on: Date.new(2026, 8, 20)
+    )
+
+    reallocation = Settlements::Reallocate.call(
+      document: receipt, allocation_id: allocation.id,
+      target_entry_line_id: second_receivable.id, clearing_mode: "partial",
+      actor: "u:#{@org.user.id}", applied_on: Date.new(2026, 8, 21)
+    )
+
+    assert reallocation.persisted?
+    assert_equal 11_800, Posting::Clearing.open_amount(allocation.target_item)
+    assert_equal 1_900, Posting::Clearing.open_amount(reallocation.target_item)
+    settlement_line = EntryLine.joins(:entry).find_by!(
+      entries: { document_id: receipt.id }, line_no: allocation.line_no + 1
+    )
+    assert_equal 0, Posting::Clearing.open_amount(settlement_line)
+    assert_equal Date.new(2026, 8, 21), settlement_line.cleared_on
+  end
+
+  test "resetting residual clearing removes the residual and restores the original" do
+    receipt = build_settlement("RC", @receivable, amount: "40.00", mode: "residual")
+    Documents::Post.call(receipt, actor: "u:#{@org.user.id}")
+    allocation = receipt.document_allocations.first
+    assert allocation.target_item.residuals.exists?
+
+    Settlements::ResetAllocation.call(
+      document: receipt, allocation_id: allocation.id,
+      actor: "u:#{@org.user.id}", reset_on: Date.new(2026, 8, 20)
+    )
+
+    assert_not allocation.target_item.residuals.exists?
+    assert_nil allocation.target_item.cleared_on
+    assert_equal 11_800, Posting::Clearing.open_amount(allocation.target_item)
   end
 
   private

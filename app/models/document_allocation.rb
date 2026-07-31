@@ -4,6 +4,7 @@ class DocumentAllocation < ApplicationRecord
   MODES = %w[partial residual].freeze
 
   belongs_to :document
+  has_one :settlement_reallocation, dependent: :restrict_with_exception
 
   validates :tenant_id, :line_no, :target_entry_line_id, :target_source_event_id,
     :target_line_no, :amount_minor, :clearing_mode, presence: true
@@ -20,6 +21,9 @@ class DocumentAllocation < ApplicationRecord
       line_no: target_line_no
     )
   end
+
+  def reset? = target_reset_event_id.present? && settlement_reset_event_id.present?
+  def applied? = target_clearing_event_id.present? && !reset?
 
   private
 

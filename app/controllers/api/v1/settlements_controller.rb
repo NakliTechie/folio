@@ -6,8 +6,8 @@ module Api
       KINDS = ::SettlementsController::KINDS.freeze
 
       before_action -> { require_capability!("reports.read") }, only: %i[index show]
-      before_action -> { require_capability!("payments.create") }, only: %i[create post]
-      before_action :set_document, only: %i[show post]
+      before_action -> { require_capability!("payments.create") }, only: %i[create post reset reallocate]
+      before_action :set_document, only: %i[show post reset reallocate]
 
       def index
         documents = document_scope.order(document_date: :desc, created_at: :desc)
@@ -40,6 +40,30 @@ module Api
           required_capability: "payments.create"
         )
         render json: { settlement: document_json(@document.reload), entry_id: entry.id }
+      end
+
+      def reset
+        allocation = Settlements::ResetAllocation.call(
+          document: @document, allocation_id: params[:allocation_id],
+          actor: "u:#{current_user.id}", reset_on: [ Date.current, @document.document_date ].max
+        )
+        render json: { allocation: allocation_json(allocation) }
+      end
+
+      def reallocate
+        reallocation = Settlements::Reallocate.call(
+          document: @document, allocation_id: params[:allocation_id],
+          target_entry_line_id: params[:target_entry_line_id],
+          clearing_mode: params[:clearing_mode],
+          actor: "u:#{current_user.id}", applied_on: [ Date.current, @document.document_date ].max
+        )
+        render json: {
+          reallocation: {
+            id: reallocation.id, target: reallocation.target_snapshot,
+            amount_minor: reallocation.amount_minor,
+            clearing_mode: reallocation.clearing_mode, applied: true
+          }
+        }
       end
 
       private
@@ -76,16 +100,21 @@ module Api
           total_minor: document.total_minor,
           party: document.party_snapshot,
           bank_account_code: document.document_lines.first.account_code,
-          allocations: document.document_allocations.map do |allocation|
-            {
-              line_no: allocation.line_no,
-              target: allocation.target_snapshot,
-              amount_minor: allocation.amount_minor,
-              clearing_mode: allocation.clearing_mode,
-              applied: allocation.target_clearing_event_id.present?
-            }
-          end
+          allocations: document.document_allocations.map { |allocation| allocation_json(allocation) }
         }
+      end
+
+      def allocation_json(allocation)
+        reallocation = allocation.settlement_reallocation
+        {
+          id: allocation.id,
+          line_no: allocation.line_no,
+          target: allocation.target_snapshot,
+          amount_minor: allocation.amount_minor,
+          clearing_mode: allocation.clearing_mode,
+          status: reallocation ? "reapplied" : allocation.reset? ? "unapplied" : "applied",
+          reallocation_target: reallocation&.target_snapshot
+        }.compact
       end
     end
   end

@@ -73,6 +73,7 @@ module Posting
           payload_str: Folio::KhataHash.canonical_payload(payload)
         )
         replay!(event)
+        event
       end
     end
 
@@ -117,6 +118,90 @@ module Posting
                        host_entry_id: clearing_entry_id || item.entry_id)
       end
       item
+    end
+
+    def self.reset!(clearing_event:, actor:, reset_on:, reason: nil)
+      raise ArgumentError, "only a clearing event can be reset" unless clearing_event.action == "items.cleared"
+      raise ArgumentError, "clearing was already reset" if reset_event_for(clearing_event)
+
+      clearing = JSON.parse(clearing_event.payload).fetch("clearing")
+      item = EntryLine.lock.find_by!(
+        tenant_id: clearing_event.tenant_id,
+        source_event_id: clearing.dig("target", "sourceEventId"),
+        line_no: clearing.dig("target", "lineNo")
+      )
+      validate_resettable!(item, clearing_event, clearing)
+      payload = {
+        "clearingReset" => {
+          "clearingEventId" => clearing_event.id,
+          "target" => clearing.fetch("target"),
+          "amountMinor" => clearing.fetch("amountMinor"),
+          "mode" => clearing.fetch("mode"),
+          "reason" => reason
+        }.compact
+      }
+      event = LedgerEvent.append!(
+        tenant_id: clearing_event.tenant_id, actor: actor,
+        action: "items.clearing_reset", origin: "folio", ts: reset_on.to_s,
+        payload_str: Folio::KhataHash.canonical_payload(payload)
+      )
+      replay_reset!(event)
+      event
+    end
+
+    def self.replay_reset!(event)
+      reset = JSON.parse(event.payload)["clearingReset"]
+      return unless reset
+
+      original = LedgerEvent.find_by(
+        tenant_id: event.tenant_id, id: reset["clearingEventId"], action: "items.cleared"
+      )
+      return unless original
+
+      clearing = JSON.parse(original.payload).fetch("clearing")
+      item = EntryLine.find_by(
+        tenant_id: event.tenant_id,
+        source_event_id: clearing.dig("target", "sourceEventId"),
+        line_no: clearing.dig("target", "lineNo")
+      )
+      return unless item
+
+      amount = Integer(clearing.fetch("amountMinor"))
+      if clearing.fetch("mode") == "residual"
+        residual = item.residuals.find_by(source_event_id: original.id)
+        residual&.destroy!
+      end
+      item.update!(
+        cleared_amount_minor: item.cleared_amount_minor - amount,
+        cleared_by_entry_id: nil,
+        cleared_on: nil,
+        clearing_reason: nil
+      )
+      item
+    end
+
+    def self.reset_event_for(clearing_event)
+      LedgerEvent.where(tenant_id: clearing_event.tenant_id, action: "items.clearing_reset").find do |event|
+        JSON.parse(event.payload).dig("clearingReset", "clearingEventId").to_i == clearing_event.id
+      end
+    end
+
+    def self.validate_resettable!(item, clearing_event, clearing)
+      amount = Integer(clearing.fetch("amountMinor"))
+      raise ArgumentError, "clearing projection no longer contains the applied amount" if item.cleared_amount_minor < amount
+
+      case clearing.fetch("mode")
+      when "partial"
+        raise ArgumentError, "a later full clearing must be reset first" if item.cleared_on.present?
+      when "full"
+        raise ArgumentError, "the item is not fully cleared" if item.cleared_on.nil?
+      when "residual"
+        residual = item.residuals.find_by(source_event_id: clearing_event.id)
+        unless residual&.open_item? && residual.cleared_on.nil? && residual.cleared_amount_minor.zero? &&
+               residual.residuals.empty?
+          raise ArgumentError, "the residual has later activity and cannot be reset"
+        end
+      end
     end
 
     # The new open item that a residual clearing opens, with a fresh baseline (ageing reset).

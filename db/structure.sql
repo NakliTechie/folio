@@ -132,6 +132,8 @@ CREATE TABLE public.document_allocations (
     settlement_clearing_event_id bigint,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    target_reset_event_id bigint,
+    settlement_reset_event_id bigint,
     CONSTRAINT chk_document_allocations_mode CHECK (((clearing_mode)::text = ANY ((ARRAY['partial'::character varying, 'residual'::character varying])::text[]))),
     CONSTRAINT chk_document_allocations_positive CHECK ((amount_minor > 0))
 );
@@ -1231,6 +1233,48 @@ ALTER SEQUENCE public.sessions_id_seq OWNED BY public.sessions.id;
 
 
 --
+-- Name: settlement_reallocations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.settlement_reallocations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    document_allocation_id bigint NOT NULL,
+    target_entry_line_id bigint NOT NULL,
+    target_source_event_id bigint NOT NULL,
+    target_line_no integer NOT NULL,
+    amount_minor bigint NOT NULL,
+    clearing_mode character varying DEFAULT 'partial'::character varying NOT NULL,
+    target_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    target_clearing_event_id bigint,
+    settlement_clearing_event_id bigint,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_settlement_reallocations_mode CHECK (((clearing_mode)::text = ANY ((ARRAY['partial'::character varying, 'residual'::character varying])::text[]))),
+    CONSTRAINT chk_settlement_reallocations_positive CHECK ((amount_minor > 0))
+);
+
+
+--
+-- Name: settlement_reallocations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.settlement_reallocations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: settlement_reallocations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.settlement_reallocations_id_seq OWNED BY public.settlement_reallocations.id;
+
+
+--
 -- Name: tax_registrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1577,6 +1621,13 @@ ALTER TABLE ONLY public.sessions ALTER COLUMN id SET DEFAULT nextval('public.ses
 
 
 --
+-- Name: settlement_reallocations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_reallocations ALTER COLUMN id SET DEFAULT nextval('public.settlement_reallocations_id_seq'::regclass);
+
+
+--
 -- Name: tax_registrations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1853,6 +1904,14 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: settlement_reallocations settlement_reallocations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_reallocations
+    ADD CONSTRAINT settlement_reallocations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: tax_registrations tax_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1952,6 +2011,13 @@ CREATE UNIQUE INDEX idx_on_tenant_id_kind_identifier_valid_from_f473959005 ON pu
 --
 
 CREATE UNIQUE INDEX idx_party_tax_registrations_identity ON public.party_tax_registrations USING btree (tenant_id, kind, identifier, valid_from);
+
+
+--
+-- Name: idx_settlement_reallocations_stable_target; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_settlement_reallocations_stable_target ON public.settlement_reallocations USING btree (tenant_id, target_source_event_id, target_line_no);
 
 
 --
@@ -2424,6 +2490,13 @@ CREATE INDEX index_sessions_on_user_id ON public.sessions USING btree (user_id);
 
 
 --
+-- Name: index_settlement_reallocations_on_document_allocation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_settlement_reallocations_on_document_allocation_id ON public.settlement_reallocations USING btree (document_allocation_id);
+
+
+--
 -- Name: index_tax_registrations_on_entity_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2573,6 +2646,14 @@ ALTER TABLE ONLY public.user_office_roles
 
 
 --
+-- Name: settlement_reallocations fk_rails_8a212ab233; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.settlement_reallocations
+    ADD CONSTRAINT fk_rails_8a212ab233 FOREIGN KEY (document_allocation_id) REFERENCES public.document_allocations(id);
+
+
+--
 -- Name: memberships fk_rails_99326fb65d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2635,6 +2716,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731235000'),
 ('20260731234000'),
 ('20260731233000'),
 ('20260731232000'),

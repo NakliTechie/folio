@@ -17,7 +17,8 @@ module Posting
   def project!(event)
     case event.action
     when "entry.posted"  then PostEntry.replay!(event)
-    when "items.cleared" then Clearing.replay!(event)
+    when "items.cleared"        then Clearing.replay!(event)
+    when "items.clearing_reset" then Clearing.replay_reset!(event)
     end
   end
 

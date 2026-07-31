@@ -32,7 +32,15 @@
             <td><%= Date.iso8601(allocation.target_snapshot.fetch("dueDate")).to_fs(:long) %></td>
             <td class="money"><%= money_amount(allocation.amount_minor, currency: @document.currency) %></td>
             <td><%= allocation.clearing_mode == "residual" ? "Reset remaining ageing" : "Preserve original ageing" %></td>
-            <td><%= allocation.target_clearing_event_id? ? "Applied" : "Pending" %></td>
+            <td>
+              <% if allocation.settlement_reallocation %>
+                Reapplied to <%= allocation.settlement_reallocation.target_snapshot["sourceDocumentNumber"] || allocation.settlement_reallocation.target_snapshot["assignment"] %>
+              <% elsif allocation.reset? %>
+                Unapplied
+              <% else %>
+                Applied
+              <% end %>
+            </td>
           </tr>
         <% end %>
       </tbody>
@@ -58,5 +66,21 @@
     <div class="action-row">
       <%= link_to "View reports", reports_path(tenant_route_options), class: "button button--primary" %>
     </div>
+    <% if permitted?("payments.create") %>
+      <% @document.document_allocations.each do |allocation| %>
+        <div class="action-row">
+          <% if allocation.applied? %>
+            <%= button_to "Reset allocation #{allocation.line_no}",
+              reset_settlement_allocation_path(@document, allocation_id: allocation.id, **tenant_route_options),
+              method: :post, class: "button button--danger",
+              form: { data: { turbo_confirm: "Reset this allocation and reopen the cash as unapplied?" } } %>
+          <% elsif allocation.reset? && allocation.settlement_reallocation.nil? %>
+            <%= link_to "Reallocate unapplied cash", new_settlement_reallocation_path(
+              @document, allocation_id: allocation.id, **tenant_route_options
+            ), class: "button button--secondary" %>
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
   <% end %>
 </main>

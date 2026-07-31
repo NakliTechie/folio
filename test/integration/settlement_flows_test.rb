@@ -99,7 +99,20 @@ class SettlementFlowsTest < ActionDispatch::IntegrationTest
     assert_response :success
     posted = JSON.parse(response.body).fetch("settlement")
     assert_equal "PY/26-27/00001", posted.fetch("document_number")
-    assert posted.dig("allocations", 0, "applied")
+    assert_equal "applied", posted.dig("allocations", 0, "status")
+    assert_equal 0, Posting::Clearing.open_amount(stable_target(@payable))
+
+    allocation_id = posted.dig("allocations", 0, "id")
+    post "/api/v1/settlements/#{json.fetch("id")}/allocations/#{allocation_id}/reset"
+    assert_response :success
+    assert_equal "unapplied", JSON.parse(response.body).dig("allocation", "status")
+    assert_equal 11_800, Posting::Clearing.open_amount(stable_target(@payable))
+
+    post "/api/v1/settlements/#{json.fetch("id")}/allocations/#{allocation_id}/reallocate", params: {
+      target_entry_line_id: stable_target(@payable).id,
+      clearing_mode: "partial"
+    }
+    assert_response :success
     assert_equal 0, Posting::Clearing.open_amount(stable_target(@payable))
   end
 
@@ -137,6 +150,32 @@ class SettlementFlowsTest < ActionDispatch::IntegrationTest
     sign_in_as(other.user)
     get "/api/v1/settlements/#{receipt.id}"
     assert_response :not_found
+  end
+
+  test "owner resets and reallocates a receipt through the correction UI" do
+    receipt = Settlements::BuildDraft.call(**receipt_builder_attributes)
+    Documents::Post.call(receipt, actor: "u:#{@org.user.id}")
+    allocation = receipt.document_allocations.first
+
+    post reset_settlement_allocation_path(receipt, allocation_id: allocation.id)
+    assert_redirected_to settlement_path(receipt, tenant_id: @org.tenant.id)
+    assert allocation.reload.reset?
+    assert_equal 11_800, Posting::Clearing.open_amount(allocation.target_item)
+
+    get new_settlement_reallocation_path(receipt, allocation_id: allocation.id)
+    assert_response :success
+    assert_select "h1", "Reallocate unapplied cash"
+    assert_select "option", text: /SI\/26-27\/00001/
+
+    post settlement_reallocation_path(receipt, allocation_id: allocation.id), params: {
+      reallocation: {
+        target_entry_line_id: allocation.target_item.id,
+        clearing_mode: "partial"
+      }
+    }
+    assert_redirected_to settlement_path(receipt, tenant_id: @org.tenant.id)
+    assert allocation.reload.settlement_reallocation
+    assert_equal 7_800, Posting::Clearing.open_amount(allocation.settlement_reallocation.target_item)
   end
 
   private

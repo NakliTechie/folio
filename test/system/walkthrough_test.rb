@@ -311,6 +311,17 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_text "INR 78.00"
     click_link "Party ledger"
     assert_selector "tbody tr", count: 2
+
+    visit settlement_path(allocation.document, tenant_id: setup.fetch(:org).tenant.id)
+    accept_confirm("Reset this allocation and reopen the cash as unapplied?") do
+      click_button "Reset allocation 1"
+    end
+    assert_selector "[role=status]", text: /cash is now unapplied/i
+    click_link "Reallocate unapplied cash"
+    select "SI/26-27/00001 · INR 118.00", from: "New open item"
+    select "Preserve ageing", from: "Remaining-balance treatment"
+    click_button "Apply reallocation"
+    assert_text "Reapplied to SI/26-27/00001"
   end
 
   test "every RBAC preset can enter and leave its authenticated landing" do
