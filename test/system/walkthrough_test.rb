@@ -276,6 +276,35 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_selector ".status-badge--danger", text: "Reversed"
   end
 
+  test "service business allocates a partial customer receipt without resetting ageing" do
+    setup = create_posted_invoice("receipt-walkthrough@folio.invalid", "Receipt Walkthrough")
+    invoice = setup.fetch(:invoice)
+
+    visit new_session_path
+    fill_in "Email", with: setup.fetch(:org).user.email_address
+    fill_in "Password", with: PASSWORD
+    click_button "Sign in"
+    click_link "Cash"
+    click_link "Record receipt"
+    set_date_field "Settlement date", "2026-08-15"
+    select "1010 · Bank", from: "Cash or bank account"
+    fill_in "Amount for SI:#{invoice.id}", with: "40.00"
+    select "Preserve ageing", from: "Remaining-balance treatment for SI:#{invoice.id}"
+    click_button "Review customer receipt"
+
+    assert_selector "h1", text: "Draft customer receipt"
+    assert_text "INR 40.00"
+    assert_text "Preserve original ageing"
+    click_button "Post customer receipt"
+
+    assert_selector "h1", text: "RC/26-27/00001"
+    assert_selector "[role=status]", text: /posted.*allocations.*applied/i
+    allocation = Document.find_by!(tenant_id: setup.fetch(:org).tenant.id, doc_type: "RC")
+      .document_allocations.first
+    assert_equal 7_800, Posting::Clearing.open_amount(allocation.target_item)
+    assert_nil allocation.target_item.cleared_on
+  end
+
   test "every RBAC preset can enter and leave its authenticated landing" do
     org = Onboarding::SignUp.call(
       email: "role-owner@folio.invalid", password: PASSWORD, org_name: "Role Walkthrough"

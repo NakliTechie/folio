@@ -14,6 +14,7 @@ class Document < ApplicationRecord
   belongs_to :reverses, class_name: "Document", foreign_key: :reverses_document_id, optional: true
   belongs_to :reversed_by, class_name: "Document", foreign_key: :reversed_by_document_id, optional: true
   has_many :document_lines, -> { order(:line_no) }, dependent: :destroy
+  has_many :document_allocations, -> { order(:line_no) }, dependent: :destroy
   has_many :entries, dependent: :nullify
   has_many :credit_notes, class_name: "Document", foreign_key: :credit_note_for_document_id,
     dependent: :restrict_with_exception
@@ -27,7 +28,7 @@ class Document < ApplicationRecord
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
   def reversible?
-    posted? && reversed_by_document_id.nil? && doc_type != "CN" &&
+    posted? && reversed_by_document_id.nil? && !%w[CN RC PY].include?(doc_type) &&
       !credit_notes.where(state: %w[posted reversed]).exists?
   end
 

@@ -17,9 +17,8 @@ module Documents
     # system posts (existing engine tests). This is defence-in-depth: the API also checks.
     def call(document, actor:, capabilities: [], authorize: nil, required_capability: "documents.post")
       ActiveRecord::Base.transaction do
-        if document.credit_note_for_document_id
-          Document.where(tenant_id: document.tenant_id).lock.find(document.credit_note_for_document_id)
-        end
+        rule = Documents.rule_for(document)
+        rule.lock_dependencies!(document) if rule.respond_to?(:lock_dependencies!)
         document.lock!
         raise NotPostable, "document is #{document.state}, not postable" unless document.postable?
         assert_document_integrity!(document)
@@ -42,7 +41,6 @@ module Documents
           capabilities: effective_capabilities, authority: authority, document: { id: document.id }, lines: sim[:lines]
         )
         document.update!(state: "posted", document_number: number, posted_entry_id: entry.id)
-        rule = Documents.rule_for(document)
         rule.after_post!(document: document, entry: entry, actor: actor) if rule.respond_to?(:after_post!)
         entry
       end

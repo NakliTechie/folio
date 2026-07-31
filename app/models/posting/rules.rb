@@ -12,7 +12,8 @@ module Posting
       "opening_balance" => "Posting::Rules::OpeningBalance",
       "sales_invoice" => "Posting::Rules::SalesInvoice",
       "credit_note" => "Posting::Rules::CreditNote",
-      "purchase_bill" => "Posting::Rules::PurchaseBill"
+      "purchase_bill" => "Posting::Rules::PurchaseBill",
+      "settlement" => "Posting::Rules::Settlement"
     }.freeze
 
     def self.for(identifier)

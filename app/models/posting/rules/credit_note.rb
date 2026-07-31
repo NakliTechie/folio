@@ -7,6 +7,10 @@ module Posting
       TAX_ACCOUNT_CODE = "2100"
 
       class << self
+        def lock_dependencies!(document)
+          Document.where(tenant_id: document.tenant_id).lock.find(document.credit_note_for_document_id)
+        end
+
         def validate_document!(document)
           source = document.credit_note_for
           unless source && source.tenant_id == document.tenant_id && source.doc_type == "SI" && source.state == "posted"

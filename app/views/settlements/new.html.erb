@@ -1,0 +1,104 @@
+<% label = @kind == "receipt" ? "customer receipt" : "vendor payment" %>
+<% content_for :title, "New #{label} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= link_to "← Back to receipts and payments", settlements_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Cash allocation</p>
+      <h1>Record a <%= label %></h1>
+      <p>Allocate the bank movement to open items from one counterparty. Blank rows are ignored.</p>
+    </div>
+    <div class="action-row">
+      <%= link_to "Customer receipt", new_settlement_path(tenant_route_options.merge(kind: "receipt")),
+        class: "button #{@kind == "receipt" ? "button--primary" : "button--secondary"}" %>
+      <%= link_to "Vendor payment", new_settlement_path(tenant_route_options.merge(kind: "payment")),
+        class: "button #{@kind == "payment" ? "button--primary" : "button--secondary"}" %>
+    </div>
+  </header>
+
+  <% if @open_items.empty? %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">✓</span>
+      <h2>No open <%= @kind == "receipt" ? "receivables" : "payables" %></h2>
+      <p>Post a <%= @kind == "receipt" ? "sales invoice" : "purchase bill" %> before recording this settlement.</p>
+      <%= link_to @kind == "receipt" ? "Open sales invoices" : "Open purchase bills",
+        @kind == "receipt" ? sales_invoices_path(tenant_route_options) : purchase_bills_path(tenant_route_options),
+        class: "button button--primary" %>
+    </section>
+  <% end %>
+
+  <%= form_with scope: :settlement, url: settlements_path(tenant_route_options), class: "stacked-form" do |form| %>
+    <%= form.hidden_field :kind, value: @kind %>
+    <section class="panel form-panel">
+      <div class="form-grid form-grid--two">
+        <div class="form-group">
+          <%= form.label :document_date, "Settlement date" %>
+          <%= form.date_field :document_date, required: true,
+            value: params.dig(:settlement, :document_date).presence || Date.current.iso8601 %>
+        </div>
+        <div class="form-group">
+          <%= form.label :bank_account_code, "Cash or bank account" %>
+          <%= form.select :bank_account_code,
+            @bank_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] },
+            { prompt: "Choose cash or bank", selected: params.dig(:settlement, :bank_account_code) || "1010" },
+            required: true %>
+        </div>
+      </div>
+      <div class="form-group">
+        <%= form.label :narration, "Reference or note (optional)" %>
+        <%= form.text_field :narration, maxlength: 200,
+          value: params.dig(:settlement, :narration), placeholder: "For example, NEFT reference" %>
+      </div>
+    </section>
+
+    <% if @open_items.any? %>
+      <section class="panel panel--table">
+        <div class="panel__header invoice-lines-heading">
+          <div><p class="eyebrow">Allocations</p><h2>Choose open items</h2></div>
+          <small>Partial preserves the original ageing date; residual closes it and re-baselines the balance.</small>
+        </div>
+        <div class="table-wrap"><table>
+          <caption class="sr-only">Open items available for the <%= label %></caption>
+          <thead><tr><th scope="col">Document</th><th scope="col">Counterparty</th><th scope="col">Due</th>
+            <th scope="col">Outstanding</th><th scope="col">Allocate</th><th scope="col">Remaining balance</th></tr></thead>
+          <tbody>
+            <% @open_items.each_with_index do |item, index| %>
+              <% submitted = @submitted_allocations[item.id.to_s] || {} %>
+              <% source = item.entry.document %>
+              <tr>
+                <td><strong><%= source&.document_number || item.assignment %></strong><br><small><%= item.assignment %></small></td>
+                <td><%= item.party&.name || "Party ##{item.party_id}" %></td>
+                <td><%= item.due_date&.to_fs(:long) || "—" %></td>
+                <td class="money"><%= money_amount(Posting::Clearing.open_amount(item)) %></td>
+                <td>
+                  <%= hidden_field_tag "settlement[allocations][][target_entry_line_id]", item.id %>
+                  <%= label_tag "settlement_allocation_#{index}_amount", "Amount for #{item.assignment}", class: "sr-only" %>
+                  <%= number_field_tag "settlement[allocations][][amount]", submitted[:amount] || submitted["amount"],
+                    id: "settlement_allocation_#{index}_amount", min: "0.01", step: "0.01",
+                    max: format("%.2f", Posting::Clearing.open_amount(item) / 100.0),
+                    inputmode: "decimal", placeholder: "0.00" %>
+                </td>
+                <td>
+                  <%= label_tag "settlement_allocation_#{index}_mode", "Remaining-balance treatment for #{item.assignment}", class: "sr-only" %>
+                  <%= select_tag "settlement[allocations][][clearing_mode]",
+                    options_for_select([["Preserve ageing", "partial"], ["Reset ageing", "residual"]], submitted[:clearing_mode] || submitted["clearing_mode"] || "partial"),
+                    id: "settlement_allocation_#{index}_mode" %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table></div>
+      </section>
+    <% end %>
+
+    <div class="balance-note">
+      <span aria-hidden="true">↔</span>
+      <p><strong>Nothing posts yet.</strong> Every entered amount must belong to the same counterparty and may not exceed the live outstanding balance.</p>
+    </div>
+    <div class="form-actions">
+      <%= form.submit "Review #{label}", class: "button button--primary", disabled: @open_items.empty? %>
+      <%= link_to "Cancel", settlements_path(tenant_route_options), class: "button button--quiet" %>
+    </div>
+  <% end %>
+</main>

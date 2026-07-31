@@ -1,0 +1,48 @@
+<% content_for :title, "Cash settlements · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Cash</p>
+      <h1>Receipts and payments</h1>
+      <p>Post cash or bank movements against specific receivables and payables, with explicit ageing behavior.</p>
+    </div>
+    <% if permitted?("payments.create") %>
+      <div class="action-row">
+        <%= link_to "Record receipt", new_settlement_path(tenant_route_options.merge(kind: "receipt")),
+          class: "button button--secondary" %>
+        <%= link_to "Record payment", new_settlement_path(tenant_route_options.merge(kind: "payment")),
+          class: "button button--primary" %>
+      </div>
+    <% end %>
+  </header>
+
+  <% if @documents.any? %>
+    <section class="panel panel--table">
+      <div class="table-wrap"><table>
+        <caption class="sr-only">Receipts and payments for <%= Current.tenant.name %></caption>
+        <thead><tr><th scope="col">Document</th><th scope="col">Type</th><th scope="col">Date</th>
+          <th scope="col">Counterparty</th><th scope="col">Total</th><th scope="col">State</th><th scope="col"></th></tr></thead>
+        <tbody>
+          <% @documents.each do |document| %>
+            <tr>
+              <td><strong><%= document.document_number || "Draft ##{document.id}" %></strong></td>
+              <td><%= settlement_kind_label(document) %></td>
+              <td><%= document.document_date.to_fs(:long) %></td>
+              <td><%= document.party_snapshot&.fetch("name", nil) || document.party&.name || "—" %></td>
+              <td class="money"><%= money_amount(document.total_minor, currency: document.currency) %></td>
+              <td><span class="<%= status_class(document.state) %>"><%= document.state.humanize %></span></td>
+              <td><%= link_to "Open", settlement_path(document, tenant_route_options), class: "text-link" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table></div>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">↔</span>
+      <h2>No cash settlements yet</h2>
+      <p>Post a sales invoice or purchase bill first, then allocate its receipt or payment here.</p>
+    </section>
+  <% end %>
+</main>

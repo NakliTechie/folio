@@ -114,6 +114,49 @@ ALTER SEQUENCE public.dimensions_id_seq OWNED BY public.dimensions.id;
 
 
 --
+-- Name: document_allocations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.document_allocations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    document_id bigint NOT NULL,
+    line_no integer NOT NULL,
+    target_entry_line_id bigint NOT NULL,
+    target_source_event_id bigint NOT NULL,
+    target_line_no integer NOT NULL,
+    amount_minor bigint NOT NULL,
+    clearing_mode character varying DEFAULT 'partial'::character varying NOT NULL,
+    target_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    target_clearing_event_id bigint,
+    settlement_clearing_event_id bigint,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_document_allocations_mode CHECK (((clearing_mode)::text = ANY ((ARRAY['partial'::character varying, 'residual'::character varying])::text[]))),
+    CONSTRAINT chk_document_allocations_positive CHECK ((amount_minor > 0))
+);
+
+
+--
+-- Name: document_allocations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.document_allocations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: document_allocations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.document_allocations_id_seq OWNED BY public.document_allocations.id;
+
+
+--
 -- Name: document_lines; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1345,6 +1388,13 @@ ALTER TABLE ONLY public.dimensions ALTER COLUMN id SET DEFAULT nextval('public.d
 
 
 --
+-- Name: document_allocations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_allocations ALTER COLUMN id SET DEFAULT nextval('public.document_allocations_id_seq'::regclass);
+
+
+--
 -- Name: document_lines id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1576,6 +1626,14 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 ALTER TABLE ONLY public.dimensions
     ADD CONSTRAINT dimensions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: document_allocations document_allocations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_allocations
+    ADD CONSTRAINT document_allocations_pkey PRIMARY KEY (id);
 
 
 --
@@ -1827,6 +1885,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_document_allocations_stable_target; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_document_allocations_stable_target ON public.document_allocations USING btree (tenant_id, target_source_event_id, target_line_no);
+
+
+--
 -- Name: idx_documents_credit_note_source; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1978,6 +2043,20 @@ CREATE UNIQUE INDEX index_accounts_on_tenant_id_and_code ON public.accounts USIN
 --
 
 CREATE UNIQUE INDEX index_dimensions_on_tenant_id_and_code ON public.dimensions USING btree (tenant_id, code);
+
+
+--
+-- Name: index_document_allocations_on_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_document_allocations_on_document_id ON public.document_allocations USING btree (document_id);
+
+
+--
+-- Name: index_document_allocations_on_document_id_and_line_no; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_document_allocations_on_document_id_and_line_no ON public.document_allocations USING btree (document_id, line_no);
 
 
 --
@@ -2470,6 +2549,14 @@ ALTER TABLE ONLY public.office_tax_registrations
 
 
 --
+-- Name: document_allocations fk_rails_524991528c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_allocations
+    ADD CONSTRAINT fk_rails_524991528c FOREIGN KEY (document_id) REFERENCES public.documents(id);
+
+
+--
 -- Name: sessions fk_rails_758836b4f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2548,6 +2635,7 @@ ALTER TABLE ONLY public.financial_statement_sections
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260731234000'),
 ('20260731233000'),
 ('20260731232000'),
 ('20260731231000'),

@@ -44,7 +44,9 @@ module ApplicationHelper
   end
 
   def browser_document_path(document)
-    if document.doc_type == "PB"
+    if %w[RC PY].include?(document.doc_type)
+      settlement_path(document, tenant_route_options)
+    elsif document.doc_type == "PB"
       purchase_bill_path(document, tenant_route_options)
     elsif document.doc_type == "CN"
       credit_note_path(document, tenant_route_options)
@@ -55,5 +57,10 @@ module ApplicationHelper
     else
       journal_voucher_path(document, tenant_route_options)
     end
+  end
+
+  def settlement_kind_label(document_or_code)
+    code = document_or_code.respond_to?(:doc_type) ? document_or_code.doc_type : document_or_code.to_s
+    { "RC" => "Customer receipt", "PY" => "Vendor payment" }.fetch(code, code)
   end
 end

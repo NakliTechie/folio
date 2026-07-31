@@ -37,6 +37,12 @@ module Onboarding
       DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "PB") do |d|
         d.label = "Purchase Bill"; d.posting_rule = "purchase_bill"; d.number_prefix = "PB/"
       end
+      DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "RC") do |d|
+        d.label = "Customer Receipt"; d.posting_rule = "settlement"; d.number_prefix = "RC/"
+      end
+      DocumentType.find_or_create_by!(tenant_id: tenant.id, code: "PY") do |d|
+        d.label = "Vendor Payment"; d.posting_rule = "settlement"; d.number_prefix = "PY/"
+      end
     end
 
     def financial_statements!(tenant)

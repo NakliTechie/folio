@@ -1,0 +1,62 @@
+<% label = settlement_kind_label(@document) %>
+<% content_for :title, "#{@document.document_number || "Draft #{label.downcase}"} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= link_to "← Back to receipts and payments", settlements_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow"><%= label %></p>
+      <h1><%= @document.document_number || "Draft #{label.downcase}" %></h1>
+      <p><%= @document.party_snapshot.fetch("name") %> · <%= @document.narration.presence || "No reference" %></p>
+    </div>
+    <span class="<%= status_class(@document.state) %>"><%= @document.state.humanize %></span>
+  </header>
+
+  <section class="panel voucher-card">
+    <dl class="metadata-grid">
+      <div><dt>Settlement date</dt><dd><%= @document.document_date.to_fs(:long) %></dd></div>
+      <div><dt>Cash / bank account</dt><dd><%= @document.document_lines.first.account_code %></dd></div>
+      <div><dt>Counterparty</dt><dd><%= @document.party_snapshot.fetch("name") %></dd></div>
+      <div><dt>Total</dt><dd><%= money_amount(@document.total_minor, currency: @document.currency) %></dd></div>
+    </dl>
+
+    <div class="table-wrap"><table>
+      <caption class="sr-only">Settlement allocations</caption>
+      <thead><tr><th scope="col">Target</th><th scope="col">Original due date</th>
+        <th scope="col">Amount</th><th scope="col">Balance treatment</th><th scope="col">Status</th></tr></thead>
+      <tbody>
+        <% @document.document_allocations.each do |allocation| %>
+          <tr>
+            <td><strong><%= allocation.target_snapshot["sourceDocumentNumber"] || allocation.target_snapshot.fetch("assignment") %></strong><br>
+              <small><%= allocation.target_snapshot.fetch("assignment") %></small></td>
+            <td><%= Date.iso8601(allocation.target_snapshot.fetch("dueDate")).to_fs(:long) %></td>
+            <td class="money"><%= money_amount(allocation.amount_minor, currency: @document.currency) %></td>
+            <td><%= allocation.clearing_mode == "residual" ? "Reset remaining ageing" : "Preserve original ageing" %></td>
+            <td><%= allocation.target_clearing_event_id? ? "Applied" : "Pending" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+      <tfoot><tr><th scope="row" colspan="2">Settlement total</th>
+        <td class="money"><strong><%= money_amount(@document.total_minor, currency: @document.currency) %></strong></td>
+        <td colspan="2"></td></tr></tfoot>
+    </table></div>
+  </section>
+
+  <% if @document.postable? %>
+    <section class="panel posting-panel">
+      <div>
+        <p class="eyebrow">Accounting preview</p>
+        <h2><%= @simulation[:balanced] ? "Balanced and ready to post" : "This settlement does not balance" %></h2>
+        <p>Posting moves cash or bank and applies each counterparty line using the selected partial or residual clearing mode.</p>
+      </div>
+      <% if @simulation[:balanced] && permitted?("payments.create") %>
+        <%= button_to "Post #{label.downcase}", post_settlement_path(@document, tenant_route_options),
+          method: :post, class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% else %>
+    <div class="action-row">
+      <%= link_to "View reports", reports_path(tenant_route_options), class: "button button--primary" %>
+    </div>
+  <% end %>
+</main>
