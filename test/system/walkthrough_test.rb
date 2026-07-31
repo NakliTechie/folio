@@ -419,6 +419,7 @@ class WalkthroughTest < ApplicationSystemTestCase
         token: invitation.generate_token_for(:invite), password: PASSWORD
       )
     end
+    configure_role_purchase_masters!(org)
 
     users.each do |role_code, user|
       visit new_session_path
@@ -436,16 +437,22 @@ class WalkthroughTest < ApplicationSystemTestCase
         assert_link "Tax setup"
         click_link "Team"
         assert_selector "h1", text: "People and invitations"
-        assert_button "Queue invitation"
+        fill_in "Work email", with: "role-invited@folio.invalid"
+        select "Viewer", from: "Role"
+        click_button "Queue invitation"
+        assert_selector "[role=status]", text: /Invitation queued/
+        assert_text "role-invited@folio.invalid"
       when "accountant"
         assert_no_link "Team"
         assert_link "Tax setup"
         click_link "Chart of accounts"
         assert_link "Add account"
-        click_link "Opening balances"
-        assert_selector "h1", text: "Opening balances"
-        click_link "Enter opening balances"
-        assert_selector "h1", text: "Enter opening balances"
+        click_link "Add account"
+        fill_in "Account code", with: "5199"
+        fill_in "Account name", with: "Role walkthrough expense"
+        select "Expense", from: "Account type"
+        click_button "Add account"
+        assert_selector "[role=status]", text: /5199.*Role walkthrough expense added/
         visit period_close_path(tenant_id: org.tenant.id)
         assert_selector "h1", text: "Period close"
         assert_no_button "Restrict to close team"
@@ -455,6 +462,21 @@ class WalkthroughTest < ApplicationSystemTestCase
         assert_no_link "Record your first transaction"
         click_link "Purchases"
         assert_link "New purchase bill"
+        click_link "New purchase bill"
+        select "V-ROLE · Role Walkthrough Vendor", from: "Vendor"
+        select "27AAPFU0939F1ZV · State 27", from: "Buyer GSTIN"
+        fill_in "Supplier invoice number", with: "ROLE-INV-1"
+        set_date_field "Supplier invoice date", "2026-07-31"
+        set_date_field "Due date", "2026-08-30"
+        select "27 · Maharashtra", from: "Place of supply (state code)"
+        select "ROLE-SVC · Role walkthrough service", from: "Product or service for line 1"
+        fill_in "Quantity for line 1", with: "1"
+        fill_in "Unit price for line 1", with: "100.00"
+        click_button "Review bill"
+        assert_selector "h2", text: "Input GST calculated and ready to post"
+        click_button "Post bill"
+        assert_selector "h1", text: "PB/26-27/00001"
+        assert_selector "[role=status]", text: /posted.*Payables.*input GST/i
         visit new_account_path(tenant_id: org.tenant.id)
         assert_current_path root_path, ignore_query: true
         assert_selector "[role=alert]", text: /do not have permission/i
@@ -465,6 +487,9 @@ class WalkthroughTest < ApplicationSystemTestCase
         click_link "Reports"
         click_link "Period close"
         assert_button "Restrict to close team"
+        click_button "Restrict to close team"
+        assert_selector "[role=status]", text: /posting period is now restricted/i
+        assert_selector ".status-badge", text: "Restricted"
         visit new_party_path(tenant_id: org.tenant.id)
         assert_current_path root_path, ignore_query: true
         assert_selector "[role=alert]", text: /do not have permission/i
@@ -494,6 +519,44 @@ class WalkthroughTest < ApplicationSystemTestCase
       arguments[0].dispatchEvent(new Event("input", { bubbles: true }));
       arguments[0].dispatchEvent(new Event("change", { bubbles: true }));
     JS
+  end
+
+  def configure_role_purchase_masters!(org)
+    entity = Entity.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office = Office.find_by!(tenant_id: org.tenant.id, code: "PRIMARY")
+    office.update!(
+      address_line1: "1 Ledger Lane", city: "Mumbai", postal_code: "400001",
+      state_code: "27", country_code: "IN"
+    )
+    TaxRegistrations::Manage.create!(
+      tenant: org.tenant, entity: entity,
+      attributes: {
+        kind: "GSTIN", identifier: "27AAPFU0939F1ZV", jurisdiction: "IN-MH",
+        valid_from: Date.new(2026, 4, 1)
+      },
+      office_ids: [ office.id ], actor: org.user
+    )
+    Parties::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        party_number: "V-ROLE", name: "Role Walkthrough Vendor", state_code: "27", country_code: "IN",
+        address_line1: "2 Supplier Road", city: "Mumbai", postal_code: "400002"
+      },
+      roles: [ "vendor" ],
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "27AAPFU0939F1ZV", valid_from: Date.new(2026, 4, 1)
+      },
+      actor: org.user
+    )
+    Items::Manage.create!(
+      tenant: org.tenant,
+      attributes: {
+        code: "ROLE-SVC", name: "Role walkthrough service", item_type: "service",
+        hsn_sac_code: "998211", unit_of_measure: "OTH", tax_rate_basis_points: 1800,
+        cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000"
+      },
+      actor: org.user
+    )
   end
 
   def create_posted_invoice(email, org_name)

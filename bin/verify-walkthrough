@@ -15,6 +15,8 @@ FAST_TESTS = %w[
   test/models/onboarding_test.rb
   test/models/onboarding_concurrency_test.rb
   test/models/rbac_test.rb
+  test/models/settlement_test.rb
+  test/models/open_item_reports_test.rb
   test/models/posting/period_control_test.rb
 ].freeze
 
