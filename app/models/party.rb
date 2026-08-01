@@ -17,6 +17,11 @@ class Party < ApplicationRecord
   validates :email, format: { with: URI::MailTo::EMAIL_REGEXP }, allow_blank: true
   validates :postal_code, format: { with: /\A\d{6}\z/ }, allow_blank: true,
     if: -> { country_code == "IN" }
+  # A vendor's default TDS section must be one the schedule knows (194C, 194J, …); nil = no
+  # ordinary withholding. Validated against the live schedule so the two never drift.
+  validates :default_tds_section,
+    inclusion: { in: ->(_) { Taxes::India::Tds::Schedule::SECTIONS.keys } },
+    allow_nil: true
   validate :party_number_stays_immutable_after_use, on: :update
 
   scope :active, -> { where(active: true) }

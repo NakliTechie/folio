@@ -1092,7 +1092,8 @@ CREATE TABLE public.parties (
     city character varying,
     postal_code character varying,
     state_code character varying,
-    country_code character varying(2) DEFAULT 'IN'::character varying NOT NULL
+    country_code character varying(2) DEFAULT 'IN'::character varying NOT NULL,
+    default_tds_section character varying
 );
 
 
@@ -1452,6 +1453,51 @@ ALTER SEQUENCE public.tax_registrations_id_seq OWNED BY public.tax_registrations
 
 
 --
+-- Name: tds_deductions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tds_deductions (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    party_id bigint NOT NULL,
+    section character varying NOT NULL,
+    rate_basis_points integer NOT NULL,
+    taxable_minor bigint NOT NULL,
+    tds_minor bigint NOT NULL,
+    deduction_date date NOT NULL,
+    deductee_pan character varying,
+    deductee_name_snapshot character varying NOT NULL,
+    source_document_id bigint NOT NULL,
+    entry_id bigint,
+    fiscal_year integer NOT NULL,
+    quarter integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT tds_deductions_amounts_nonneg CHECK (((taxable_minor >= 0) AND (tds_minor >= 0))),
+    CONSTRAINT tds_deductions_quarter_valid CHECK (((quarter >= 1) AND (quarter <= 4)))
+);
+
+
+--
+-- Name: tds_deductions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.tds_deductions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: tds_deductions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.tds_deductions_id_seq OWNED BY public.tds_deductions.id;
+
+
+--
 -- Name: tenants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1780,6 +1826,13 @@ ALTER TABLE ONLY public.tax_registrations ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: tds_deductions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tds_deductions ALTER COLUMN id SET DEFAULT nextval('public.tds_deductions_id_seq'::regclass);
+
+
+--
 -- Name: tenants id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2078,6 +2131,14 @@ ALTER TABLE ONLY public.settlement_reallocations
 
 ALTER TABLE ONLY public.tax_registrations
     ADD CONSTRAINT tax_registrations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tds_deductions tds_deductions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tds_deductions
+    ADD CONSTRAINT tds_deductions_pkey PRIMARY KEY (id);
 
 
 --
@@ -2756,6 +2817,34 @@ CREATE INDEX index_tax_registrations_on_tenant_id_and_active ON public.tax_regis
 
 
 --
+-- Name: index_tds_deductions_on_source_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_tds_deductions_on_source_document_id ON public.tds_deductions USING btree (source_document_id);
+
+
+--
+-- Name: index_tds_deductions_on_tenant_id_and_fiscal_year_and_quarter; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_tds_deductions_on_tenant_id_and_fiscal_year_and_quarter ON public.tds_deductions USING btree (tenant_id, fiscal_year, quarter);
+
+
+--
+-- Name: index_tds_deductions_on_tenant_id_and_party_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_tds_deductions_on_tenant_id_and_party_id ON public.tds_deductions USING btree (tenant_id, party_id);
+
+
+--
+-- Name: index_tds_deductions_on_tenant_id_and_section; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_tds_deductions_on_tenant_id_and_section ON public.tds_deductions USING btree (tenant_id, section);
+
+
+--
 -- Name: index_tenants_on_slug; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3005,6 +3094,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801110000'),
 ('20260801100000'),
 ('20260801008000'),
 ('20260801007000'),

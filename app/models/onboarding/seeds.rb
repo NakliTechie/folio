@@ -8,6 +8,7 @@ module Onboarding
       [ "1000", "Cash", "asset" ], [ "1010", "Bank", "asset" ], [ "1200", "Sundry Debtors", "asset" ],
       [ "1210", "GST Input Credit", "asset" ],
       [ "2000", "Sundry Creditors", "liability" ], [ "2100", "GST Payable", "liability" ],
+      [ "2110", "TDS Payable", "liability" ],
       [ "3000", "Capital", "equity" ],
       [ "4000", "Sales", "income" ], [ "5000", "Purchases", "expense" ], [ "5100", "Expenses", "expense" ]
     ].freeze
