@@ -23,6 +23,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_select "input[autofocus]", count: 0
     assert_select "a.brand[aria-label]", count: 0
     assert_select "a.brand", text: /Folio/
+    assert_select ".mini-steps", text: /Eleven accounts, ready to use/
   end
 
   test "signup provisions the accounting profile the user confirmed" do
