@@ -7,10 +7,14 @@ module Settlements
       "PY" => { role: "vendor", account_code: "2000", label: "payment" }
     }.freeze
     CASH_ACCOUNT_CODES = %w[1000 1010].freeze
+    # Where withheld TDS lands. A vendor payment with withholding posts a 3-way split:
+    # Dr AP (gross) / Cr Bank (net) / Cr TDS Payable (tds).
+    TDS_PAYABLE_ACCOUNT_CODE = "2110"
 
     module_function
 
-    def call(tenant:, doc_type:, document_date:, bank_account_code:, allocations:, narration: nil)
+    def call(tenant:, doc_type:, document_date:, bank_account_code:, allocations:, narration: nil,
+             tds_section: nil)
       type_config = TYPES[doc_type.to_s]
       raise InvalidSettlement, "choose customer receipt or vendor payment" unless type_config
       date = parse_date!(document_date)
@@ -37,6 +41,13 @@ module Settlements
       party = Party.where(tenant_id: tenant.id).find(party_ids.first)
       total = normalized.sum { |allocation| allocation.fetch(:amount_minor) }
       direction = doc_type == "RC" ? 1 : -1
+      # Withholding applies only to vendor payments, and only when a section resolves
+      # (explicit, or the vendor's default) and the amount actually crosses the threshold.
+      withholding = withholding_for(
+        tenant: tenant, entity: entity, party: party, doc_type: doc_type,
+        section: tds_section, date: date, gross: total
+      )
+      tds_minor = withholding ? withholding.fetch("tds_minor") : 0
 
       Document.transaction do
         document = Document.create!(
@@ -51,10 +62,18 @@ module Settlements
         )
         document.document_lines.create!(
           tenant_id: tenant.id, line_no: 1, account_code: bank_code,
-          amount_minor: direction * total, currency: currency,
+          amount_minor: direction * (total - tds_minor), currency: currency,
           minor_unit_exponent: exponent, narration: narration,
           extra: { "settlementKind" => type_config.fetch(:label) }
         )
+        if withholding
+          document.document_lines.create!(
+            tenant_id: tenant.id, line_no: 2, account_code: TDS_PAYABLE_ACCOUNT_CODE,
+            amount_minor: direction * tds_minor, currency: currency,
+            minor_unit_exponent: exponent, narration: "TDS #{withholding.fetch('section')}",
+            extra: { "tds" => withholding }
+          )
+        end
         normalized.each_with_index do |allocation, index|
           target = allocation.fetch(:target)
           document.document_allocations.create!(
@@ -121,6 +140,42 @@ module Settlements
 
       amount = target.amounts.find { |candidate| candidate.slot_role == "transaction" }&.amount_minor.to_i
       type_config.fetch(:role) == "customer" ? amount.positive? : amount.negative?
+    end
+
+    # Returns a frozen withholding snapshot (string-keyed, stored on the TDS line's extra and
+    # later persisted as a TdsDeduction), or nil when no TDS applies. Matches Bahi's oracle:
+    # the base is the GROSS amount being paid (not ex-GST). §206AA (no PAN) is handled by the
+    # kernel; the PAN is derived from the vendor's in-force GSTIN.
+    def withholding_for(tenant:, entity:, party:, doc_type:, section:, date:, gross:)
+      return nil unless doc_type == "PY"
+
+      resolved_section = section.presence || party.default_tds_section
+      return nil if resolved_section.blank?
+
+      pan = vendor_pan(party, date)
+      fiscal_year = Documents.fiscal_year(date, variant: entity.fiscal_year_variant)
+      prior = TdsDeduction.for_tenant(tenant.id)
+        .where(party_id: party.id, section: resolved_section, fiscal_year: fiscal_year)
+        .sum(:taxable_minor)
+      result = Taxes::India::Tds::Deduction.compute(
+        section: resolved_section, on: date, amount_minor: gross, pan: pan, fy_paid_to_date_minor: prior
+      )
+      return nil unless result.applied && result.tds_minor.positive?
+
+      {
+        "section" => resolved_section, "rate_basis_points" => result.rate_basis_points,
+        "taxable_minor" => gross, "tds_minor" => result.tds_minor,
+        "deductee_pan" => pan, "deductee_name_snapshot" => party.name,
+        "party_id" => party.id, "fiscal_year" => fiscal_year,
+        "quarter" => TdsDeduction.india_quarter(date)
+      }
+    rescue Taxes::India::Tds::UnknownSection, Taxes::India::Tds::InvalidInput => e
+      raise InvalidSettlement, "TDS section #{section.presence || party.default_tds_section} is unavailable: #{e.message}"
+    end
+
+    def vendor_pan(party, date)
+      gstin = party.party_tax_registrations.in_force_on(date).find_by(kind: "GSTIN")&.identifier
+      gstin[2, 10] if gstin && gstin.length >= 12
     end
 
     def settlement_party_snapshot(party, target)
