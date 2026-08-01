@@ -69,15 +69,15 @@
             value: params.dig(:purchase_bill, :due_date).presence || (business_date + 30).iso8601 %>
         </div>
         <div class="form-group">
-          <%= form.label :place_of_supply_state_code, "Place of supply (state code)" %>
+          <%= form.label :place_of_supply_state_code, "Place of supply override (optional)" %>
           <%= form.select :place_of_supply_state_code,
             Taxes::India::StateCodes::CODES.map { |code| ["#{code} · #{Taxes::India::StateCodes.name_for(code)}", code] },
-            { prompt: "Choose the place of supply", selected: params.dig(:purchase_bill, :place_of_supply_state_code) },
-            required: true %>
-          <small>This determines whether the supplier charged IGST or CGST plus SGST/UTGST.</small>
+            { include_blank: "Use the buyer GSTIN state automatically",
+              selected: params.dig(:purchase_bill, :place_of_supply_state_code) } %>
+          <small>Folio uses the selected buyer GSTIN state by default. Choose another state only when the supplier invoice or delivery basis requires an exception.</small>
         </div>
         <div class="form-group">
-          <%= form.label :place_of_supply_override_reason, "Reason if this differs from the vendor state" %>
+          <%= form.label :place_of_supply_override_reason, "Override evidence" %>
           <%= form.text_area :place_of_supply_override_reason, rows: 2, maxlength: 500,
             value: params.dig(:purchase_bill, :place_of_supply_override_reason),
             placeholder: "For example, supplier invoice basis and contract or delivery reference" %>

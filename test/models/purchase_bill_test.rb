@@ -83,10 +83,26 @@ class PurchaseBillTest < ActiveSupport::TestCase
     assert_equal "V-INV-001", payable_payload.dig("extra", "supplierInvoiceNumber")
   end
 
-  test "an inter-state bill posts IGST to the input-credit account" do
-    bill = build_bill(place_of_supply_state_code: "29")
+  test "an ordinary inter-state bill infers place of supply from the buyer GST registration" do
+    vendor = Parties::Manage.create!(
+      tenant: @org.tenant,
+      attributes: {
+        party_number: "V-INTER", name: "Karnataka Vendor", state_code: "29", country_code: "IN",
+        address_line1: "3 Supplier Road", city: "Bengaluru", postal_code: "560003"
+      },
+      roles: [ "vendor" ],
+      tax_registration_attributes: {
+        kind: "GSTIN", identifier: "29AAAAA0300L1Z8", valid_from: Date.new(2026, 4, 1)
+      },
+      actor: @org.user
+    )
+
+    bill = build_bill(party_id: vendor.id)
     assert_equal({ "igst" => 1_800 }, bill.tax_breakdown)
-    assert_equal "manual_override", bill.place_of_supply_evidence.fetch("basis")
+    assert_equal "27", bill.place_of_supply_state_code
+    assert_equal "buyer_registration", bill.place_of_supply_evidence.fetch("basis")
+    assert_equal "27", bill.place_of_supply_evidence.fetch("defaultStateCode")
+    assert_nil bill.place_of_supply_evidence["actorId"]
 
     entry = Documents::Post.call(bill, actor: "u:#{@org.user.id}")
     tax_line = entry.entry_lines.find_by!(account_code: "1210")
@@ -94,13 +110,26 @@ class PurchaseBillTest < ActiveSupport::TestCase
     assert_equal 1_800, tax_line.amounts.find_by!(slot_role: "transaction").amount_minor
   end
 
-  test "a purchase place-of-supply override requires frozen evidence" do
+  test "a genuine purchase place-of-supply override requires frozen evidence" do
     error = assert_raises(PurchaseBills::InvalidBill) do
       build_bill(place_of_supply_state_code: "29", override_evidence: false)
     end
 
     assert_match(/explain why/, error.message)
-    assert_equal "party_address", build_bill.place_of_supply_evidence.fetch("basis")
+    assert_equal "buyer_registration", build_bill.place_of_supply_evidence.fetch("basis")
+
+    error = assert_raises(PurchaseBills::InvalidBill) do
+      build_bill(
+        place_of_supply_state_code: "29", external_reference: "V-UNAUTHORIZED-1",
+        override_actor: nil
+      )
+    end
+    assert_match(/not permitted to override the default place of supply/, error.message)
+
+    override = build_bill(place_of_supply_state_code: "29", external_reference: "V-OVERRIDE-1")
+    assert_equal "manual_override", override.place_of_supply_evidence.fetch("basis")
+    assert_equal "buyer_registration", override.place_of_supply_evidence.fetch("defaultBasis")
+    assert_equal @org.user.id, override.place_of_supply_evidence.fetch("actorId")
   end
 
   test "supplier invoice references are case-insensitively unique per vendor" do
@@ -137,6 +166,20 @@ class PurchaseBillTest < ActiveSupport::TestCase
     end
     assert_match(/tax was altered/, error.message)
     assert_nil NumberRange.find_by(tenant_id: @org.tenant.id, doc_type: "PB")
+    assert_equal "draft", bill.reload.state
+  end
+
+  test "posting rejects altered buyer-registration place-of-supply evidence" do
+    bill = build_bill
+    bill.update_column(
+      :place_of_supply_evidence,
+      bill.place_of_supply_evidence.merge("defaultStateCode" => "29")
+    )
+
+    error = assert_raises(Documents::InvalidDocument) do
+      Documents::Post.call(bill, actor: "u:#{@org.user.id}")
+    end
+    assert_match(/buyer-registration place-of-supply evidence was altered/, error.message)
     assert_equal "draft", bill.reload.state
   end
 
@@ -213,10 +256,10 @@ class PurchaseBillTest < ActiveSupport::TestCase
 
   private
 
-  def build_bill(party_id: @vendor.id, place_of_supply_state_code: "27", external_reference: "V-INV-001",
-                 override_evidence: true)
-    vendor = Party.find(party_id)
-    override = place_of_supply_state_code != vendor.state_code && override_evidence
+  def build_bill(party_id: @vendor.id, place_of_supply_state_code: nil, external_reference: "V-INV-001",
+                 override_evidence: true, override_actor: @org.user)
+    override = place_of_supply_state_code.present? &&
+      place_of_supply_state_code != @buyer_registration.state_code && override_evidence
     PurchaseBills::BuildDraft.call(
       tenant: @org.tenant,
       party_id: party_id,
@@ -225,7 +268,7 @@ class PurchaseBillTest < ActiveSupport::TestCase
       due_date: BILL_DATE + 30,
       place_of_supply_state_code: place_of_supply_state_code,
       place_of_supply_override_reason: override ? "Supplier invoice records Karnataka as the place of supply" : nil,
-      actor: override ? @org.user : nil,
+      actor: override ? override_actor : nil,
       external_reference: external_reference,
       narration: "July legal fees",
       lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]

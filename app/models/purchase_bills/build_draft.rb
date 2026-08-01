@@ -7,7 +7,7 @@ module PurchaseBills
     module_function
 
     def call(tenant:, party_id:, tax_registration_id:, document_date:, due_date:,
-             place_of_supply_state_code:, external_reference:, lines:, narration: nil,
+             place_of_supply_state_code: nil, external_reference:, lines:, narration: nil,
              tds_section: nil, place_of_supply_override_reason: nil, actor: nil)
       bill_date = parse_date!(document_date, "supplier invoice date")
       payment_due = parse_date!(due_date, "due date")
@@ -57,13 +57,15 @@ module PurchaseBills
         raise InvalidBill, "the buying office state must match the selected buyer GSTIN"
       end
 
-      place_state = place_of_supply_state_code.to_s
+      place_state = place_of_supply_state_code.to_s.presence || buyer_registration.state_code
       unless Taxes::India::StateCodes.valid?(place_state)
         raise InvalidBill, "place of supply must be a valid GST state code"
       end
       place_evidence = Taxes::India::PlaceOfSupplyEvidence.build!(
         tenant: tenant, party: vendor, selected_state_code: place_state, actor: actor,
-        override_reason: place_of_supply_override_reason, error_class: InvalidBill
+        override_reason: place_of_supply_override_reason,
+        default_basis: "buyer_registration", default_state_code: buyer_registration.state_code,
+        error_class: InvalidBill
       )
 
       normalized_lines = normalize_lines!(

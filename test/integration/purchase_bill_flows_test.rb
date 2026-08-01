@@ -56,12 +56,16 @@ class PurchaseBillFlowsTest < ActionDispatch::IntegrationTest
     assert_select "option", text: /Acme Vendor/
     assert_select "option", text: /27AAPFU0939F1ZV/
     assert_select "option", text: /Legal services/
+    assert_select "select[name='purchase_bill[place_of_supply_state_code]'] option[value='']",
+      text: /Use the buyer GSTIN state automatically/
 
     assert_difference -> { Document.where(tenant_id: @org.tenant.id, doc_type: "PB").count }, 1 do
       post purchase_bills_path, params: browser_bill_params
     end
     bill = Document.where(tenant_id: @org.tenant.id, doc_type: "PB").order(:id).last
     assert_redirected_to purchase_bill_path(bill, tenant_id: @org.tenant.id)
+    assert_equal "27", bill.place_of_supply_state_code
+    assert_equal "buyer_registration", bill.place_of_supply_evidence.fetch("basis")
 
     follow_redirect!
     assert_response :success
@@ -164,8 +168,6 @@ class PurchaseBillFlowsTest < ActionDispatch::IntegrationTest
         tax_registration_id: @buyer_registration.id,
         document_date: "2026-07-31",
         due_date: "2026-08-30",
-        place_of_supply_state_code: "27",
-        place_of_supply_override_reason: "Supplier invoice identifies the Maharashtra recipient location",
         external_reference: "V-INV-001",
         narration: "July legal fees",
         lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
