@@ -53,6 +53,29 @@
     </div>
   </section>
 
+  <% if @document.purchase_order %>
+    <section class="panel panel--table">
+      <div class="panel__header">
+        <div><p class="eyebrow">Procurement evidence</p><h2>Match to <%= @document.purchase_order.order_number %></h2></div>
+        <% has_exceptions = @document.procurement_matches.any? { |match| match.status == "exception" } %>
+        <span class="status-badge <%= has_exceptions ? "status-badge--pending" : "status-badge--success" %>"><%= has_exceptions ? "Exception" : "Matched" %></span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Item</th><th>Ordered price</th><th>Billed price</th><th>Quantity</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <% @document.procurement_matches.includes(:purchase_order_line, document_line: :item).each do |match| %>
+            <tr><td><strong><%= match.document_line.item.code %></strong></td>
+              <td class="money"><%= money_amount(match.ordered_unit_price_minor) %></td>
+              <td class="money"><%= money_amount(match.billed_unit_price_minor) %></td>
+              <td><%= match.billed_quantity.to_s("F") %></td>
+              <td><% if match.status == "matched" %><span class="status-badge status-badge--success">Matched</span><% else %><ul><% match.exceptions.each do |exception| %><li><%= exception.fetch("message") %></li><% end %></ul><% end %></td></tr>
+          <% end %>
+        </tbody>
+      </table></div>
+      <p><small>Match exceptions are advisory evidence. Posting preserves the discrepancy rather than hiding or silently overriding it.</small></p>
+    </section>
+  <% end %>
+
   <% if @document.tds_section.present? %>
     <section class="panel">
       <div class="panel__header">

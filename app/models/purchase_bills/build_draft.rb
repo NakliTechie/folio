@@ -8,7 +8,8 @@ module PurchaseBills
 
     def call(tenant:, party_id:, tax_registration_id:, document_date:, due_date:,
              place_of_supply_state_code: nil, external_reference:, lines:, narration: nil,
-             tds_section: nil, place_of_supply_override_reason: nil, actor: nil)
+             tds_section: nil, place_of_supply_override_reason: nil, actor: nil,
+             purchase_order_id: nil)
       bill_date = parse_date!(document_date, "supplier invoice date")
       payment_due = parse_date!(due_date, "due date")
       raise InvalidBill, "due date cannot be before the supplier invoice date" if payment_due < bill_date
@@ -33,6 +34,8 @@ module PurchaseBills
       vendor = Party.active.includes(:party_roles, :party_tax_registrations)
         .where(tenant_id: tenant.id).find(party_id)
       raise InvalidBill, "the selected party is not a vendor" unless vendor.role_codes.include?("vendor")
+      profile = VendorProfile.find_by(tenant_id: tenant.id, party_id: vendor.id)
+      raise InvalidBill, "this vendor is on posting hold" if profile&.posting_hold?
       unless vendor.statutory_address_complete? && vendor.country_code == "IN"
         raise InvalidBill, "the selected vendor needs a complete India billing address"
       end
@@ -56,6 +59,9 @@ module PurchaseBills
       unless buyer_registration.state_code == office.state_code
         raise InvalidBill, "the buying office state must match the selected buyer GSTIN"
       end
+      purchase_order = resolve_purchase_order!(
+        tenant: tenant, entity: entity, office: office, vendor: vendor, purchase_order_id: purchase_order_id
+      )
 
       place_state = place_of_supply_state_code.to_s.presence || buyer_registration.state_code
       unless Taxes::India::StateCodes.valid?(place_state)
@@ -101,6 +107,7 @@ module PurchaseBills
           fiscal_year: Documents.fiscal_year(bill_date, variant: entity.fiscal_year_variant),
           document_date: bill_date, posting_date: bill_date, due_date: payment_due,
           external_reference: supplier_reference, narration: narration,
+          purchase_order: purchase_order,
           state: "draft", party: vendor, tax_registration: buyer_registration,
           supply_type: "B2B", place_of_supply_state_code: place_state,
           place_of_supply_evidence: place_evidence,
@@ -124,6 +131,7 @@ module PurchaseBills
             tax_components: line.fetch(:tax_components), item_snapshot: line.fetch(:item_snapshot)
           )
         end
+        Procurement::MatchBill.call!(document: document, purchase_order: purchase_order) if purchase_order
         Posting::Rules::PurchaseBill.validate_document!(document)
         document
       end
@@ -131,6 +139,22 @@ module PurchaseBills
       raise InvalidBill, "a purchase-bill master is unavailable: #{e.model}"
     rescue ActiveRecord::RecordNotUnique
       raise InvalidBill, "this supplier invoice number is already recorded for the vendor"
+    rescue Procurement::InvalidProcurement => e
+      raise InvalidBill, e.message
+    end
+
+    def resolve_purchase_order!(tenant:, entity:, office:, vendor:, purchase_order_id:)
+      return if purchase_order_id.blank?
+
+      order = PurchaseOrder.where(
+        tenant_id: tenant.id, entity_id: entity.id, office_id: office.id
+      ).find(purchase_order_id)
+      raise InvalidBill, "the purchase order belongs to another vendor" unless order.vendor.id == vendor.id
+      unless %w[approved partially_received received closed].include?(order.status)
+        raise InvalidBill, "only a released purchase order can be matched to a bill"
+      end
+
+      order
     end
 
     def normalize_lines!(tenant:, entity:, vendor_registration:, place_state:, raw_lines:)

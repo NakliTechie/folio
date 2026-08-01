@@ -4,8 +4,10 @@
 class DocumentLine < ApplicationRecord
   belongs_to :document
   belongs_to :item, optional: true
+  belongs_to :purchase_order_line, optional: true
   belongs_to :credited_document_line, class_name: "DocumentLine", optional: true
   belongs_to :debited_document_line, class_name: "DocumentLine", optional: true
+  has_one :procurement_match, dependent: :destroy
   normalizes :currency, with: ->(currency) { currency.to_s.upcase }
   normalizes :account_code, with: ->(code) { code.to_s.strip }
   validates :tenant_id, :line_no, :account_code, :amount_minor, :currency, :minor_unit_exponent,

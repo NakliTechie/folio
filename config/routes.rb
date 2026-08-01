@@ -63,6 +63,15 @@ Rails.application.routes.draw do
     post :create_cycle
     post :run_allocation
   end
+  resource :procurement, controller: "procurement", only: :show do
+    post :onboard_vendor
+    post :approve_vendor
+    post :suspend_vendor
+    post :create_order
+    post :approve_order
+    post :receive_order
+    post :close_order
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

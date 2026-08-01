@@ -108,6 +108,19 @@ $$;
 
 
 --
+-- Name: folio_procurement_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_procurement_evidence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: % on row id=% rejected', TG_TABLE_NAME, TG_OP, OLD.id;
+END;
+$$;
+
+
+--
 -- Name: folio_protect_last_tenant_owner(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1397,6 +1410,7 @@ CREATE TABLE public.document_lines (
     item_snapshot jsonb,
     credited_document_line_id bigint,
     debited_document_line_id bigint,
+    purchase_order_line_id bigint,
     CONSTRAINT chk_document_lines_cess_rate CHECK (((cess_rate_basis_points IS NULL) OR ((cess_rate_basis_points >= 0) AND (cess_rate_basis_points <= 10000)))),
     CONSTRAINT chk_document_lines_invoice_amounts CHECK (((item_id IS NULL) OR ((quantity > (0)::numeric) AND (unit_price_minor >= 0) AND (taxable_minor > 0)))),
     CONSTRAINT chk_document_lines_tax_rate CHECK (((tax_rate_basis_points IS NULL) OR ((tax_rate_basis_points >= 0) AND (tax_rate_basis_points <= 4000))))
@@ -1511,6 +1525,7 @@ CREATE TABLE public.documents (
     place_of_supply_evidence jsonb DEFAULT '{}'::jsonb NOT NULL,
     contract_id bigint,
     contract_snapshot jsonb,
+    purchase_order_id bigint,
     CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying, 'quantity_underbilling'::character varying])::text[])))),
     CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
     CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
@@ -2145,6 +2160,80 @@ CREATE SEQUENCE public.fixed_assets_id_seq
 --
 
 ALTER SEQUENCE public.fixed_assets_id_seq OWNED BY public.fixed_assets.id;
+
+
+--
+-- Name: goods_receipt_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.goods_receipt_lines (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    goods_receipt_id bigint NOT NULL,
+    purchase_order_line_id bigint NOT NULL,
+    inventory_transaction_id bigint,
+    received_quantity numeric(20,6) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT goods_receipt_lines_quantity_positive CHECK ((received_quantity > (0)::numeric))
+);
+
+
+--
+-- Name: goods_receipt_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.goods_receipt_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: goods_receipt_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.goods_receipt_lines_id_seq OWNED BY public.goods_receipt_lines.id;
+
+
+--
+-- Name: goods_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.goods_receipts (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    purchase_order_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    receipt_number character varying NOT NULL,
+    idempotency_key character varying NOT NULL,
+    request_sha256 character varying NOT NULL,
+    received_on date NOT NULL,
+    external_reference character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: goods_receipts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.goods_receipts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: goods_receipts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.goods_receipts_id_seq OWNED BY public.goods_receipts.id;
 
 
 --
@@ -2785,6 +2874,48 @@ ALTER SEQUENCE public.posting_limits_id_seq OWNED BY public.posting_limits.id;
 
 
 --
+-- Name: procurement_matches; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.procurement_matches (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    document_id bigint NOT NULL,
+    document_line_id bigint NOT NULL,
+    purchase_order_id bigint NOT NULL,
+    purchase_order_line_id bigint NOT NULL,
+    status character varying NOT NULL,
+    billed_quantity numeric(20,6) NOT NULL,
+    ordered_unit_price_minor bigint NOT NULL,
+    billed_unit_price_minor bigint NOT NULL,
+    exceptions jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT procurement_matches_quantity_positive CHECK ((billed_quantity > (0)::numeric)),
+    CONSTRAINT procurement_matches_status_valid CHECK (((status)::text = ANY ((ARRAY['matched'::character varying, 'exception'::character varying])::text[])))
+);
+
+
+--
+-- Name: procurement_matches_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.procurement_matches_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: procurement_matches_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.procurement_matches_id_seq OWNED BY public.procurement_matches.id;
+
+
+--
 -- Name: profit_centers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2821,6 +2952,139 @@ CREATE SEQUENCE public.profit_centers_id_seq
 --
 
 ALTER SEQUENCE public.profit_centers_id_seq OWNED BY public.profit_centers.id;
+
+
+--
+-- Name: purchase_order_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchase_order_lines (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    purchase_order_id bigint NOT NULL,
+    item_id bigint NOT NULL,
+    warehouse_id bigint,
+    line_no integer NOT NULL,
+    description character varying NOT NULL,
+    ordered_quantity numeric(20,6) NOT NULL,
+    received_quantity numeric(20,6) DEFAULT 0.0 NOT NULL,
+    unit_price_minor bigint NOT NULL,
+    line_total_minor bigint NOT NULL,
+    account_code character varying NOT NULL,
+    item_type character varying NOT NULL,
+    item_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT purchase_order_lines_item_type_valid CHECK (((item_type)::text = ANY ((ARRAY['service'::character varying, 'good'::character varying])::text[]))),
+    CONSTRAINT purchase_order_lines_quantity_positive CHECK ((ordered_quantity > (0)::numeric)),
+    CONSTRAINT purchase_order_lines_received_coherent CHECK (((received_quantity >= (0)::numeric) AND (received_quantity <= ordered_quantity))),
+    CONSTRAINT purchase_order_lines_value_valid CHECK (((unit_price_minor >= 0) AND (line_total_minor > 0)))
+);
+
+
+--
+-- Name: purchase_order_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.purchase_order_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: purchase_order_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.purchase_order_lines_id_seq OWNED BY public.purchase_order_lines.id;
+
+
+--
+-- Name: purchase_order_number_ranges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchase_order_number_ranges (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    fiscal_year integer NOT NULL,
+    next_value integer DEFAULT 1 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT purchase_order_ranges_next_positive CHECK ((next_value > 0))
+);
+
+
+--
+-- Name: purchase_order_number_ranges_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.purchase_order_number_ranges_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: purchase_order_number_ranges_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.purchase_order_number_ranges_id_seq OWNED BY public.purchase_order_number_ranges.id;
+
+
+--
+-- Name: purchase_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchase_orders (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    vendor_profile_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    approved_by_id bigint,
+    order_number character varying NOT NULL,
+    fiscal_year integer NOT NULL,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    order_date date NOT NULL,
+    expected_on date,
+    currency character varying NOT NULL,
+    minor_unit_exponent integer NOT NULL,
+    subtotal_minor bigint NOT NULL,
+    description text,
+    approved_at timestamp(6) without time zone,
+    closed_on date,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT purchase_orders_status_valid CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'approved'::character varying, 'partially_received'::character varying, 'received'::character varying, 'closed'::character varying])::text[]))),
+    CONSTRAINT purchase_orders_subtotal_positive CHECK ((subtotal_minor > 0))
+);
+
+
+--
+-- Name: purchase_orders_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.purchase_orders_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: purchase_orders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.purchase_orders_id_seq OWNED BY public.purchase_orders.id;
 
 
 --
@@ -3255,6 +3519,51 @@ ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
 
 
 --
+-- Name: vendor_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vendor_profiles (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    party_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    approved_by_id bigint,
+    status character varying DEFAULT 'pending'::character varying NOT NULL,
+    spend_authorized boolean DEFAULT false NOT NULL,
+    purchasing_hold boolean DEFAULT false NOT NULL,
+    posting_hold boolean DEFAULT false NOT NULL,
+    payment_hold boolean DEFAULT false NOT NULL,
+    payment_terms_days integer DEFAULT 30 NOT NULL,
+    preferred_currency character varying NOT NULL,
+    approved_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT vendor_profiles_approval_coherent CHECK (((((status)::text = 'approved'::text) AND (spend_authorized = true) AND (approved_by_id IS NOT NULL) AND (approved_at IS NOT NULL)) OR (((status)::text <> 'approved'::text) AND (spend_authorized = false)))),
+    CONSTRAINT vendor_profiles_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'suspended'::character varying])::text[]))),
+    CONSTRAINT vendor_profiles_terms_nonnegative CHECK ((payment_terms_days >= 0))
+);
+
+
+--
+-- Name: vendor_profiles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.vendor_profiles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: vendor_profiles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.vendor_profiles_id_seq OWNED BY public.vendor_profiles.id;
+
+
+--
 -- Name: warehouses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3594,6 +3903,20 @@ ALTER TABLE ONLY public.fixed_assets ALTER COLUMN id SET DEFAULT nextval('public
 
 
 --
+-- Name: goods_receipt_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipt_lines ALTER COLUMN id SET DEFAULT nextval('public.goods_receipt_lines_id_seq'::regclass);
+
+
+--
+-- Name: goods_receipts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipts ALTER COLUMN id SET DEFAULT nextval('public.goods_receipts_id_seq'::regclass);
+
+
+--
 -- Name: inventory_movements id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -3706,10 +4029,38 @@ ALTER TABLE ONLY public.posting_limits ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
+-- Name: procurement_matches id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.procurement_matches ALTER COLUMN id SET DEFAULT nextval('public.procurement_matches_id_seq'::regclass);
+
+
+--
 -- Name: profit_centers id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.profit_centers ALTER COLUMN id SET DEFAULT nextval('public.profit_centers_id_seq'::regclass);
+
+
+--
+-- Name: purchase_order_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines ALTER COLUMN id SET DEFAULT nextval('public.purchase_order_lines_id_seq'::regclass);
+
+
+--
+-- Name: purchase_order_number_ranges id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_number_ranges ALTER COLUMN id SET DEFAULT nextval('public.purchase_order_number_ranges_id_seq'::regclass);
+
+
+--
+-- Name: purchase_orders id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders ALTER COLUMN id SET DEFAULT nextval('public.purchase_orders_id_seq'::regclass);
 
 
 --
@@ -3787,6 +4138,13 @@ ALTER TABLE ONLY public.user_signing_keys ALTER COLUMN id SET DEFAULT nextval('p
 --
 
 ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
+
+
+--
+-- Name: vendor_profiles id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vendor_profiles ALTER COLUMN id SET DEFAULT nextval('public.vendor_profiles_id_seq'::regclass);
 
 
 --
@@ -4149,6 +4507,22 @@ ALTER TABLE ONLY public.fixed_assets
 
 
 --
+-- Name: goods_receipt_lines goods_receipt_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipt_lines
+    ADD CONSTRAINT goods_receipt_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: goods_receipts goods_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipts
+    ADD CONSTRAINT goods_receipts_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: inventory_movements inventory_movements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4285,11 +4659,43 @@ ALTER TABLE ONLY public.posting_limits
 
 
 --
+-- Name: procurement_matches procurement_matches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.procurement_matches
+    ADD CONSTRAINT procurement_matches_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: profit_centers profit_centers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.profit_centers
     ADD CONSTRAINT profit_centers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: purchase_order_lines purchase_order_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines
+    ADD CONSTRAINT purchase_order_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: purchase_order_number_ranges purchase_order_number_ranges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_number_ranges
+    ADD CONSTRAINT purchase_order_number_ranges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: purchase_orders purchase_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT purchase_orders_pkey PRIMARY KEY (id);
 
 
 --
@@ -4386,6 +4792,14 @@ ALTER TABLE ONLY public.user_signing_keys
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: vendor_profiles vendor_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vendor_profiles
+    ADD CONSTRAINT vendor_profiles_pkey PRIMARY KEY (id);
 
 
 --
@@ -5300,6 +5714,13 @@ CREATE INDEX index_document_lines_on_item_id ON public.document_lines USING btre
 
 
 --
+-- Name: index_document_lines_on_purchase_order_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_document_lines_on_purchase_order_line_id ON public.document_lines USING btree (purchase_order_line_id);
+
+
+--
 -- Name: index_document_types_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5332,6 +5753,13 @@ CREATE INDEX index_documents_on_document_type_id ON public.documents USING btree
 --
 
 CREATE INDEX index_documents_on_external_reference ON public.documents USING btree (tenant_id, entity_id, external_reference) WHERE (external_reference IS NOT NULL);
+
+
+--
+-- Name: index_documents_on_purchase_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_documents_on_purchase_order_id ON public.documents USING btree (purchase_order_id);
 
 
 --
@@ -5699,6 +6127,62 @@ CREATE INDEX index_fixed_assets_on_office_id ON public.fixed_assets USING btree 
 
 
 --
+-- Name: index_goods_receipt_lines_on_goods_receipt_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_goods_receipt_lines_on_goods_receipt_id ON public.goods_receipt_lines USING btree (goods_receipt_id);
+
+
+--
+-- Name: index_goods_receipt_lines_on_inventory_transaction_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_goods_receipt_lines_on_inventory_transaction_id ON public.goods_receipt_lines USING btree (inventory_transaction_id);
+
+
+--
+-- Name: index_goods_receipt_lines_on_order_line; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_goods_receipt_lines_on_order_line ON public.goods_receipt_lines USING btree (goods_receipt_id, purchase_order_line_id);
+
+
+--
+-- Name: index_goods_receipt_lines_on_purchase_order_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_goods_receipt_lines_on_purchase_order_line_id ON public.goods_receipt_lines USING btree (purchase_order_line_id);
+
+
+--
+-- Name: index_goods_receipts_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_goods_receipts_on_created_by_id ON public.goods_receipts USING btree (created_by_id);
+
+
+--
+-- Name: index_goods_receipts_on_purchase_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_goods_receipts_on_purchase_order_id ON public.goods_receipts USING btree (purchase_order_id);
+
+
+--
+-- Name: index_goods_receipts_on_tenant_id_and_idempotency_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_goods_receipts_on_tenant_id_and_idempotency_key ON public.goods_receipts USING btree (tenant_id, idempotency_key);
+
+
+--
+-- Name: index_goods_receipts_on_tenant_id_and_receipt_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_goods_receipts_on_tenant_id_and_receipt_number ON public.goods_receipts USING btree (tenant_id, receipt_number);
+
+
+--
 -- Name: index_inventory_movements_on_item_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5958,6 +6442,34 @@ CREATE UNIQUE INDEX index_period_controls_on_scope ON public.period_controls USI
 
 
 --
+-- Name: index_procurement_matches_on_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_procurement_matches_on_document_id ON public.procurement_matches USING btree (document_id);
+
+
+--
+-- Name: index_procurement_matches_on_document_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_procurement_matches_on_document_line_id ON public.procurement_matches USING btree (document_line_id);
+
+
+--
+-- Name: index_procurement_matches_on_purchase_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_procurement_matches_on_purchase_order_id ON public.procurement_matches USING btree (purchase_order_id);
+
+
+--
+-- Name: index_procurement_matches_on_purchase_order_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_procurement_matches_on_purchase_order_line_id ON public.procurement_matches USING btree (purchase_order_line_id);
+
+
+--
 -- Name: index_profit_centers_on_controlling_segment_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5976,6 +6488,111 @@ CREATE INDEX index_profit_centers_on_entity_id ON public.profit_centers USING bt
 --
 
 CREATE UNIQUE INDEX index_profit_centers_on_tenant_id_and_code ON public.profit_centers USING btree (tenant_id, code);
+
+
+--
+-- Name: index_purchase_order_lines_on_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_order_lines_on_item_id ON public.purchase_order_lines USING btree (item_id);
+
+
+--
+-- Name: index_purchase_order_lines_on_purchase_order_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_order_lines_on_purchase_order_id ON public.purchase_order_lines USING btree (purchase_order_id);
+
+
+--
+-- Name: index_purchase_order_lines_on_purchase_order_id_and_line_no; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchase_order_lines_on_purchase_order_id_and_line_no ON public.purchase_order_lines USING btree (purchase_order_id, line_no);
+
+
+--
+-- Name: index_purchase_order_lines_on_unique_item; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchase_order_lines_on_unique_item ON public.purchase_order_lines USING btree (purchase_order_id, item_id);
+
+
+--
+-- Name: index_purchase_order_lines_on_warehouse_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_order_lines_on_warehouse_id ON public.purchase_order_lines USING btree (warehouse_id);
+
+
+--
+-- Name: index_purchase_order_number_ranges_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_order_number_ranges_on_entity_id ON public.purchase_order_number_ranges USING btree (entity_id);
+
+
+--
+-- Name: index_purchase_order_number_ranges_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_order_number_ranges_on_office_id ON public.purchase_order_number_ranges USING btree (office_id);
+
+
+--
+-- Name: index_purchase_order_ranges_on_series; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchase_order_ranges_on_series ON public.purchase_order_number_ranges USING btree (tenant_id, entity_id, office_id, fiscal_year);
+
+
+--
+-- Name: index_purchase_orders_on_approved_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_orders_on_approved_by_id ON public.purchase_orders USING btree (approved_by_id);
+
+
+--
+-- Name: index_purchase_orders_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_orders_on_created_by_id ON public.purchase_orders USING btree (created_by_id);
+
+
+--
+-- Name: index_purchase_orders_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_orders_on_entity_id ON public.purchase_orders USING btree (entity_id);
+
+
+--
+-- Name: index_purchase_orders_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_orders_on_office_id ON public.purchase_orders USING btree (office_id);
+
+
+--
+-- Name: index_purchase_orders_on_tenant_id_and_order_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchase_orders_on_tenant_id_and_order_number ON public.purchase_orders USING btree (tenant_id, order_number);
+
+
+--
+-- Name: index_purchase_orders_on_tenant_id_and_status_and_order_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_orders_on_tenant_id_and_status_and_order_date ON public.purchase_orders USING btree (tenant_id, status, order_date);
+
+
+--
+-- Name: index_purchase_orders_on_vendor_profile_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchase_orders_on_vendor_profile_id ON public.purchase_orders USING btree (vendor_profile_id);
 
 
 --
@@ -6168,6 +6785,34 @@ CREATE UNIQUE INDEX index_users_on_email_address ON public.users USING btree (em
 
 
 --
+-- Name: index_vendor_profiles_on_approved_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_vendor_profiles_on_approved_by_id ON public.vendor_profiles USING btree (approved_by_id);
+
+
+--
+-- Name: index_vendor_profiles_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_vendor_profiles_on_created_by_id ON public.vendor_profiles USING btree (created_by_id);
+
+
+--
+-- Name: index_vendor_profiles_on_party_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_vendor_profiles_on_party_id ON public.vendor_profiles USING btree (party_id);
+
+
+--
+-- Name: index_vendor_profiles_on_tenant_id_and_party_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_vendor_profiles_on_tenant_id_and_party_id ON public.vendor_profiles USING btree (tenant_id, party_id);
+
+
+--
 -- Name: index_warehouses_on_entity_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6242,6 +6887,20 @@ CREATE TRIGGER domain_events_no_truncate BEFORE TRUNCATE ON public.domain_events
 --
 
 CREATE TRIGGER domain_events_no_update BEFORE UPDATE ON public.domain_events FOR EACH ROW EXECUTE FUNCTION public.folio_domain_events_append_only();
+
+
+--
+-- Name: goods_receipt_lines goods_receipt_lines_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER goods_receipt_lines_immutable BEFORE DELETE OR UPDATE ON public.goods_receipt_lines FOR EACH ROW EXECUTE FUNCTION public.folio_procurement_evidence_immutable();
+
+
+--
+-- Name: goods_receipts goods_receipts_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER goods_receipts_immutable BEFORE DELETE OR UPDATE ON public.goods_receipts FOR EACH ROW EXECUTE FUNCTION public.folio_procurement_evidence_immutable();
 
 
 --
@@ -6359,6 +7018,14 @@ ALTER TABLE ONLY public.contract_posting_run_items
 
 
 --
+-- Name: procurement_matches fk_rails_0c8a993869; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.procurement_matches
+    ADD CONSTRAINT fk_rails_0c8a993869 FOREIGN KEY (purchase_order_id) REFERENCES public.purchase_orders(id);
+
+
+--
 -- Name: user_office_roles fk_rails_1018c65b31; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6407,6 +7074,14 @@ ALTER TABLE ONLY public.warehouses
 
 
 --
+-- Name: purchase_order_lines fk_rails_1d0d709115; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines
+    ADD CONSTRAINT fk_rails_1d0d709115 FOREIGN KEY (warehouse_id) REFERENCES public.warehouses(id);
+
+
+--
 -- Name: entry_lines fk_rails_1d40e13a42; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6420,6 +7095,22 @@ ALTER TABLE ONLY public.entry_lines
 
 ALTER TABLE ONLY public.bank_statement_imports
     ADD CONSTRAINT fk_rails_1d4ecd5563 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
+
+
+--
+-- Name: goods_receipts fk_rails_1e4a00dae7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipts
+    ADD CONSTRAINT fk_rails_1e4a00dae7 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: vendor_profiles fk_rails_1eeb109c2f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vendor_profiles
+    ADD CONSTRAINT fk_rails_1eeb109c2f FOREIGN KEY (approved_by_id) REFERENCES public.users(id);
 
 
 --
@@ -6500,6 +7191,14 @@ ALTER TABLE ONLY public.allocation_cycles
 
 ALTER TABLE ONLY public.exchange_rates
     ADD CONSTRAINT fk_rails_3908165cb0 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: purchase_orders fk_rails_3c1ce09582; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT fk_rails_3c1ce09582 FOREIGN KEY (approved_by_id) REFERENCES public.users(id);
 
 
 --
@@ -6623,11 +7322,27 @@ ALTER TABLE ONLY public.exchange_revaluation_items
 
 
 --
+-- Name: goods_receipt_lines fk_rails_5c58f31f71; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipt_lines
+    ADD CONSTRAINT fk_rails_5c58f31f71 FOREIGN KEY (inventory_transaction_id) REFERENCES public.inventory_transactions(id);
+
+
+--
 -- Name: bank_statement_imports fk_rails_6376db30c1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.bank_statement_imports
     ADD CONSTRAINT fk_rails_6376db30c1 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: purchase_order_number_ranges fk_rails_63b9f56621; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_number_ranges
+    ADD CONSTRAINT fk_rails_63b9f56621 FOREIGN KEY (office_id) REFERENCES public.offices(id);
 
 
 --
@@ -6668,6 +7383,14 @@ ALTER TABLE ONLY public.asset_transactions
 
 ALTER TABLE ONLY public.warehouses
     ADD CONSTRAINT fk_rails_70cd2f2065 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
+
+
+--
+-- Name: purchase_orders fk_rails_7139e543c2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT fk_rails_7139e543c2 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
 
 
 --
@@ -6719,6 +7442,22 @@ ALTER TABLE ONLY public.contracts
 
 
 --
+-- Name: purchase_orders fk_rails_770688b262; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT fk_rails_770688b262 FOREIGN KEY (vendor_profile_id) REFERENCES public.vendor_profiles(id);
+
+
+--
+-- Name: purchase_order_lines fk_rails_7b2f871d0c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines
+    ADD CONSTRAINT fk_rails_7b2f871d0c FOREIGN KEY (item_id) REFERENCES public.items(id);
+
+
+--
 -- Name: user_signing_keys fk_rails_7e11dda020; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6751,6 +7490,22 @@ ALTER TABLE ONLY public.fixed_assets
 
 
 --
+-- Name: procurement_matches fk_rails_8422dcd887; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.procurement_matches
+    ADD CONSTRAINT fk_rails_8422dcd887 FOREIGN KEY (document_id) REFERENCES public.documents(id);
+
+
+--
+-- Name: vendor_profiles fk_rails_849c428992; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vendor_profiles
+    ADD CONSTRAINT fk_rails_849c428992 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: user_office_roles fk_rails_84f904cce7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6780,6 +7535,22 @@ ALTER TABLE ONLY public.asset_transactions
 
 ALTER TABLE ONLY public.settlement_reallocations
     ADD CONSTRAINT fk_rails_8a212ab233 FOREIGN KEY (document_allocation_id) REFERENCES public.document_allocations(id);
+
+
+--
+-- Name: vendor_profiles fk_rails_8a44bbbdd8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vendor_profiles
+    ADD CONSTRAINT fk_rails_8a44bbbdd8 FOREIGN KEY (party_id) REFERENCES public.parties(id);
+
+
+--
+-- Name: purchase_order_number_ranges fk_rails_8dea018959; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_number_ranges
+    ADD CONSTRAINT fk_rails_8dea018959 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -6847,11 +7618,35 @@ ALTER TABLE ONLY public.contract_schedules
 
 
 --
+-- Name: goods_receipt_lines fk_rails_9f16d899e5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipt_lines
+    ADD CONSTRAINT fk_rails_9f16d899e5 FOREIGN KEY (purchase_order_line_id) REFERENCES public.purchase_order_lines(id);
+
+
+--
 -- Name: party_roles fk_rails_9fe14e5bed; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.party_roles
     ADD CONSTRAINT fk_rails_9fe14e5bed FOREIGN KEY (party_id) REFERENCES public.parties(id);
+
+
+--
+-- Name: purchase_order_lines fk_rails_a4215877c0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_order_lines
+    ADD CONSTRAINT fk_rails_a4215877c0 FOREIGN KEY (purchase_order_id) REFERENCES public.purchase_orders(id);
+
+
+--
+-- Name: purchase_orders fk_rails_a440a1415d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT fk_rails_a440a1415d FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -6887,6 +7682,22 @@ ALTER TABLE ONLY public.stock_balances
 
 
 --
+-- Name: procurement_matches fk_rails_aeea4b00c9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.procurement_matches
+    ADD CONSTRAINT fk_rails_aeea4b00c9 FOREIGN KEY (document_line_id) REFERENCES public.document_lines(id);
+
+
+--
+-- Name: procurement_matches fk_rails_b27bba0779; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.procurement_matches
+    ADD CONSTRAINT fk_rails_b27bba0779 FOREIGN KEY (purchase_order_line_id) REFERENCES public.purchase_order_lines(id);
+
+
+--
 -- Name: asset_transactions fk_rails_b44828b607; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6903,11 +7714,27 @@ ALTER TABLE ONLY public.depreciation_runs
 
 
 --
+-- Name: purchase_orders fk_rails_ba72717467; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchase_orders
+    ADD CONSTRAINT fk_rails_ba72717467 FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
 -- Name: party_tax_registrations fk_rails_ba92ab1221; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.party_tax_registrations
     ADD CONSTRAINT fk_rails_ba92ab1221 FOREIGN KEY (party_id) REFERENCES public.parties(id);
+
+
+--
+-- Name: goods_receipts fk_rails_bbe00c5362; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipts
+    ADD CONSTRAINT fk_rails_bbe00c5362 FOREIGN KEY (purchase_order_id) REFERENCES public.purchase_orders(id);
 
 
 --
@@ -6983,6 +7810,14 @@ ALTER TABLE ONLY public.asset_transactions
 
 
 --
+-- Name: document_lines fk_rails_da289f4794; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_lines
+    ADD CONSTRAINT fk_rails_da289f4794 FOREIGN KEY (purchase_order_line_id) REFERENCES public.purchase_order_lines(id);
+
+
+--
 -- Name: documents fk_rails_dd14d0c95c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7039,6 +7874,14 @@ ALTER TABLE ONLY public.contract_performance_obligations
 
 
 --
+-- Name: goods_receipt_lines fk_rails_f2f12b04b3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.goods_receipt_lines
+    ADD CONSTRAINT fk_rails_f2f12b04b3 FOREIGN KEY (goods_receipt_id) REFERENCES public.goods_receipts(id);
+
+
+--
 -- Name: financial_statement_sections fk_rails_f389e55e55; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7052,6 +7895,14 @@ ALTER TABLE ONLY public.financial_statement_sections
 
 ALTER TABLE ONLY public.contract_allocation_runs
     ADD CONSTRAINT fk_rails_f7d2ea3f42 FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: documents fk_rails_f88f06229a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT fk_rails_f88f06229a FOREIGN KEY (purchase_order_id) REFERENCES public.purchase_orders(id);
 
 
 --
@@ -7101,6 +7952,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801190000'),
 ('20260801183000'),
 ('20260801180000'),
 ('20260801173000'),

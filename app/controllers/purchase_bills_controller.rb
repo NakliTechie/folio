@@ -32,6 +32,7 @@ class PurchaseBillsController < BrowserController
       external_reference: bill_params[:external_reference],
       narration: bill_params[:narration],
       tds_section: bill_params[:tds_section],
+      purchase_order_id: bill_params[:purchase_order_id],
       lines: bill_params[:lines]
     )
     redirect_to purchase_bill_path(@document, tenant_route_options),
@@ -100,6 +101,9 @@ class PurchaseBillsController < BrowserController
         office_tax_registrations: { office_id: primary_office.id, tenant_id: Current.tenant.id }
       ).distinct.order(:identifier)
     @items = Item.active.where(tenant_id: Current.tenant.id).order(:name)
+    @purchase_orders = PurchaseOrder.where(
+      tenant_id: Current.tenant.id, status: %w[approved partially_received received closed]
+    ).includes(vendor_profile: :party).order(order_date: :desc, id: :desc)
     @tds_sections = Taxes::India::Tds::Schedule.sections
     @company_profile_complete = primary_office.statutory_address_complete?
     @registered_vendor_ready = Party.active.joins(:party_roles, :party_tax_registrations)
@@ -120,6 +124,7 @@ class PurchaseBillsController < BrowserController
   def bill_params
     params.require(:purchase_bill).permit(
       :party_id,
+      :purchase_order_id,
       :tax_registration_id,
       :document_date,
       :due_date,

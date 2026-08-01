@@ -44,8 +44,10 @@ module DomainEvents
       # --- procurement / vendor management (Batch 9) ---
       "purchase_order.raised"   => "A purchase order was raised.",
       "purchase_order.approved" => "A purchase order was approved for release.",
+      "purchase_order.received" => "Ordered goods or services were accepted against a purchase order.",
       "purchase_order.closed"   => "A purchase order was closed.",
       "vendor.onboarded"        => "A vendor completed onboarding.",
+      "vendor.approved"         => "A vendor was independently approved for procurement.",
       "vendor.suspended"        => "A vendor was suspended.",
 
       # --- India e-invoice lifecycle (statutory, non-financial) ---

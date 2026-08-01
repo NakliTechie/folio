@@ -79,10 +79,11 @@
             </div>
           </details>
 
-          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("purchase_bills", "purchase_credit_notes", "purchase_debit_notes") %>">
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("purchase_bills", "purchase_credit_notes", "purchase_debit_notes", "procurement") %>">
             <summary>Purchases</summary>
             <div class="nav-group__menu">
               <%= link_to "Purchase bills", purchase_bills_path(tenant_route_options), class: navigation_class("purchase_bills") %>
+              <%= link_to "Procurement", procurement_path(tenant_route_options), class: navigation_class("procurement") if permitted?("procurement.read") %>
               <%= link_to "Supplier credits", purchase_credit_notes_path(tenant_route_options), class: navigation_class("purchase_credit_notes") %>
               <%= link_to "Supplier debits", purchase_debit_notes_path(tenant_route_options), class: navigation_class("purchase_debit_notes") %>
             </div>

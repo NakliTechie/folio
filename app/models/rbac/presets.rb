@@ -14,18 +14,19 @@ module Rbac
                                  banking.read banking.manage banking.reconcile
                                  inventory.read inventory.manage inventory.post
                                  assets.read assets.manage assets.post
-                                 controlling.read controlling.manage controlling.allocate] },
+                                 controlling.read controlling.manage controlling.allocate
+                                 procurement.read procurement.manage procurement.approve procurement.receive] },
       "operator"   => { name: "Operator",
                         caps: %w[invoices.create bills.create payments.create documents.simulate
                                  accounts.read masters.read reports.read gst.place_of_supply.override
-                                 contracts.read] },
+                                 contracts.read procurement.read] },
       "ca_auditor" => { name: "CA/Auditor",
                         caps: %w[documents.post documents.reverse documents.simulate accounts.read
                                  masters.read reports.read period.lock contracts.read currency.read banking.read
-                                 inventory.read assets.read controlling.read] },
+                                 inventory.read assets.read controlling.read procurement.read] },
       "viewer"     => { name: "Viewer",
                         caps: %w[accounts.read masters.read reports.read contracts.read currency.read banking.read
-                                 inventory.read assets.read controlling.read] }
+                                 inventory.read assets.read controlling.read procurement.read] }
     }.freeze
 
     module_function

@@ -200,7 +200,7 @@ module Posting
               raise Documents::InvalidDocument, "purchase bill line #{line.line_no} is incomplete"
             end
             unless line.item_snapshot["id"].to_i == line.item_id &&
-                   line.item_snapshot["expenseAccountCode"] == line.account_code &&
+                   expected_line_account(document, line) == line.account_code &&
                    line.item_snapshot["hsnSacCode"] == line.hsn_sac_code &&
                    line.item_snapshot["taxRateBasisPoints"].to_i == line.tax_rate_basis_points &&
                    line.item_snapshot["cessRateBasisPoints"].to_i == line.cess_rate_basis_points
@@ -236,6 +236,28 @@ module Posting
                  document.tax_breakdown.transform_values(&:to_i) == breakdown
             raise Documents::InvalidDocument, "purchase bill totals do not match its frozen lines"
           end
+        end
+
+        def expected_line_account(document, line)
+          return line.item_snapshot["expenseAccountCode"] unless line.purchase_order_line_id
+
+          match = procurement_match_for(document, line)
+          unless match && match.purchase_order_id == document.purchase_order_id &&
+              match.purchase_order_line_id == line.purchase_order_line_id
+            raise Documents::InvalidDocument,
+              "purchase bill line #{line.line_no} is missing its procurement-match evidence"
+          end
+          match.purchase_order_line.item_type == "good" ? "2050" : line.item_snapshot["expenseAccountCode"]
+        end
+
+        def procurement_match_for(document, line)
+          return document.procurement_matches.find_by(document_line_id: line.id) unless document.reverses_document_id
+
+          original_line = DocumentLine.find_by(
+            document_id: document.reverses_document_id, line_no: line.line_no,
+            purchase_order_line_id: line.purchase_order_line_id
+          )
+          original_line&.procurement_match
         end
 
         def transaction_amount(document, amount_minor)

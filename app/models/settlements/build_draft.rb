@@ -40,6 +40,9 @@ module Settlements
       raise InvalidSettlement, "all allocations must belong to one counterparty" unless party_ids.one?
 
       party = Party.where(tenant_id: tenant.id).find(party_ids.first)
+      if doc_type == "PY" && VendorProfile.find_by(tenant_id: tenant.id, party_id: party.id)&.payment_hold?
+        raise InvalidSettlement, "this vendor is on payment hold"
+      end
       total = normalized.sum { |allocation| allocation.fetch(:amount_minor) }
       direction = doc_type == "RC" ? 1 : -1
 

@@ -13,8 +13,8 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_response :success, "signed in, on the authenticated landing"
     tenant = Tenant.find_by(slug: "acme-co")
-    assert_equal 22, Account.where(tenant_id: tenant.id).count,
-      "starter COA seeded (including contract, FX, TDS, inventory, and fixed-asset accounts)"
+    assert_equal 23, Account.where(tenant_id: tenant.id).count,
+      "starter COA seeded (including contract, FX, TDS, inventory, fixed-asset, and GRNI accounts)"
     assert_equal "queued", User.find_by!(email_address: "founder@acme.com").verification_delivery_state
   end
 
@@ -41,7 +41,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_select "input[autofocus]", count: 0
     assert_select "a.brand[aria-label]", count: 0
     assert_select "a.brand", text: /Folio/
-    assert_select ".mini-steps", text: /Twenty-two accounts, ready to use/
+    assert_select ".mini-steps", text: /Twenty-three accounts, ready to use/
   end
 
   test "self-service signup presents only the supported India launch profile" do

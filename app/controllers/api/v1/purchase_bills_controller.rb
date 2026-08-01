@@ -30,6 +30,7 @@ module Api
           external_reference: params[:external_reference],
           narration: params[:narration],
           tds_section: params[:tds_section],
+          purchase_order_id: params[:purchase_order_id],
           lines: lines_params
         )
         render json: { purchase_bill: document_json(document) }, status: :created
@@ -100,6 +101,12 @@ module Api
           tax_minor: document.tax_minor,
           total_minor: document.total_minor,
           tax_breakdown: document.tax_breakdown,
+          purchase_order: document.purchase_order && {
+            id: document.purchase_order.id,
+            order_number: document.purchase_order.order_number,
+            match_status: document.procurement_matches.where(status: "exception").exists? ?
+              "exception" : "matched"
+          },
           tds: document.tds_section && {
             section: document.tds_section,
             statutory_reference: document.tds_statutory_reference,
@@ -129,7 +136,13 @@ module Api
               tax_rate_basis_points: line.tax_rate_basis_points,
               cess_rate_basis_points: line.cess_rate_basis_points,
               tax_components: line.tax_components
-            }
+            }.merge(line.procurement_match ? {
+              purchase_order_line_id: line.purchase_order_line_id,
+              procurement_match: {
+                status: line.procurement_match.status,
+                exceptions: line.procurement_match.exceptions
+              }
+            } : {})
           end
         }
       end

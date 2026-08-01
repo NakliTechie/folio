@@ -11,6 +11,7 @@ class Document < ApplicationRecord
   belongs_to :party, optional: true
   belongs_to :tax_registration, optional: true
   belongs_to :contract, optional: true
+  belongs_to :purchase_order, optional: true
   belongs_to :credit_note_for, class_name: "Document", foreign_key: :credit_note_for_document_id, optional: true
   belongs_to :debit_note_for, class_name: "Document", foreign_key: :debit_note_for_document_id, optional: true
   belongs_to :reverses, class_name: "Document", foreign_key: :reverses_document_id, optional: true
@@ -23,6 +24,7 @@ class Document < ApplicationRecord
   has_many :debit_notes, class_name: "Document", foreign_key: :debit_note_for_document_id,
     dependent: :restrict_with_exception
   has_one :einvoice_submission, dependent: :restrict_with_exception
+  has_many :procurement_matches, dependent: :destroy
 
   validates :tenant_id, :entity_id, :office_id, :doc_type, :fiscal_year,
     :document_date, :posting_date, presence: true
@@ -30,6 +32,7 @@ class Document < ApplicationRecord
   validate :document_type_matches_document
   validate :invoice_totals_are_consistent
   validate :contract_scope_is_valid
+  validate :purchase_order_scope_is_valid
 
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
@@ -83,5 +86,16 @@ class Document < ApplicationRecord
       errors.add(:contract, "must belong to the same company, office, and customer")
     end
     errors.add(:contract, "must use the document currency") if currency && contract.currency != currency
+  end
+
+
+  def purchase_order_scope_is_valid
+    return unless purchase_order
+
+    unless doc_type == "PB" && purchase_order.tenant_id == tenant_id &&
+        purchase_order.entity_id == entity_id && purchase_order.office_id == office_id &&
+        purchase_order.vendor.id == party_id
+      errors.add(:purchase_order, "must be an order for the same company, office, and vendor bill")
+    end
   end
 end

@@ -8,6 +8,7 @@ module Onboarding
       [ "1000", "Cash", "asset" ], [ "1010", "Bank", "asset" ], [ "1200", "Sundry Debtors", "asset" ],
       [ "1190", "Contract Assets (Unbilled Revenue)", "asset" ], [ "1210", "GST Input Credit", "asset" ],
       [ "2000", "Sundry Creditors", "liability" ], [ "2100", "GST Payable", "liability" ],
+      [ "2050", "Goods Received Not Invoiced", "liability" ],
       [ "2110", "TDS Payable", "liability" ], [ "2200", "Contract Liabilities (Deferred Revenue)", "liability" ],
       [ "3000", "Capital", "equity" ],
       [ "4000", "Sales", "income" ], [ "4100", "Foreign Exchange Gains", "income" ],
@@ -29,7 +30,7 @@ module Onboarding
         Account.find_or_create_by!(tenant_id: tenant.id, code: code) do |account|
           account.name = name
           account.account_type = type
-          account.monetary = %w[1000 1010 1190 1200 2000 2100 2110 2200].include?(code)
+          account.monetary = %w[1000 1010 1190 1200 2000 2050 2100 2110 2200].include?(code)
         end
       end
     end

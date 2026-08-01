@@ -1,0 +1,51 @@
+<% content_for :title, "Procurement · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading"><div><p class="eyebrow">Purchase-to-pay controls</p><h1>Procurement</h1><p>Approve vendors and commitments independently, accept exact quantities, and preserve bill-match evidence through posting.</p></div></header>
+
+  <% if permitted?("procurement.manage") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Approved vendor list</p><h2>Onboard vendor</h2></div></div>
+      <% if @vendor_parties.empty? %><p>Every current vendor already has a procurement profile. Add vendor master data under Customers first if needed.</p><% else %>
+        <%= form_with scope: :vendor_profile, url: onboard_vendor_procurement_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+          <%= form.label :party_id, "Vendor" %><%= form.select :party_id, @vendor_parties.map { |party| ["#{party.party_number} · #{party.name}", party.id] }, required: true %>
+          <%= form.label :payment_terms_days, "Terms (days)" %><%= form.number_field :payment_terms_days, value: 30, min: 0, required: true %>
+          <%= form.label :preferred_currency %><%= form.text_field :preferred_currency, value: Current.tenant.functional_currency, maxlength: 3, required: true %>
+          <%= form.submit "Submit for approval", class: "button button--primary" %>
+        <% end %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Maker–checker authorization</p><h2>Vendor profiles</h2></div></div>
+    <% if @vendors.empty? %><div class="empty-state"><p>No vendors have entered procurement approval yet.</p></div><% else %><div class="table-wrap"><table>
+      <thead><tr><th>Vendor</th><th>Status</th><th>Terms</th><th>Created by</th><th>Approved by</th><th>Control</th></tr></thead><tbody>
+      <% @vendors.each do |profile| %><tr><td><strong><%= profile.party.party_number %> · <%= profile.party.name %></strong></td><td><span class="<%= status_class(profile.status) %>"><%= profile.status.humanize %></span></td><td><%= profile.payment_terms_days %> days · <%= profile.preferred_currency %></td><td><%= profile.created_by.email_address %></td><td><%= profile.approved_by&.email_address || "—" %></td><td>
+        <% if permitted?("procurement.approve") && profile.status == "pending" %><%= button_to "Approve", approve_vendor_procurement_path(tenant_route_options.merge(id: profile.id)), method: :post, class: "button button--quiet", disabled: profile.created_by_id == Current.user.id %><% end %>
+        <% if permitted?("procurement.approve") && profile.status == "approved" %><%= form_with url: suspend_vendor_procurement_path(tenant_route_options.merge(id: profile.id)), method: :post, class: "inline-form" do |form| %><%= form.label :reason, "Suspension reason", class: "sr-only" %><%= form.text_field :reason, placeholder: "Reason", required: true %><%= form.submit "Suspend", class: "button button--danger" %><% end %><% end %>
+      </td></tr><% end %></tbody>
+    </table></div><p><small>The creator cannot approve their own vendor profile. Suspension applies purchasing, posting, and payment holds.</small></p><% end %>
+  </section>
+
+  <% if permitted?("procurement.manage") && @approved_vendors.any? && @items.any? %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Non-financial commitment</p><h2>Raise purchase order</h2></div></div>
+      <%= form_with scope: :purchase_order, url: create_order_procurement_path(tenant_route_options), method: :post, class: "stacked-form" do |form| %>
+        <div class="form-grid"><div class="field"><%= form.label :vendor_profile_id, "Approved vendor" %><%= form.select :vendor_profile_id, @approved_vendors.map { |profile| ["#{profile.party.party_number} · #{profile.party.name}", profile.id] }, required: true %></div><div class="field"><%= form.label :order_date %><%= form.date_field :order_date, value: business_date, required: true %></div><div class="field"><%= form.label :expected_on %><%= form.date_field :expected_on, value: business_date + 7 %></div><div class="field"><%= form.label :description %><%= form.text_field :description, maxlength: 200 %></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Item</th><th>Warehouse for goods</th><th>Quantity</th><th>Unit price</th></tr></thead><tbody><% 5.times do |index| %><tr><td><%= select_tag "purchase_order[lines][][item_id]", options_for_select(@items.map { |item| ["#{item.code} · #{item.name} (#{item.item_type})", item.id] }), include_blank: index.zero? ? "Choose an item" : "Optional line", required: index.zero?, aria: { label: "Item for line #{index + 1}" } %></td><td><%= select_tag "purchase_order[lines][][warehouse_id]", options_for_select(@warehouses.map { |warehouse| ["#{warehouse.code} · #{warehouse.name}", warehouse.id] }), include_blank: "Not applicable", aria: { label: "Warehouse for line #{index + 1}" } %></td><td><%= number_field_tag "purchase_order[lines][][quantity]", nil, min: "0.000001", step: "0.000001", aria: { label: "Quantity for line #{index + 1}" } %></td><td><%= number_field_tag "purchase_order[lines][][unit_price]", nil, min: 0, step: "0.01", aria: { label: "Unit price for line #{index + 1}" } %></td></tr><% end %></tbody></table></div>
+        <%= form.submit "Raise purchase order", class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Commitments and receipts</p><h2>Purchase orders</h2></div></div>
+    <% if @orders.empty? %><div class="empty-state"><p>No purchase orders yet.</p></div><% else %><div class="table-wrap"><table><thead><tr><th>Order</th><th>Vendor</th><th>Status</th><th>Value</th><th>Lines</th><th>Controls</th></tr></thead><tbody>
+      <% @orders.each do |order| %><tr><td><strong><%= order.order_number %></strong><br><small><%= order.order_date.to_fs(:long) %></small></td><td><%= order.vendor.name %></td><td><span class="<%= status_class(order.status) %>"><%= order.status.humanize %></span><br><small>Maker: <%= order.created_by.email_address %><%= " · Checker: #{order.approved_by.email_address}" if order.approved_by %></small></td><td class="money"><%= money_amount(order.subtotal_minor, currency: order.currency) %></td><td><ul><% order.purchase_order_lines.each do |line| %><li><%= line.item.code %>: <%= line.received_quantity.to_s("F") %> / <%= line.ordered_quantity.to_s("F") %> <%= line.item.unit_of_measure %></li><% end %></ul></td><td>
+        <% if order.status == "draft" && permitted?("procurement.approve") %><%= button_to "Approve order", approve_order_procurement_path(tenant_route_options.merge(id: order.id)), method: :post, class: "button button--quiet", disabled: order.created_by_id == Current.user.id %><% end %>
+        <% if order.receivable? && permitted?("procurement.receive") %><%= form_with scope: :goods_receipt, url: receive_order_procurement_path(tenant_route_options.merge(id: order.id)), method: :post, class: "stacked-form" do |form| %><%= form.date_field :received_on, value: business_date, required: true, aria: { label: "Receipt date" } %><%= form.text_field :external_reference, placeholder: "Delivery reference", aria: { label: "Delivery reference" } %><%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %><% order.purchase_order_lines.each do |line| %><%= hidden_field_tag "goods_receipt[lines][][purchase_order_line_id]", line.id %><%= number_field_tag "goods_receipt[lines][][quantity]", nil, min: 0, max: line.open_quantity.to_s("F"), step: "0.000001", placeholder: "Receive #{line.item.code}", aria: { label: "Receipt quantity for #{line.item.code}" } %><% end %><%= form.submit "Record receipt", class: "button button--quiet" %><% end %><% end %>
+        <% if %w[approved partially_received received].include?(order.status) && permitted?("procurement.approve") %><%= button_to "Close", close_order_procurement_path(tenant_route_options.merge(id: order.id)), method: :post, class: "button button--danger", form: { data: { turbo_confirm: "Close this purchase order? Open quantities will no longer be receivable." } } %><% end %>
+      </td></tr><% end %></tbody></table></div><% end %>
+  </section>
+</main>
