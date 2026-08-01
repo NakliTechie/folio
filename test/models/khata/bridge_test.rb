@@ -23,8 +23,9 @@ class Khata::BridgeTest < ActiveSupport::TestCase
     refute result.duplicate
     run = result.run
     assert_equal 1_029, run.source_audit_rows
-    assert_equal "verified", run.conformance.dig("C", "signatureStatus")
-    assert run.conformance.dig("R", "ok")
+    assert_equal "verified", run.conformance.dig("chainAndSignatures", "signatureStatus")
+    assert run.conformance.dig("nativeProjection", "ok")
+    assert run.recovery_snapshot
     assert EventSigning.verify(run.domain_event)
     assert_equal "Arjun Rao Advisory LLP", @org.tenant.reload.name
     assert_equal "Arjun Rao Advisory LLP",
@@ -69,6 +70,7 @@ class Khata::BridgeTest < ActiveSupport::TestCase
 
   test "exports a deterministic standard archive that round-trips chain and ledger reports" do
     Khata::Bridge.import!(tenant: @org.tenant, actor: @org.user, path: CONSULTING)
+    post_native_journal!
     entity = Entity.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
 
     first = Khata::Export.call(tenant: @org.tenant, entity_id: entity.id)
@@ -76,6 +78,8 @@ class Khata::BridgeTest < ActiveSupport::TestCase
     assert_equal first.bytes, second.bytes
     assert_equal "1.0", first.manifest.fetch("khataFormatVersion")
     assert_equal 12, first.manifest.fetch("schemaVersion")
+    assert_equal 2, first.manifest.dig("integrity", "signingKeys").size
+    assert_nil first.manifest.dig("integrity", "signedBy")
 
     archive_file = Tempfile.new([ "folio-round-trip", ".khata" ])
     archive_file.binmode
@@ -92,12 +96,27 @@ class Khata::BridgeTest < ActiveSupport::TestCase
       imported = Khata::Bridge.import!(
         tenant: target.tenant, actor: target.user, path: archive_file.path
       )
-      assert imported.run.conformance.dig("R", "ok")
+      assert imported.run.conformance.dig("nativeProjection", "ok")
       assert_equal archive.trial_balance, Reports.trial_balance(target.tenant.id)
       assert_equal archive.audit_head, LedgerEvent.verify_chain(target.tenant.id)[:head]
+
+      before_rebuild = Reports.trial_balance(target.tenant.id)
+      Posting.rebuild!(target.tenant.id)
+      assert_equal before_rebuild, Reports.trial_balance(target.tenant.id)
     end
   ensure
     archive_file&.close!
+  end
+
+  test "a signed Bahi import remains report-identical after routine projection rebuild" do
+    Khata::Bridge.import!(tenant: @org.tenant, actor: @org.user, path: CONSULTING)
+    before = Reports.trial_balance(@org.tenant.id)
+
+    Posting.rebuild!(@org.tenant.id)
+
+    assert_equal before, Reports.trial_balance(@org.tenant.id)
+    assert_equal 960, Entry.where(tenant_id: @org.tenant.id).count
+    assert EntryLine.where(tenant_id: @org.tenant.id).where.not(source_event_id: nil).exists?
   end
 
   test "denies a non-owner before inspecting or mutating the company" do
@@ -143,5 +162,30 @@ class Khata::BridgeTest < ActiveSupport::TestCase
     assert_nil event.prev_hash
     assert_equal row["hash"], event.hash_hex
     assert LedgerEvent.verify_chain(@org.tenant.id)[:ok]
+  end
+
+  private
+
+  def post_native_journal!
+    ledger = Ledger.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    entity = Entity.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    office = Office.find_by!(tenant_id: @org.tenant.id, entity_id: entity.id, code: "PRIMARY")
+    codes = Account.where(tenant_id: @org.tenant.id).order(:code).limit(2).pluck(:code)
+    Posting::PostEntry.post!(
+      tenant_id: @org.tenant.id, actor: @org.user.email_address, actor_user_id: @org.user.id,
+      document_date: Date.new(2026, 8, 1), posting_date: Date.new(2026, 8, 1),
+      entered_at: Time.utc(2026, 8, 1, 10), fiscal_year: 2026, period_no: 5,
+      ledger_id: ledger.id,
+      lines: [
+        { line_no: 1, account_code: codes.first, ledger_id: ledger.id,
+          entity_id: entity.id, office_id: office.id,
+          amounts: [ { slot_role: "transaction", currency: "INR",
+                       minor_unit_exponent: 2, amount_minor: 100 } ] },
+        { line_no: 2, account_code: codes.second, ledger_id: ledger.id,
+          entity_id: entity.id, office_id: office.id,
+          amounts: [ { slot_role: "transaction", currency: "INR",
+                       minor_unit_exponent: 2, amount_minor: -100 } ] }
+      ]
+    )
   end
 end

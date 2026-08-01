@@ -13,20 +13,31 @@ module Khata
     end
 
     def verify(hash_hex:, signature:, jwk:)
-      raw_signature = if signature.is_a?(String) && signature.bytesize == 64
-        signature
-      elsif signature.is_a?(String)
-        Base64.strict_decode64(signature)
+      raw_signature = decoded_signature(signature)
+      digest = [ EventSigning.valid_hash!(hash_hex) ].pack("H*")
+      key = public_key(jwk)
+      if raw_signature&.bytesize == 64
+        key.verify("SHA256", p1363_to_der(raw_signature), digest)
       else
-        signature
+        raw_signature.present? && key.verify_raw(nil, raw_signature, digest)
       end
-      return false unless raw_signature&.bytesize == 64
-
-      public_key(jwk).verify(
-        "SHA256", p1363_to_der(raw_signature), [ EventSigning.valid_hash!(hash_hex) ].pack("H*")
-      )
     rescue ArgumentError, OpenSSL::PKey::PKeyError, OpenSSL::ASN1::ASN1Error
       false
+    end
+
+    def jwk_from_pem(public_key_pem)
+      key = OpenSSL::PKey.read(public_key_pem)
+      point = key.public_key.to_octet_string(:uncompressed)
+      raise ArgumentError, "signing key must be an EC P-256 public key" unless point.bytesize == 65
+
+      {
+        "kty" => "EC", "crv" => "P-256",
+        "x" => Base64.urlsafe_encode64(point.byteslice(1, 32), padding: false),
+        "y" => Base64.urlsafe_encode64(point.byteslice(33, 32), padding: false),
+        "ext" => true, "key_ops" => [ "verify" ]
+      }
+    rescue OpenSSL::PKey::PKeyError, NoMethodError
+      raise ArgumentError, "signing key must be an EC P-256 public key"
     end
 
     def public_key(jwk)
@@ -55,6 +66,16 @@ module Khata
 
     def base64url(value)
       Base64.urlsafe_decode64(value.to_s + ("=" * ((4 - value.to_s.length % 4) % 4)))
+    end
+
+    def decoded_signature(signature)
+      return signature unless signature.is_a?(String)
+      return signature if signature.bytesize == 64
+      return signature if signature.encoding == Encoding::BINARY && !signature.ascii_only?
+
+      Base64.strict_decode64(signature)
+    rescue ArgumentError
+      signature
     end
   end
 end

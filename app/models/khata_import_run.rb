@@ -5,6 +5,7 @@ class KhataImportRun < ApplicationRecord
   belongs_to :imported_by, class_name: "User"
   belongs_to :external_signing_key, optional: true
   belongs_to :domain_event
+  has_one :recovery_snapshot, class_name: "KhataRecoverySnapshot", dependent: :restrict_with_exception
 
   validates :source_workspace_id, :source_filename, :archive_sha256, :books_sha256,
     :source_audit_head, :source_audit_rows, :source_manifest, :import_counts,

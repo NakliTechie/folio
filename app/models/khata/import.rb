@@ -137,7 +137,8 @@ module Khata
         raise KeyError, "source account #{account_code} was not imported" unless account_codes.include?(account_code)
         { entry_id: eid, line_no: ln, account_code: account_code,
           account_name: l["account_name"].presence || account_names.fetch(account_code),
-          ledger_id: ledger_id(l["ledger"]), value_date: l["value_date"], amount_minor: signed_amount!(l) }
+          ledger_id: ledger_id(l["ledger"]), value_date: l["value_date"],
+          source_event_id: @ledger_event_ids[l["entry_id"].to_i], amount_minor: signed_amount!(l) }
       end
       return if source.empty?
 
@@ -147,6 +148,7 @@ module Khata
             account_code: s[:account_code], ledger_id: s[:ledger_id],
             account_name: s[:account_name],
             entity_id: @entity_id, office_id: @office_id, value_date: s[:value_date],
+            source_event_id: s[:source_event_id],
             created_at: now, updated_at: now }
         end
       )

@@ -74,7 +74,8 @@ CREATE TABLE audit_log (
   prev_hash TEXT NOT NULL,
   hash TEXT NOT NULL,
   signature TEXT,
-  hash_version INTEGER
+  hash_version INTEGER,
+  signer_fingerprint TEXT
 );
 
 CREATE TABLE bank_reconciliations (
@@ -254,7 +255,8 @@ CREATE TABLE entries (
   created_by TEXT,
   created_at TEXT NOT NULL,
   reversed_by_id INTEGER,
-  is_amendment INTEGER DEFAULT 0
+  is_amendment INTEGER DEFAULT 0,
+  folio_ledger_event_seq INTEGER
 );
 
 CREATE TABLE entry_lines (

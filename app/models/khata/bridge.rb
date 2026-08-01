@@ -44,10 +44,13 @@ module Khata
           reject_nonempty_books!
           entity, office = source_scope!
           adopt_source_identity!(archive, entity, office)
-          external_key = create_external_key!(archive)
+          external_keys = create_external_keys!(archive)
           Posting::PostEntry.ingest_verbatim!(
             tenant_id: @tenant.id, rows: archive.audit_rows, replay: false,
-            external_signing_key_id: external_key&.id
+            external_signing_key_id_by_seq: archive.audit_rows.to_h do |row|
+              fingerprint = archive.signer_fingerprint_for(row)
+              [ Integer(row.fetch("id")), external_keys.fetch(fingerprint).id ]
+            end
           )
           counts = Import.import_database!(
             database: archive.database, tenant_id: @tenant.id,
@@ -62,7 +65,9 @@ module Khata
           end
 
           conformance = archive.conformance.merge(
-            "R" => { "ok" => true, "queries" => %w[trial-balance account-type-totals] },
+            "nativeProjection" => {
+              "ok" => true, "queries" => %w[trial-balance account-type-totals]
+            },
             "identity" => { "warnings" => @identity_warnings }
           )
           event = DomainEvents::Record.call(
@@ -78,19 +83,21 @@ module Khata
             }
           )
           run = KhataImportRun.create!(
-            tenant: @tenant, imported_by: @actor, external_signing_key: external_key,
+            tenant: @tenant, imported_by: @actor,
+            external_signing_key: (external_keys.values.sole if external_keys.one?),
             domain_event: event, source_workspace_id: archive.workspace_id,
             source_filename: @filename, archive_sha256: archive_sha256,
             books_sha256: archive.books_sha256, source_audit_head: archive.audit_head,
             source_audit_rows: archive.audit_rows.size, source_manifest: archive.manifest,
             import_counts: counts, conformance: conformance
           )
+          RecoveryProjection.capture!(run)
           Result.new(run, false)
         end
       end
     rescue Errno::ENOENT, Errno::EACCES => e
       raise InvalidImport, "Unable to read .khata file: #{e.message}"
-    rescue Archive::InvalidArchive, Import::InvalidLineAmount,
+    rescue Archive::InvalidArchive, Import::InvalidLineAmount, RecoveryProjection::InvalidSnapshot,
            Import::InvalidCurrencyProfile, ActiveRecord::RecordInvalid,
            KeyError, ArgumentError => e
       raise InvalidImport, e.message
@@ -126,14 +133,14 @@ module Khata
       [ entity, office ]
     end
 
-    def create_external_key!(archive)
-      jwk = archive.manifest.dig("integrity", "signedBy")
-      return if jwk.blank?
-
-      ExternalSigningKey.create!(
-        tenant: @tenant, source_workspace_id: archive.workspace_id,
-        public_key_jwk: jwk, fingerprint: Signatures.fingerprint(jwk)
-      )
+    def create_external_keys!(archive)
+      archive.signing_keys.to_h do |fingerprint, jwk|
+        key = ExternalSigningKey.create!(
+          tenant: @tenant, source_workspace_id: archive.workspace_id,
+          public_key_jwk: jwk, fingerprint: fingerprint
+        )
+        [ fingerprint, key ]
+      end
     end
 
     def adopt_source_identity!(archive, entity, office)
@@ -184,11 +191,8 @@ module Khata
 
     def entry_event_ids(archive)
       events = LedgerEvent.for_tenant(@tenant.id).pluck(:seq, :id).to_h
-      archive.audit_rows.filter_map do |row|
-        match = row["ref"].to_s.match(/\Aentry:(\d+)\z/)
-        next unless row["action"] == "entry.post" && match
-
-        [ match[1].to_i, events.fetch(Integer(row.fetch("id"))) ]
+      archive.entry_event_seq_by_source_entry.to_h do |source_entry_id, event_seq|
+        [ source_entry_id, events.fetch(event_seq) ]
       end.to_h
     end
   end

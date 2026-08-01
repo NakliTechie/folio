@@ -15,10 +15,17 @@ module Khata
     MAX_MANIFEST_BYTES = 2.megabytes
     MAX_ENTRIES = 10_000
     MAX_TOTAL_UNCOMPRESSED_BYTES = 500.megabytes
+    MAX_ACCOUNTS = 50_000
+    MAX_JOURNAL_ENTRIES = 100_000
+    MAX_ENTRY_LINES = 500_000
+    MAX_AUDIT_ROWS = 250_000
+    MAX_AUDIT_PAYLOAD_BYTES = 1.megabyte
+    MAX_TOTAL_AUDIT_PAYLOAD_BYTES = 100.megabytes
     UUID = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
     REQUIRED_TABLES = %w[accounts entries entry_lines audit_log meta].freeze
 
-    attr_reader :path, :manifest, :books_sha256, :audit_rows, :signature_status
+    attr_reader :path, :manifest, :books_sha256, :audit_rows, :signature_status,
+      :signing_keys, :entry_event_seq_by_source_entry
 
     def self.open(path)
       archive = new(path)
@@ -37,6 +44,7 @@ module Khata
       extract_and_open_books!
       validate_database!
       verify_chain_and_signatures!
+      validate_entry_correspondence!
     rescue InvalidArchive
       close
       raise
@@ -61,11 +69,21 @@ module Khata
 
     def conformance
       {
-        "F" => { "ok" => true, "booksSha256" => books_sha256,
-                 "schemaVersion" => manifest.fetch("schemaVersion") },
-        "C" => { "ok" => true, "auditRows" => audit_rows.size,
-                 "auditHead" => audit_head, "signatureStatus" => signature_status }
+        "runtimeFormatSubset" => {
+          "ok" => true, "booksSha256" => books_sha256,
+          "schemaVersion" => manifest.fetch("schemaVersion"),
+          "checks" => %w[container sqlite-integrity foreign-keys journal-balance line-shape]
+        },
+        "chainAndSignatures" => {
+          "ok" => true, "auditRows" => audit_rows.size,
+          "auditHead" => audit_head, "signatureStatus" => signature_status,
+          "signingKeys" => signing_keys.size
+        }
       }
+    end
+
+    def signer_fingerprint_for(row)
+      row["signer_fingerprint"].presence || signing_keys.keys.sole
     end
 
     def trial_balance
@@ -210,6 +228,21 @@ module Khata
         WHERE debit < 0 OR credit < 0 OR (debit > 0 AND credit > 0) OR (debit = 0 AND credit = 0)
       SQL
       raise InvalidArchive, "books.sqlite contains an invalid debit/credit line" unless invalid_amount.to_i.zero?
+      enforce_row_limit!("accounts", MAX_ACCOUNTS)
+      enforce_row_limit!("entries", MAX_JOURNAL_ENTRIES)
+      enforce_row_limit!("entry_lines", MAX_ENTRY_LINES)
+      enforce_row_limit!("audit_log", MAX_AUDIT_ROWS)
+      payload_limits = database.get_first_row(<<~SQL)
+        SELECT COALESCE(MAX(length(CAST(payload AS BLOB))), 0) AS largest,
+          COALESCE(SUM(length(CAST(payload AS BLOB))), 0) AS total
+        FROM audit_log
+      SQL
+      if payload_limits.fetch("largest").to_i > MAX_AUDIT_PAYLOAD_BYTES
+        raise InvalidArchive, "audit_log contains a payload larger than 1 MB"
+      end
+      if payload_limits.fetch("total").to_i > MAX_TOTAL_AUDIT_PAYLOAD_BYTES
+        raise InvalidArchive, "audit_log payloads exceed the 100 MB processing limit"
+      end
       if schema_version >= 2
         missing_snapshot = database.get_first_value(<<~SQL)
           SELECT COUNT(*) FROM entry_lines WHERE account_name IS NULL OR account_name = ''
@@ -222,11 +255,18 @@ module Khata
       raise InvalidArchive, "books.sqlite schema version is missing or invalid"
     end
 
+    def enforce_row_limit!(table, limit)
+      count = database.get_first_value("SELECT COUNT(*) FROM #{table}").to_i
+      raise InvalidArchive, "#{table} contains #{count} rows; maximum is #{limit}" if count > limit
+    end
+
     def verify_chain_and_signatures!
       hash_version = column?("audit_log", "hash_version") ? "hash_version" : "NULL AS hash_version"
+      signer = column?("audit_log", "signer_fingerprint") ?
+        "signer_fingerprint" : "NULL AS signer_fingerprint"
       @audit_rows = database.execute(<<~SQL)
         SELECT id, ts, actor, action, ref, origin, payload, prev_hash, hash, signature,
-          #{hash_version} FROM audit_log ORDER BY id
+          #{hash_version}, #{signer} FROM audit_log ORDER BY id
       SQL
       raise InvalidArchive, "audit_log is empty" if audit_rows.empty?
 
@@ -256,15 +296,10 @@ module Khata
     end
 
     def verify_signatures!
-      jwk = manifest.dig("integrity", "signedBy")
-      if jwk.blank?
-        @signature_status = "not_declared"
-        return
-      end
-      if audit_rows.any? { |row| row["action"] == "keypair.rotation" }
-        raise InvalidArchive, "key-rotation signature verification is not supported by this bridge"
-      end
+      @signing_keys = manifest_signing_keys
       audit_rows.each do |row|
+        fingerprint = signer_fingerprint_for(row)
+        jwk = signing_keys[fingerprint]
         unless row["signature"].present? && Khata::Signatures.verify(
           hash_hex: row.fetch("hash"), signature: row.fetch("signature"), jwk: jwk
         )
@@ -272,6 +307,63 @@ module Khata
         end
       end
       @signature_status = "verified"
+    end
+
+    def manifest_signing_keys
+      integrity = manifest.fetch("integrity")
+      declared = Array(integrity["signingKeys"])
+      if declared.empty? && integrity["signedBy"].present?
+        jwk = integrity.fetch("signedBy")
+        declared = [ { "fingerprint" => Khata::Signatures.fingerprint(jwk), "jwk" => jwk } ]
+      end
+      raise InvalidArchive, ".khata archives must declare signing keys" if declared.empty?
+
+      declared.each_with_object({}) do |item, keys|
+        jwk = item.fetch("jwk")
+        fingerprint = item.fetch("fingerprint")
+        unless fingerprint.match?(/\A[0-9a-f]{64}\z/) &&
+            ActiveSupport::SecurityUtils.secure_compare(fingerprint, Khata::Signatures.fingerprint(jwk))
+          raise InvalidArchive, ".khata signing-key fingerprint is invalid"
+        end
+        raise InvalidArchive, ".khata signing-key fingerprints must be unique" if keys.key?(fingerprint)
+
+        Khata::Signatures.public_key(jwk)
+        keys[fingerprint] = jwk
+      end
+    end
+
+    def validate_entry_correspondence!
+      source = if column?("entries", "folio_ledger_event_seq")
+        database.execute("SELECT id, folio_ledger_event_seq AS event_seq FROM entries ORDER BY id")
+      else
+        refs = audit_rows.filter_map do |row|
+          match = row["ref"].to_s.match(/\Aentry:(\d+)\z/)
+          next unless match && %w[entry.post entry.posted].include?(row["action"])
+
+          [ match[1].to_i, Integer(row.fetch("id")) ]
+        end.to_h
+        database.execute("SELECT id FROM entries ORDER BY id").map do |entry|
+          { "id" => entry.fetch("id"), "event_seq" => refs[entry.fetch("id").to_i] }
+        end
+      end
+
+      events = audit_rows.index_by { |row| Integer(row.fetch("id")) }
+      mapping = {}
+      source.each do |entry|
+        entry_id = Integer(entry.fetch("id"))
+        seq = Integer(entry.fetch("event_seq"))
+        event = events.fetch(seq)
+        unless %w[entry.post entry.posted].include?(event["action"])
+          raise InvalidArchive, "entry #{entry_id} points to non-posting audit row #{seq}"
+        end
+        if mapping.value?(seq)
+          raise InvalidArchive, "audit row #{seq} is linked to more than one entry"
+        end
+        mapping[entry_id] = seq
+      rescue TypeError, ArgumentError, KeyError
+        raise InvalidArchive, "entry #{entry_id} has no signed source posting event"
+      end
+      @entry_event_seq_by_source_entry = mapping
     end
   end
 end

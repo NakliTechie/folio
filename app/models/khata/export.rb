@@ -137,6 +137,9 @@ module Khata
     def write_entries(database, records, account_ids)
       ids = {}
       line_id = 0
+      event_sequences = LedgerEvent.where(
+        tenant_id: tenant.id, id: records.map { |record| record.fetch(:entry).ledger_event_id }
+      ).pluck(:id, :seq).to_h
       records.each_with_index do |record, index|
         entry = record.fetch(:entry)
         export_id = index + 1
@@ -146,13 +149,14 @@ module Khata
         entry_values = [
           export_id, entry.posting_date.iso8601, document&.doc_type || source["voucherType"] || "JV",
           document&.document_number || source["voucherRef"],
-          document&.narration || "Folio entry #{entry.id}",
-          event_actor(entry), entry.entered_at.utc.iso8601(3)
+          document&.narration || "Folio entry #{entry.id}", event_actor(entry),
+          entry.entered_at.utc.iso8601(3), event_sequences.fetch(entry.ledger_event_id)
         ]
         database.execute(<<~SQL, entry_values)
           INSERT INTO entries
-            (id, posted_at, voucher_type, voucher_ref, narration, created_by, created_at, is_amendment)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            (id, posted_at, voucher_type, voucher_ref, narration, created_by, created_at,
+             is_amendment, folio_ledger_event_seq)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
         SQL
         record.fetch(:lines).each_with_index do |(line, amount), line_index|
           line_id += 1
@@ -193,28 +197,58 @@ module Khata
     end
 
     def write_audit_log(database)
+      @signing_keys = {}
       LedgerEvent.for_tenant(tenant.id).in_order.each do |event|
+        fingerprint, jwk = signer_identity!(event)
+        unless Khata::Signatures.verify(
+          hash_hex: event.hash_hex, signature: event.signature, jwk: jwk
+        )
+          raise InvalidExport, "Ledger event #{event.seq} has an invalid signature."
+        end
+        @signing_keys[fingerprint] = jwk
         values = [
           event.seq, event.ts, event.actor, event.action, event.ref, event.origin, event.payload,
           event.prev_hash, event.hash_hex,
           event.signature.present? ? Base64.strict_encode64(event.signature) : nil,
-          event.hash_version
+          event.hash_version, fingerprint
         ]
         database.execute(<<~SQL, values)
           INSERT INTO audit_log
-            (id, ts, actor, action, ref, origin, payload, prev_hash, hash, signature, hash_version)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, ts, actor, action, ref, origin, payload, prev_hash, hash, signature,
+             hash_version, signer_fingerprint)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         SQL
       end
     end
 
+    def signer_identity!(event)
+      if event.external_signing_key_id
+        key = ExternalSigningKey.find_by(
+          id: event.external_signing_key_id, tenant_id: tenant.id
+        )
+        raise InvalidExport, "Ledger event #{event.seq} has no imported signing key." unless key
+
+        return [ key.fingerprint, key.public_key_jwk ]
+      end
+
+      key = UserSigningKey.find_by(id: event.signing_key_id, user_id: event.actor_user_id)
+      unless event.signature.present? && key
+        raise InvalidExport, "Ledger event #{event.seq} is unsigned and cannot be exported."
+      end
+      jwk = Khata::Signatures.jwk_from_pem(key.public_key_pem)
+      [ Khata::Signatures.fingerprint(jwk), jwk ]
+    end
+
     def build_manifest(books, chain)
       source = KhataImportRun.find_by(tenant_id: tenant.id)
-      integrity = { "booksHash" => Digest::SHA256.hexdigest(books), "auditHead" => chain.fetch(:head) }
-      external_ids = LedgerEvent.for_tenant(tenant.id).distinct.pluck(:external_signing_key_id)
-      if external_ids.one? && external_ids.first
-        integrity["signedBy"] = ExternalSigningKey.find(external_ids.first).public_key_jwk
+      keyring = @signing_keys.sort.map do |fingerprint, jwk|
+        { "fingerprint" => fingerprint, "jwk" => jwk }
       end
+      integrity = {
+        "booksHash" => Digest::SHA256.hexdigest(books), "auditHead" => chain.fetch(:head),
+        "signingKeys" => keyring
+      }
+      integrity["signedBy"] = keyring.sole.fetch("jwk") if keyring.one?
       {
         "khataFormatVersion" => "1.0", "schemaVersion" => 12,
         "workspaceId" => source&.source_workspace_id || tenant.khata_workspace_id,

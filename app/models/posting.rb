@@ -39,7 +39,14 @@ module Posting
       end
       Document.where(tenant_id: tenant_id).update_all(posted_entry_id: nil)
       Entry.where(tenant_id: tenant_id).destroy_all
-      LedgerEvent.for_tenant(tenant_id).in_order.each { |event| project!(event) }
+      import_run = KhataImportRun.find_by(tenant_id: tenant_id)
+      if import_run
+        Khata::RecoveryProjection.restore!(import_run)
+        events = LedgerEvent.for_tenant(tenant_id).where("seq > ?", import_run.source_audit_rows)
+        events.in_order.each { |event| project!(event) }
+      else
+        LedgerEvent.for_tenant(tenant_id).in_order.each { |event| project!(event) }
+      end
       rebind_document_entries!(tenant_id)
     end
   end

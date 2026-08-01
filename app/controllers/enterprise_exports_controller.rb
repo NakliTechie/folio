@@ -11,6 +11,9 @@ class EnterpriseExportsController < BrowserController
     @offices = Office.where(tenant_id: Current.tenant.id).includes(:entity).order(:code)
     @groups = ConsolidationGroup.where(tenant_id: Current.tenant.id).order(:code)
     @khata_import = KhataImportRun.find_by(tenant_id: Current.tenant.id)
+    @khata_import_upload = KhataImportUpload.where(tenant_id: Current.tenant.id)
+      .select(:id, :tenant_id, :source_filename, :status, :error_message, :created_at, :updated_at)
+      .order(id: :desc).first
   end
 
   def sap_b1_dtw
@@ -57,15 +60,29 @@ class EnterpriseExportsController < BrowserController
     unless upload.respond_to?(:tempfile) && upload.respond_to?(:original_filename)
       raise Khata::Bridge::InvalidImport, "Choose a .khata file to import."
     end
-    result = Khata::Bridge.import!(
-      tenant: Current.tenant, actor: Current.user, path: upload.tempfile.path,
-      filename: upload.original_filename
+    size = File.size(upload.tempfile.path)
+    raise Khata::Bridge::InvalidImport, ".khata file is empty." if size.zero?
+    if size > Khata::Archive::MAX_ARCHIVE_BYTES
+      raise Khata::Bridge::InvalidImport, ".khata file exceeds the 100 MB upload limit."
+    end
+    if KhataImportUpload.where(tenant_id: Current.tenant.id, status: %w[queued processing]).exists?
+      raise Khata::Bridge::InvalidImport, "A .khata import is already queued or processing."
+    end
+    request = KhataImportUpload.create!(
+      tenant: Current.tenant, requested_by: Current.user,
+      source_filename: File.basename(upload.original_filename.to_s).byteslice(0, 255),
+      archive_sha256: Digest::SHA256.file(upload.tempfile.path).hexdigest,
+      archive_bytes: File.binread(upload.tempfile.path)
     )
-    notice = result.duplicate ?
-      "This exact .khata file was already imported; no changes were made." :
-      ".khata imported. Format, chain, signatures, and native ledger reports all passed."
-    redirect_to enterprise_export_path(tenant_route_options), notice: notice
-  rescue ActionController::ParameterMissing, Khata::Bridge::InvalidImport => e
+    if request.enqueue!
+      redirect_to enterprise_export_path(tenant_route_options),
+        notice: ".khata verification and import were queued. Refresh this page for the result."
+    else
+      redirect_to enterprise_export_path(tenant_route_options),
+        alert: "The .khata import could not be queued. Try again."
+    end
+  rescue ActionController::ParameterMissing, Khata::Bridge::InvalidImport,
+         ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
     redirect_to enterprise_export_path(tenant_route_options), alert: e.message
   end
 end

@@ -180,7 +180,8 @@ module Posting
     # Store an existing chain verbatim (preserving each row's own prev_hash/hash so the
     # chain reproduces byte-for-byte), then replay! any fat events into projections.
     # `rows` are .khata audit_log rows (column names as in the corpus).
-    def self.ingest_verbatim!(tenant_id:, rows:, replay: true, external_signing_key_id: nil)
+    def self.ingest_verbatim!(tenant_id:, rows:, replay: true, external_signing_key_id: nil,
+                              external_signing_key_id_by_seq: {})
       now = Time.now.utc
       LedgerEvent.insert_all!(
         rows.map do |r|
@@ -191,7 +192,9 @@ module Posting
             ts: r["ts"], actor: r["actor"], action: r["action"],
             ref: r["ref"], origin: r["origin"], payload: r["payload"],
             signature: decode_source_signature(r["signature"]),
-            external_signing_key_id: external_signing_key_id, recorded_at: now
+            external_signing_key_id: external_signing_key_id_by_seq.fetch(
+              Integer(r.fetch("id")), external_signing_key_id
+            ), recorded_at: now
           }
         end
       )

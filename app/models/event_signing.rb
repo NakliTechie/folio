@@ -14,6 +14,11 @@ module EventSigning
     Result.new(private_key.sign_raw(nil, digest), key_record)
   end
 
+  def sign!(user_id:, hash_hex:)
+    sign(user_id: user_id, hash_hex: hash_hex) ||
+      raise("User #{user_id} has no active event-signing key")
+  end
+
   def verify(event)
     if event.respond_to?(:external_signing_key_id) && event.external_signing_key_id
       key = ExternalSigningKey.find_by(id: event.external_signing_key_id, tenant_id: event.tenant_id)

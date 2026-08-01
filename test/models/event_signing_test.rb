@@ -83,4 +83,43 @@ class EventSigningTest < ActiveSupport::TestCase
     event.actor_user_id = other.user.id
     refute EventSigning.verify(event)
   end
+
+  test "actor-backed appends fail closed when the user has no active key" do
+    key = @org.user.user_signing_keys.active.sole
+    key.update!(active: false, retired_at: Time.current)
+
+    error = assert_raises(RuntimeError) do
+      LedgerEvent.append!(
+        tenant_id: @org.tenant.id, actor: @org.user.email_address,
+        actor_user_id: @org.user.id, action: "test.event", origin: "test",
+        ts: "2026-08-02", payload_str: "{}"
+      )
+    end
+    assert_match(/no active event-signing key/, error.message)
+    assert_empty LedgerEvent.where(tenant_id: @org.tenant.id)
+  end
+
+  test "the database protects historical keys and rejects unsigned actor events" do
+    key = @org.user.user_signing_keys.active.sole
+
+    assert_raises(ActiveRecord::StatementInvalid) do
+      UserSigningKey.transaction(requires_new: true) do
+        key.update_column(:public_key_pem, "tampered")
+      end
+    end
+    assert_raises(ActiveRecord::StatementInvalid) do
+      UserSigningKey.transaction(requires_new: true) { key.delete }
+    end
+    assert_raises(ActiveRecord::StatementInvalid) do
+      LedgerEvent.connection.execute(<<~SQL)
+        INSERT INTO ledger_events
+          (tenant_id, seq, prev_hash, hash_hex, hash_version, ts, actor, action, origin,
+           payload, actor_user_id, recorded_at)
+        VALUES
+          (#{@org.tenant.id}, 1, '#{Folio::KhataHash::GENESIS_PREV}', '#{'f' * 64}', 2,
+           '2026-08-02', 'u:#{@org.user.id}', 'test.event', 'test', '{}',
+           #{@org.user.id}, clock_timestamp())
+      SQL
+    end
+  end
 end

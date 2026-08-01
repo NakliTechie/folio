@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../config/environment"
+
+created = 0
+skipped = 0
+KhataImportRun.order(:tenant_id).find_each do |run|
+  if run.recovery_snapshot
+    skipped += 1
+    next
+  end
+
+  chain = LedgerEvent.verify_chain(run.tenant_id)
+  unless chain[:ok] && chain[:rows] >= run.source_audit_rows &&
+      LedgerEvent.for_tenant(run.tenant_id).find_by(seq: run.source_audit_rows)&.hash_hex == run.source_audit_head
+    abort "Tenant #{run.tenant_id}: source chain cannot be verified; recovery snapshot was not created."
+  end
+
+  Khata::RecoveryProjection.capture!(run)
+  created += 1
+end
+
+puts "Created #{created} .khata recovery snapshot(s); #{skipped} already existed."

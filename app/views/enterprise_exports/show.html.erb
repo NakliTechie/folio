@@ -63,19 +63,24 @@
     <section class="card">
       <h2>Import existing Bahi books</h2>
       <% if @khata_import %>
-        <p class="notification notification--success">Imported <strong><%= @khata_import.source_filename %></strong> once. <%= @khata_import.source_audit_rows %> signed audit rows reproduce head <code><%= @khata_import.source_audit_head.first(12) %>…</code>; Tier F/C/R checks passed.</p>
+        <p class="notification notification--success">Imported <strong><%= @khata_import.source_filename %></strong> once. <%= @khata_import.source_audit_rows %> signed audit rows reproduce head <code><%= @khata_import.source_audit_head.first(12) %>…</code>; bounded runtime-format checks, target recovery, and native account-report parity passed.</p>
         <% @khata_import.conformance.dig("identity", "warnings").to_a.each do |warning| %>
           <p class="notification notification--warning"><%= warning %></p>
         <% end %>
+      <% elsif @khata_import_upload&.status.in?(%w[queued processing]) %>
+        <p class="notification notification--info"><strong><%= @khata_import_upload.source_filename %></strong> is <%= @khata_import_upload.status %>. Refresh this page for the verified result.</p>
       <% else %>
-        <p class="muted">For a newly created, operationally empty company only. Folio verifies safe ZIP structure, the SQLite hash and invariants, every audit-chain link, declared signatures, and native report parity before committing anything. This is a one-time server-authoritative migration, not an offline merge.</p>
+        <% if @khata_import_upload&.status == "failed" %>
+          <p class="notification notification--warning">The previous import failed: <%= @khata_import_upload.error_message %></p>
+        <% end %>
+        <p class="muted">For a newly created, operationally empty company only. Folio verifies safe ZIP structure, bounded SQLite integrity checks, posting-event correspondence, every audit-chain link and signature, a governed recovery snapshot, and native account-report parity before committing anything. This runtime gate is narrower than the release-only Tier F/C/R corpus suite. The import is a one-time server-authoritative migration, not an offline merge.</p>
         <%= form_with url: import_khata_enterprise_export_path, method: :post, multipart: true, class: "form-grid" do |form| %>
           <div class="form-group">
             <%= form.label :khata_file, ".khata file" %>
             <%= form.file_field :khata_file, accept: ".khata,application/x-khata,application/zip", required: true %>
           </div>
           <div class="form-actions">
-            <%= form.submit "Verify and import", class: "button" %>
+            <%= form.submit "Queue verification and import", class: "button" %>
           </div>
         <% end %>
       <% end %>

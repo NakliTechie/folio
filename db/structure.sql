@@ -37,6 +37,23 @@ $$;
 
 
 --
+-- Name: folio_actor_event_requires_signature(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_actor_event_requires_signature() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.actor_user_id IS NOT NULL
+    AND (NEW.signature IS NULL OR NEW.signing_key_id IS NULL) THEN
+    RAISE EXCEPTION '% actor-backed events require a signature and signing key', TG_TABLE_NAME;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: folio_asset_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -241,6 +258,32 @@ CREATE FUNCTION public.folio_tenant_khata_workspace_immutable() RETURNS trigger
 BEGIN
   IF NEW.khata_workspace_id IS DISTINCT FROM OLD.khata_workspace_id THEN
     RAISE EXCEPTION 'tenant khata_workspace_id is immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: folio_user_signing_key_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_user_signing_key_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'user_signing_keys is immutable: DELETE on row id=% rejected', OLD.id;
+  END IF;
+  IF NEW.user_id IS DISTINCT FROM OLD.user_id
+    OR NEW.key_version IS DISTINCT FROM OLD.key_version
+    OR NEW.algorithm IS DISTINCT FROM OLD.algorithm
+    OR NEW.public_key_pem IS DISTINCT FROM OLD.public_key_pem
+    OR NEW.encrypted_private_key IS DISTINCT FROM OLD.encrypted_private_key
+    OR NEW.fingerprint IS DISTINCT FROM OLD.fingerprint
+    OR (OLD.active = FALSE AND NEW.active = TRUE)
+    OR (OLD.retired_at IS NOT NULL AND NEW.retired_at IS DISTINCT FROM OLD.retired_at) THEN
+    RAISE EXCEPTION 'user_signing_keys key material and retirement are immutable';
   END IF;
   RETURN NEW;
 END;
@@ -2836,6 +2879,83 @@ ALTER SEQUENCE public.khata_import_runs_id_seq OWNED BY public.khata_import_runs
 
 
 --
+-- Name: khata_import_uploads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.khata_import_uploads (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    requested_by_id bigint NOT NULL,
+    khata_import_run_id bigint,
+    source_filename character varying NOT NULL,
+    archive_sha256 character varying(64) NOT NULL,
+    archive_bytes bytea,
+    status character varying DEFAULT 'queued'::character varying NOT NULL,
+    error_message text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT khata_import_uploads_size_valid CHECK (((archive_bytes IS NULL) OR (octet_length(archive_bytes) <= 104857600))),
+    CONSTRAINT khata_import_uploads_status_valid CHECK (((status)::text = ANY ((ARRAY['queued'::character varying, 'processing'::character varying, 'succeeded'::character varying, 'failed'::character varying])::text[])))
+);
+
+
+--
+-- Name: khata_import_uploads_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.khata_import_uploads_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: khata_import_uploads_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.khata_import_uploads_id_seq OWNED BY public.khata_import_uploads.id;
+
+
+--
+-- Name: khata_recovery_snapshots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.khata_recovery_snapshots (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    khata_import_run_id bigint NOT NULL,
+    schema_version integer DEFAULT 1 NOT NULL,
+    projection jsonb NOT NULL,
+    projection_sha256 character varying(64) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT khata_recovery_snapshots_digest_valid CHECK (((projection_sha256)::text ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT khata_recovery_snapshots_schema_version_valid CHECK ((schema_version = 1))
+);
+
+
+--
+-- Name: khata_recovery_snapshots_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.khata_recovery_snapshots_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: khata_recovery_snapshots_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.khata_recovery_snapshots_id_seq OWNED BY public.khata_recovery_snapshots.id;
+
+
+--
 -- Name: ledger_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4427,6 +4547,20 @@ ALTER TABLE ONLY public.khata_import_runs ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: khata_import_uploads id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_uploads ALTER COLUMN id SET DEFAULT nextval('public.khata_import_uploads_id_seq'::regclass);
+
+
+--
+-- Name: khata_recovery_snapshots id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_recovery_snapshots ALTER COLUMN id SET DEFAULT nextval('public.khata_recovery_snapshots_id_seq'::regclass);
+
+
+--
 -- Name: ledger_events id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -5106,6 +5240,22 @@ ALTER TABLE ONLY public.journal_entry_line_amounts
 
 ALTER TABLE ONLY public.khata_import_runs
     ADD CONSTRAINT khata_import_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: khata_import_uploads khata_import_uploads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_uploads
+    ADD CONSTRAINT khata_import_uploads_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: khata_recovery_snapshots khata_recovery_snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_recovery_snapshots
+    ADD CONSTRAINT khata_recovery_snapshots_pkey PRIMARY KEY (id);
 
 
 --
@@ -7066,6 +7216,48 @@ CREATE UNIQUE INDEX index_khata_import_runs_on_tenant_id_and_archive_sha256 ON p
 
 
 --
+-- Name: index_khata_import_uploads_on_active_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_khata_import_uploads_on_active_tenant ON public.khata_import_uploads USING btree (tenant_id) WHERE ((status)::text = ANY ((ARRAY['queued'::character varying, 'processing'::character varying])::text[]));
+
+
+--
+-- Name: index_khata_import_uploads_on_khata_import_run_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_khata_import_uploads_on_khata_import_run_id ON public.khata_import_uploads USING btree (khata_import_run_id);
+
+
+--
+-- Name: index_khata_import_uploads_on_requested_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_khata_import_uploads_on_requested_by_id ON public.khata_import_uploads USING btree (requested_by_id);
+
+
+--
+-- Name: index_khata_import_uploads_on_tenant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_khata_import_uploads_on_tenant_id ON public.khata_import_uploads USING btree (tenant_id);
+
+
+--
+-- Name: index_khata_recovery_snapshots_on_khata_import_run_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_khata_recovery_snapshots_on_khata_import_run_id ON public.khata_recovery_snapshots USING btree (khata_import_run_id);
+
+
+--
+-- Name: index_khata_recovery_snapshots_on_tenant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_khata_recovery_snapshots_on_tenant_id ON public.khata_recovery_snapshots USING btree (tenant_id);
+
+
+--
 -- Name: index_ledger_events_on_external_signing_key_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7752,6 +7944,13 @@ CREATE TRIGGER domain_events_no_update BEFORE UPDATE ON public.domain_events FOR
 
 
 --
+-- Name: domain_events domain_events_require_actor_signature; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER domain_events_require_actor_signature BEFORE INSERT ON public.domain_events FOR EACH ROW EXECUTE FUNCTION public.folio_actor_event_requires_signature();
+
+
+--
 -- Name: external_signing_keys external_signing_keys_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -7850,6 +8049,20 @@ CREATE TRIGGER khata_import_runs_no_truncate BEFORE TRUNCATE ON public.khata_imp
 
 
 --
+-- Name: khata_recovery_snapshots khata_recovery_snapshots_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER khata_recovery_snapshots_immutable BEFORE DELETE OR UPDATE ON public.khata_recovery_snapshots FOR EACH ROW EXECUTE FUNCTION public.folio_khata_evidence_immutable();
+
+
+--
+-- Name: khata_recovery_snapshots khata_recovery_snapshots_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER khata_recovery_snapshots_no_truncate BEFORE TRUNCATE ON public.khata_recovery_snapshots FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: ledger_events ledger_events_no_delete; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -7871,6 +8084,13 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 
 
 --
+-- Name: ledger_events ledger_events_require_actor_signature; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER ledger_events_require_actor_signature BEFORE INSERT ON public.ledger_events FOR EACH ROW EXECUTE FUNCTION public.folio_actor_event_requires_signature();
+
+
+--
 -- Name: user_office_roles protect_last_tenant_owner; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -7882,6 +8102,20 @@ CREATE TRIGGER protect_last_tenant_owner BEFORE DELETE OR UPDATE ON public.user_
 --
 
 CREATE TRIGGER tenants_khata_workspace_immutable BEFORE UPDATE ON public.tenants FOR EACH ROW EXECUTE FUNCTION public.folio_tenant_khata_workspace_immutable();
+
+
+--
+-- Name: user_signing_keys user_signing_keys_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER user_signing_keys_guard BEFORE DELETE OR UPDATE ON public.user_signing_keys FOR EACH ROW EXECUTE FUNCTION public.folio_user_signing_key_guard();
+
+
+--
+-- Name: user_signing_keys user_signing_keys_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER user_signing_keys_no_truncate BEFORE TRUNCATE ON public.user_signing_keys FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
 
 
 --
@@ -8333,6 +8567,22 @@ ALTER TABLE ONLY public.goods_receipt_lines
 
 
 --
+-- Name: khata_import_uploads fk_rails_5e64ce32f5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_uploads
+    ADD CONSTRAINT fk_rails_5e64ce32f5 FOREIGN KEY (requested_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: khata_recovery_snapshots fk_rails_61ed82d5ed; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_recovery_snapshots
+    ADD CONSTRAINT fk_rails_61ed82d5ed FOREIGN KEY (khata_import_run_id) REFERENCES public.khata_import_runs(id);
+
+
+--
 -- Name: bank_statement_imports fk_rails_6376db30c1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8621,6 +8871,14 @@ ALTER TABLE ONLY public.external_signing_keys
 
 
 --
+-- Name: khata_import_uploads fk_rails_939b000935; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_uploads
+    ADD CONSTRAINT fk_rails_939b000935 FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
 -- Name: intercompany_transactions fk_rails_93bfddda2e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8837,6 +9095,14 @@ ALTER TABLE ONLY public.khata_import_runs
 
 
 --
+-- Name: khata_import_uploads fk_rails_c0f374c323; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_uploads
+    ADD CONSTRAINT fk_rails_c0f374c323 FOREIGN KEY (khata_import_run_id) REFERENCES public.khata_import_runs(id);
+
+
+--
 -- Name: controlling_plan_lines fk_rails_c2a584b4c4; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8882,6 +9148,14 @@ ALTER TABLE ONLY public.exchange_revaluation_items
 
 ALTER TABLE ONLY public.contract_posting_runs
     ADD CONSTRAINT fk_rails_cef285fc3e FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: khata_recovery_snapshots fk_rails_d0b77b7acb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_recovery_snapshots
+    ADD CONSTRAINT fk_rails_d0b77b7acb FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 
 --
@@ -9043,6 +9317,8 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260802011000'),
+('20260802010000'),
 ('20260801200000'),
 ('20260801195000'),
 ('20260801194000'),

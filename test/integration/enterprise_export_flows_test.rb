@@ -5,6 +5,8 @@ require "stringio"
 require "zip"
 
 class EnterpriseExportFlowsTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   setup do
     @org = Onboarding::SignUp.call(
       email: "sap-export-browser@folio.invalid", password: "correct-horse-battery",
@@ -61,7 +63,9 @@ class EnterpriseExportFlowsTest < ActionDispatch::IntegrationTest
     upload = Rack::Test::UploadedFile.new(
       Rails.root.join("conformance/corpus/files/consulting.khata"), "application/x-khata"
     )
-    post import_khata_enterprise_export_path, params: { khata_file: upload }
+    perform_enqueued_jobs(only: KhataImportJob) do
+      post import_khata_enterprise_export_path, params: { khata_file: upload }
+    end
 
     assert_redirected_to enterprise_export_path(tenant_id: @org.tenant.id)
     follow_redirect!
