@@ -160,6 +160,57 @@ class SalesInvoiceFlowsTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "posted invoice prepares and downloads offline INV-01 JSON without claiming an IRN" do
+    invoice = SalesInvoices::BuildDraft.call(**builder_attributes)
+    Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+
+    get sales_invoice_path(invoice)
+    assert_response :success
+    assert_select "h2", "Prepare the IRP request"
+    assert_select "button", "Prepare e-invoice JSON"
+
+    assert_difference "EinvoiceSubmission.count", 1 do
+      post prepare_einvoice_sales_invoice_path(invoice)
+    end
+    assert_redirected_to sales_invoice_path(invoice, tenant_id: @org.tenant.id)
+    follow_redirect!
+    assert_select "h2", "JSON prepared — IRN not generated"
+    assert_select "a", "Download INV-01 JSON"
+    assert_select "button", text: "Reverse invoice", count: 0
+
+    get einvoice_json_sales_invoice_path(invoice)
+    assert_response :success
+    assert_equal "application/json", response.media_type
+    assert_match(/einvoice-SI-26-27-00001\.json/, response.headers.fetch("Content-Disposition"))
+    payload = JSON.parse(response.body)
+    assert_equal "1.1", payload.fetch("Version")
+    assert_equal "INV", payload.dig("DocDtls", "Typ")
+    assert_equal 18, payload.dig("ItemList", 0, "IgstAmt")
+
+    assert_no_difference [ "EinvoiceSubmission.count", "DomainEvent.count" ] do
+      post "/api/v1/sales_invoices/#{invoice.id}/prepare_einvoice"
+    end
+    assert_response :success
+    submission = JSON.parse(response.body).fetch("einvoice_submission")
+    assert_equal "prepared", submission.fetch("status")
+    assert_equal false, submission.fetch("signed_qr_code_present")
+    assert_equal payload, submission.fetch("payload")
+
+    record = invoice.einvoice_submission
+    raw_response = { "Status" => 1, "Data" => { "Irn" => "b" * 64 } }
+    record.update!(
+      status: "acknowledged", provider: "test_irp", irn: "b" * 64,
+      ack_number: "112026000000002", acknowledged_at: Time.zone.parse("2026-07-31 12:00:00"),
+      signed_invoice: "signed-invoice-jws", signed_qr_code: "signed-qr-jws",
+      signature_status: "provider_verified", provider_response: raw_response,
+      provider_response_sha256: Taxes::India::Gst::EInvoice.canonical_digest(raw_response)
+    )
+    get print_sales_invoice_path(invoice)
+    assert_response :success
+    assert_select "dt", "IRN"
+    assert_select ".einvoice-proof svg", count: 1
+  end
+
   private
 
   def browser_invoice_params(place_of_supply_state_code: "29")

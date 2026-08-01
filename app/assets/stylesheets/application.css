@@ -1476,6 +1476,21 @@ fieldset {
   margin-bottom: 0;
 }
 
+.einvoice-proof {
+  align-items: center;
+  border: 1px solid var(--border);
+  display: flex;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 0.75rem;
+}
+
+.einvoice-proof__qr svg {
+  display: block;
+  height: 9rem;
+  width: 9rem;
+}
+
 .member-list li {
   justify-content: flex-start;
 }

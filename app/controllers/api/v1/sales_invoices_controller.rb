@@ -4,9 +4,9 @@ module Api
   module V1
     class SalesInvoicesController < BaseController
       before_action -> { require_capability!("reports.read") }, only: %i[index show]
-      before_action -> { require_capability!("invoices.create") }, only: %i[create post]
+      before_action -> { require_capability!("invoices.create") }, only: %i[create post prepare_einvoice]
       before_action -> { require_capability!("documents.reverse") }, only: :reverse
-      before_action :set_document, only: %i[show post reverse]
+      before_action :set_document, only: %i[show prepare_einvoice post reverse]
 
       def index
         documents = document_scope.order(document_date: :desc, created_at: :desc)
@@ -40,6 +40,21 @@ module Api
           required_capability: "invoices.create"
         )
         render json: { sales_invoice: document_json(@document.reload), entry_id: entry.id }
+      end
+
+      def prepare_einvoice
+        created = @document.einvoice_submission.nil?
+        submission = Taxes::India::Gst::EInvoice::Prepare.call(
+          document: @document,
+          actor: "u:#{current_user.id}",
+          actor_user_id: current_user.id
+        )
+        render json: { einvoice_submission: submission_json(submission, include_payload: true) },
+          status: created ? :created : :ok
+      rescue Taxes::India::Gst::EInvoice::NotReady,
+             Taxes::India::Gst::EInvoice::InvalidPayload,
+             ActiveRecord::RecordInvalid => e
+        render_error(e.message, :unprocessable_entity)
       end
 
       def reverse
@@ -88,6 +103,7 @@ module Api
           tax_minor: document.tax_minor,
           total_minor: document.total_minor,
           tax_breakdown: document.tax_breakdown,
+          einvoice_submission: submission_json(document.einvoice_submission),
           party: document.party_snapshot,
           seller_registration: document.tax_registration_snapshot,
           lines: document.document_lines.map do |line|
@@ -105,6 +121,31 @@ module Api
             }
           end
         }
+      end
+
+      def submission_json(submission, include_payload: false)
+        return unless submission
+
+        result = {
+          id: submission.id,
+          status: submission.status,
+          provider: submission.provider,
+          schema_version: submission.schema_version,
+          schema_reference: Taxes::India::Gst::EInvoice::SCHEMA_REFERENCE,
+          request_id: submission.request_id,
+          payload_sha256: submission.payload_sha256,
+          attempt_count: submission.attempt_count,
+          irn: submission.irn,
+          ack_number: submission.ack_number,
+          acknowledged_at: submission.acknowledged_at,
+          signature_status: submission.signature_status,
+          signed_invoice_present: submission.signed_invoice.present?,
+          signed_qr_code_present: submission.signed_qr_code.present?,
+          error_code: submission.error_code,
+          error_message: submission.error_message
+        }
+        result[:payload] = submission.payload if include_payload
+        result
       end
     end
   end

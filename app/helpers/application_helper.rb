@@ -19,6 +19,18 @@ module ApplicationHelper
     number_to_percentage(basis_points.to_i / 100.0, precision: 2, strip_insignificant_zeros: true)
   end
 
+  def einvoice_qr_svg(submission)
+    return unless submission&.acknowledged? && submission.signed_qr_code.present?
+
+    # RQRCode maps the opaque signed payload only into numeric SVG rectangles; it never
+    # interpolates the payload as markup. The generated SVG is therefore safe to mark as HTML.
+    RQRCode::QRCode.new(submission.signed_qr_code)
+      .as_svg(module_size: 3, standalone: true, use_path: true)
+      .html_safe
+  rescue RQRCode::QRCodeRunTimeError
+    nil
+  end
+
   def credit_note_reason_label(reason_code)
     {
       "value_reduction" => "Value reduction",

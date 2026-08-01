@@ -40,6 +40,8 @@ Rails.application.routes.draw do
   resources :sales_invoices, path: "sales-invoices", only: %i[index show new create] do
     member do
       get :print
+      get :einvoice_json
+      post :prepare_einvoice
       post :post
       post :reverse
     end
@@ -114,6 +116,7 @@ Rails.application.routes.draw do
       end
       resources :sales_invoices, only: %i[index show create] do
         member do
+          post :prepare_einvoice
           post :post
           post :reverse
         end

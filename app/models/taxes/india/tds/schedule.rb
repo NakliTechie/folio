@@ -24,7 +24,7 @@ module Taxes
         #   threshold_annual_minor: aggregate threshold below which no TDS (nil = none).
         #              The historical name is retained for compatibility; threshold_period
         #              says whether its accumulation window is a fiscal year or a month.
-        #   base_rule: :on_full  → withhold on the whole payment once a threshold is crossed
+        #   base_rule: :on_full  → withhold on the whole assessable base once a threshold is crossed
         #              :on_excess → withhold only on the amount EXCEEDING the annual threshold
         #                           (§194Q — TDS is on purchase value above ₹50L, not the whole).
         #   no_pan_rate_basis_points: a §206AA rate SPECIFIC to this section (nil = the general

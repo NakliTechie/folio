@@ -49,6 +49,32 @@
     </div>
   </section>
 
+  <% unless @document.postable? %>
+    <section class="panel posting-panel" aria-labelledby="einvoice-heading">
+      <div>
+        <p class="eyebrow">GST e-invoice · INV-01 v1.1</p>
+        <h2 id="einvoice-heading"><%= @einvoice_submission&.acknowledged? ? "IRN acknowledged" : @einvoice_submission ? "JSON prepared — IRN not generated" : "Prepare the IRP request" %></h2>
+        <% if @einvoice_submission&.acknowledged? %>
+          <p>IRN <strong><%= @einvoice_submission.irn %></strong> · acknowledgement <%= @einvoice_submission.ack_number %>. Signature status: <%= @einvoice_submission.signature_status.humanize.downcase %>.</p>
+        <% elsif @einvoice_submission %>
+          <p>This immutable request is ready for offline upload or a future reviewed provider adapter. Folio has not contacted an IRP, generated an IRN, or verified a signature.</p>
+        <% else %>
+          <p>Preparation validates the posted invoice against Folio’s domestic B2B INV-01 profile and freezes an idempotent JSON request. It does not contact an IRP.</p>
+        <% end %>
+      </div>
+      <div class="action-row">
+        <% if @einvoice_submission %>
+          <%= link_to "Download INV-01 JSON", einvoice_json_sales_invoice_path(@document, tenant_route_options),
+            class: "button button--secondary" %>
+        <% elsif @document.state == "posted" && permitted?("invoices.create") %>
+          <%= button_to "Prepare e-invoice JSON", prepare_einvoice_sales_invoice_path(@document, tenant_route_options),
+            method: :post, class: "button button--secondary",
+            form: { data: { turbo_confirm: "Freeze this invoice’s INV-01 request? Reversal will be blocked afterward to avoid IRP ambiguity." } } %>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
+
   <% if @document.postable? %>
     <section class="panel posting-panel">
       <div>

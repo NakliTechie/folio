@@ -460,6 +460,62 @@ ALTER SEQUENCE public.domain_events_id_seq OWNED BY public.domain_events.id;
 
 
 --
+-- Name: einvoice_submissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.einvoice_submissions (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    document_id bigint NOT NULL,
+    tax_registration_id bigint NOT NULL,
+    provider character varying DEFAULT 'offline_export'::character varying NOT NULL,
+    status character varying DEFAULT 'prepared'::character varying NOT NULL,
+    schema_version character varying DEFAULT '1.1'::character varying NOT NULL,
+    request_id character varying NOT NULL,
+    payload jsonb NOT NULL,
+    payload_sha256 character varying(64) NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    last_attempt_at timestamp(6) without time zone,
+    irn character varying(64),
+    ack_number character varying,
+    acknowledged_at timestamp(6) without time zone,
+    signed_invoice text,
+    signed_qr_code text,
+    signature_status character varying DEFAULT 'not_checked'::character varying NOT NULL,
+    provider_response jsonb,
+    provider_response_sha256 character varying(64),
+    error_code character varying,
+    error_message text,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT einvoice_submissions_ack_evidence_complete CHECK ((((status)::text <> 'acknowledged'::text) OR ((irn IS NOT NULL) AND (ack_number IS NOT NULL) AND (acknowledged_at IS NOT NULL) AND (signed_invoice IS NOT NULL) AND (signed_qr_code IS NOT NULL) AND (provider_response IS NOT NULL) AND (provider_response_sha256 IS NOT NULL)))),
+    CONSTRAINT einvoice_submissions_attempt_count_nonnegative CHECK ((attempt_count >= 0)),
+    CONSTRAINT einvoice_submissions_signature_status_valid CHECK (((signature_status)::text = ANY ((ARRAY['not_checked'::character varying, 'provider_verified'::character varying, 'locally_verified'::character varying, 'failed'::character varying])::text[]))),
+    CONSTRAINT einvoice_submissions_status_valid CHECK (((status)::text = ANY ((ARRAY['prepared'::character varying, 'submitting'::character varying, 'acknowledged'::character varying, 'rejected'::character varying, 'indeterminate'::character varying])::text[])))
+);
+
+
+--
+-- Name: einvoice_submissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.einvoice_submissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: einvoice_submissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.einvoice_submissions_id_seq OWNED BY public.einvoice_submissions.id;
+
+
+--
 -- Name: entities; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1674,6 +1730,13 @@ ALTER TABLE ONLY public.domain_events ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
+-- Name: einvoice_submissions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.einvoice_submissions ALTER COLUMN id SET DEFAULT nextval('public.einvoice_submissions_id_seq'::regclass);
+
+
+--
 -- Name: entities id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1938,6 +2001,14 @@ ALTER TABLE ONLY public.documents
 
 ALTER TABLE ONLY public.domain_events
     ADD CONSTRAINT domain_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: einvoice_submissions einvoice_submissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.einvoice_submissions
+    ADD CONSTRAINT einvoice_submissions_pkey PRIMARY KEY (id);
 
 
 --
@@ -2518,6 +2589,48 @@ CREATE UNIQUE INDEX index_domain_events_on_tenant_id_and_seq ON public.domain_ev
 
 
 --
+-- Name: index_einvoice_submissions_on_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_einvoice_submissions_on_document_id ON public.einvoice_submissions USING btree (document_id);
+
+
+--
+-- Name: index_einvoice_submissions_on_tax_registration_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_einvoice_submissions_on_tax_registration_id ON public.einvoice_submissions USING btree (tax_registration_id);
+
+
+--
+-- Name: index_einvoice_submissions_on_tenant_id_and_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_einvoice_submissions_on_tenant_id_and_document_id ON public.einvoice_submissions USING btree (tenant_id, document_id);
+
+
+--
+-- Name: index_einvoice_submissions_on_tenant_id_and_irn; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_einvoice_submissions_on_tenant_id_and_irn ON public.einvoice_submissions USING btree (tenant_id, irn) WHERE (irn IS NOT NULL);
+
+
+--
+-- Name: index_einvoice_submissions_on_tenant_id_and_request_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_einvoice_submissions_on_tenant_id_and_request_id ON public.einvoice_submissions USING btree (tenant_id, request_id);
+
+
+--
+-- Name: index_einvoice_submissions_on_tenant_id_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_einvoice_submissions_on_tenant_id_and_status ON public.einvoice_submissions USING btree (tenant_id, status);
+
+
+--
 -- Name: index_entities_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2980,6 +3093,14 @@ CREATE TRIGGER protect_last_tenant_owner BEFORE DELETE OR UPDATE ON public.user_
 
 
 --
+-- Name: einvoice_submissions fk_rails_017120e64f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.einvoice_submissions
+    ADD CONSTRAINT fk_rails_017120e64f FOREIGN KEY (document_id) REFERENCES public.documents(id);
+
+
+--
 -- Name: office_tax_registrations fk_rails_019bb5b0bc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3025,6 +3146,14 @@ ALTER TABLE ONLY public.financial_statement_assignments
 
 ALTER TABLE ONLY public.office_tax_registrations
     ADD CONSTRAINT fk_rails_341ce49cc2 FOREIGN KEY (tax_registration_id) REFERENCES public.tax_registrations(id);
+
+
+--
+-- Name: einvoice_submissions fk_rails_41f91a62ff; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.einvoice_submissions
+    ADD CONSTRAINT fk_rails_41f91a62ff FOREIGN KEY (tax_registration_id) REFERENCES public.tax_registrations(id);
 
 
 --
@@ -3138,6 +3267,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801130000'),
 ('20260801120000'),
 ('20260801110000'),
 ('20260801100000'),

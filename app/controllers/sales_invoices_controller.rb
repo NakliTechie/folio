@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 class SalesInvoicesController < BrowserController
-  before_action -> { require_capability!("reports.read") }, only: %i[index show print]
-  before_action -> { require_capability!("invoices.create") }, only: %i[new create post]
+  before_action -> { require_capability!("reports.read") }, only: %i[index show print einvoice_json]
+  before_action -> { require_capability!("invoices.create") }, only: %i[new create post prepare_einvoice]
   before_action -> { require_capability!("documents.reverse") }, only: :reverse
-  before_action :set_document, only: %i[show print post reverse]
+  before_action :set_document, only: %i[show print einvoice_json prepare_einvoice post reverse]
 
   def index
     @documents = document_scope.includes(:party).order(document_date: :desc, created_at: :desc)
@@ -12,13 +12,44 @@ class SalesInvoicesController < BrowserController
 
   def show
     @simulation = Documents::Simulate.call(@document) if @document.postable?
+    @einvoice_submission = @document.einvoice_submission
   end
 
   def print
+    @einvoice_submission = @document.einvoice_submission
     return if @document.statutory_printable?
 
     redirect_to sales_invoice_path(@document, tenant_route_options),
       alert: "Print is unavailable because this historical draft predates complete statutory snapshots."
+  end
+
+  def prepare_einvoice
+    submission = Taxes::India::Gst::EInvoice::Prepare.call(
+      document: @document,
+      actor: "u:#{Current.user.id}",
+      actor_user_id: Current.user.id
+    )
+    redirect_to sales_invoice_path(@document, tenant_route_options),
+      notice: "INV-01 v#{submission.schema_version} JSON prepared. No IRN has been generated or submitted."
+  rescue Taxes::India::Gst::EInvoice::NotReady,
+         Taxes::India::Gst::EInvoice::InvalidPayload,
+         ActiveRecord::RecordInvalid => e
+    redirect_to sales_invoice_path(@document, tenant_route_options), alert: e.message
+  end
+
+  def einvoice_json
+    submission = @document.einvoice_submission
+    unless submission
+      return redirect_to sales_invoice_path(@document, tenant_route_options),
+        alert: "Prepare the e-invoice request before downloading it."
+    end
+
+    send_data(
+      JSON.pretty_generate(submission.payload),
+      filename: "einvoice-#{@document.document_number.tr('/', '-')}.json",
+      type: "application/json",
+      disposition: "attachment"
+    )
   end
 
   def new

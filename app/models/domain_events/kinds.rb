@@ -31,6 +31,12 @@ module DomainEvents
       "vendor.onboarded"        => "A vendor completed onboarding.",
       "vendor.suspended"        => "A vendor was suspended.",
 
+      # --- India e-invoice lifecycle (statutory, non-financial) ---
+      "einvoice.prepared"      => "An immutable INV-01 request was prepared.",
+      "einvoice.acknowledged"  => "An IRP acknowledged a document and returned an IRN.",
+      "einvoice.rejected"      => "An IRP rejected an e-invoice request.",
+      "einvoice.indeterminate" => "An IRP attempt ended without a conclusive response.",
+
       # --- tenant / membership lifecycle (non-financial governance) ---
       "member.invited"  => "A user was invited to join a tenant with a role.",
       "member.joined"   => "An invited user accepted and joined a tenant.",

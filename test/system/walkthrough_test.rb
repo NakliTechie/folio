@@ -407,6 +407,31 @@ class WalkthroughTest < ApplicationSystemTestCase
     assert_text "Reapplied to SI/26-27/00001"
   end
 
+  test "posted invoice prepares an offline e-invoice request without claiming an IRN" do
+    setup = create_posted_invoice(
+      "einvoice-walkthrough@folio.invalid", "E-invoice Walkthrough"
+    )
+
+    visit new_session_path
+    fill_in "Email", with: setup[:org].user.email_address
+    fill_in "Password", with: PASSWORD
+    click_button "Sign in"
+    assert_text "Signed in as #{setup[:org].user.email_address}.", wait: 5
+    visit sales_invoice_path(setup[:invoice], tenant_id: setup[:org].tenant.id)
+
+    assert_selector "h2", text: "Prepare the IRP request"
+    accept_confirm(
+      "Freeze this invoice’s INV-01 request? Reversal will be blocked afterward to avoid IRP ambiguity."
+    ) do
+      click_button "Prepare e-invoice JSON"
+    end
+
+    assert_selector "[role=status]", text: /INV-01 v1\.1 JSON prepared.*No IRN/i
+    assert_selector "h2", text: "JSON prepared — IRN not generated"
+    assert_link "Download INV-01 JSON"
+    assert_no_button "Reverse invoice"
+  end
+
   test "each RBAC preset completes its browser-specific journey" do
     org = Onboarding::SignUp.call(
       email: "role-owner@folio.invalid", password: PASSWORD, org_name: "Role Walkthrough"

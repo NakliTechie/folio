@@ -212,6 +212,22 @@ class CreditNoteTest < ActiveSupport::TestCase
     end
   end
 
+  test "posted credit notes use the CRN branch of the same INV-01 provider seam" do
+    note = build_credit_note(quantity: "0.5")
+    Documents::Post.call(note, actor: "u:#{@org.user.id}")
+
+    submission = Taxes::India::Gst::EInvoice::Prepare.call(
+      document: note,
+      actor: "u:#{@org.user.id}",
+      actor_user_id: @org.user.id
+    )
+    assert_equal "CRN", submission.payload.dig("DocDtls", "Typ")
+    assert_equal note.document_number, submission.payload.dig("DocDtls", "No")
+    assert_equal 25, submission.payload.dig("ValDtls", "AssVal")
+    assert_equal 29.5, submission.payload.dig("ValDtls", "TotInvVal")
+    assert Taxes::India::Gst::EInvoice::Validator.validate!(submission.payload)
+  end
+
   private
 
   def build_credit_note(quantity:)

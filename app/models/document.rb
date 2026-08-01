@@ -21,6 +21,7 @@ class Document < ApplicationRecord
     dependent: :restrict_with_exception
   has_many :debit_notes, class_name: "Document", foreign_key: :debit_note_for_document_id,
     dependent: :restrict_with_exception
+  has_one :einvoice_submission, dependent: :restrict_with_exception
 
   validates :tenant_id, :entity_id, :office_id, :doc_type, :fiscal_year,
     :document_date, :posting_date, presence: true
@@ -32,6 +33,7 @@ class Document < ApplicationRecord
   def postable? = %w[draft parked].include?(state)
   def reversible?
     posted? && reversed_by_document_id.nil? && !%w[CN PC PD RC PY RF].include?(doc_type) &&
+      !einvoice_submission &&
       !settlement_activity? &&
       !credit_notes.where(state: %w[posted reversed]).exists? &&
       !debit_notes.where(state: %w[posted reversed]).exists?

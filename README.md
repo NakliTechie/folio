@@ -5,7 +5,8 @@
 **Folio** is a multi-user Rails/Postgres accounting application for India services-first businesses.
 The current product operates one primary office per company with tenant-wide role assignments. It
 supports governed masters, sales and purchase documents, receipts/payments, open-item settlement,
-GST preparation reports, period controls, and an append-only hash-chained accounting event log.
+credit-event TDS, filing JSON for GSTR-1/GSTR-3B/CMP-08, offline INV-01 e-invoice preparation,
+period controls, and append-only hash-chained financial and lifecycle event logs.
 
 Folio shares accounting semantics and a conformance corpus with
 [Bahi](https://bahi.naklitechie.com/), which remains single-office, local-first, and single-file by
@@ -157,12 +158,14 @@ DATABASE_URL=postgresql:///folio_release_baseline_YYYYMMDD \
 
 ## 13. Product status and roadmap
 
-The current checkpoint includes the governed ledger, India B2B sales/purchases and linked supplier
-credits and debits,
-cash settlement/correction plus customer/vendor credit netting and refunds, current-state ageing and party ledgers, GST preparation/day book,
-period controls, tenant-wide RBAC, replay recovery, and browser/API flows. The project planning
-workspace maintains the executable sequence and explicit deferrals: TDS, full-suite accounting,
-multi-office/multi-country enterprise depth, the complete `.khata` bridge, and production launch.
+The current checkpoint includes the governed ledger, India B2B sales/purchases and linked
+adjustments, cash settlement/correction, current-state ageing and party ledgers, GST day book and
+filing JSON, credit-event/GST-exclusive TDS, period controls, tenant-wide RBAC, replay recovery, and
+browser/API flows. INV-01 v1.1 requests and IRP acknowledgement artifacts have a persistent provider
+seam, but live IRP/GSP submission is deliberately disabled until a provider and credentials are
+chosen; an offline export is never presented as an IRN. The remaining sequence is production launch,
+contract management, full-suite accounting, multi-office/multi-country depth, and the complete
+`.khata` bridge.
 
 ## 14. Open questions
 1. Final **name** (Folio vs Abacus / Comptoir / Ledgerline).
