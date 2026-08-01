@@ -72,6 +72,11 @@ Rails.application.routes.draw do
     post :receive_order
     post :close_order
   end
+  resource :consolidation, controller: "consolidation", only: :show do
+    post :create_entity
+    post :post_intercompany
+    post :eliminate
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

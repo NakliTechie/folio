@@ -16,6 +16,10 @@ class OnboardingConcurrencyTest < ActiveSupport::TestCase
     # teardown must bypass the production last-owner trigger while removing the whole tenant;
     # ordinary application writes never enter this block.
     ActiveRecord::Base.connection.disable_referential_integrity do
+      ConsolidationEliminationRun.where(tenant_id: tenant_ids).delete_all
+      IntercompanyTransaction.where(tenant_id: tenant_ids).delete_all
+      ConsolidationGroupMember.where(tenant_id: tenant_ids).delete_all
+      ConsolidationGroup.where(tenant_id: tenant_ids).delete_all
       Invitation.where(tenant_id: tenant_ids).delete_all
       UserOfficeRole.where(tenant_id: tenant_ids).delete_all
       RolePermission.where(role_template_id: role_ids).delete_all

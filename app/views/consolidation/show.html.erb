@@ -1,0 +1,58 @@
+<% content_for :title, "Consolidation · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading"><div><p class="eyebrow">Group reporting</p><h1>Consolidation</h1><p>Post both sides of internal activity with one shared identity, then remove it from the <%= @group.presentation_currency %> group view through an auditable elimination layer.</p></div></header>
+
+  <section class="panel">
+    <div class="panel__header"><div><p class="eyebrow">Reporting policy</p><h2><%= @group.name %></h2></div><span class="status-badge status-badge--success"><%= @group.presentation_currency %></span></div>
+    <p>This group accepts only entities whose functional currency is <%= @group.presentation_currency %>. Cross-currency translation is deliberately blocked until the group policy and second jurisdiction are approved.</p>
+    <p><strong>Members:</strong> <%= @entities.map { |entity| "#{entity.code} · #{entity.legal_name}" }.join(", ") %></p>
+  </section>
+
+  <% if permitted?("consolidation.manage") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Legal-entity scope</p><h2>Add group entity</h2></div></div>
+      <%= form_with scope: :entity, url: create_entity_consolidation_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+        <%= form.label :code %><%= form.text_field :code, required: true, maxlength: 20 %>
+        <%= form.label :legal_name %><%= form.text_field :legal_name, required: true %>
+        <%= form.label :office_name %><%= form.text_field :office_name, placeholder: "Head office" %>
+        <%= form.label :effective_from %><%= form.date_field :effective_from, value: business_date, required: true %>
+        <%= form.submit "Add entity", class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <% if permitted?("consolidation.post") && @entities.size > 1 %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Matched by construction</p><h2>Post intercompany activity</h2></div></div>
+      <%= form_with scope: :intercompany_transaction, url: post_intercompany_consolidation_path(tenant_route_options), method: :post, class: "stacked-form" do |form| %>
+        <div class="form-grid">
+          <div class="field"><%= form.label :seller_entity_id, "Seller entity" %><%= form.select :seller_entity_id, @entities.map { |entity| ["#{entity.code} · #{entity.legal_name}", entity.id] }, required: true %></div>
+          <div class="field"><%= form.label :buyer_entity_id, "Buyer entity" %><%= form.select :buyer_entity_id, @entities.map { |entity| ["#{entity.code} · #{entity.legal_name}", entity.id] }, required: true %></div>
+          <div class="field"><%= form.label :posting_date %><%= form.date_field :posting_date, value: business_date, required: true %></div>
+          <div class="field"><%= form.label :amount, "Amount (#{@group.presentation_currency})" %><%= form.number_field :amount, min: 0.01, step: 0.01, required: true %></div>
+          <div class="field"><%= form.label :seller_receivable_account_code, "Seller receivable" %><%= form.select :seller_receivable_account_code, @asset_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :seller_revenue_account_code, "Seller revenue" %><%= form.select :seller_revenue_account_code, @income_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :buyer_expense_account_code, "Buyer expense" %><%= form.select :buyer_expense_account_code, @expense_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :buyer_payable_account_code, "Buyer payable" %><%= form.select :buyer_payable_account_code, @liability_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :description %><%= form.text_field :description, required: true, maxlength: 200 %></div>
+        </div>
+        <%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %>
+        <p class="form-hint">One financial event creates a balanced seller entry and a balanced buyer entry with the same intercompany identity.</p>
+        <%= form.submit "Post both sides", class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Elimination monitor</p><h2>Intercompany transactions</h2></div></div>
+    <% if @transactions.empty? %><div class="empty-state"><p>No intercompany transactions yet.</p></div><% else %><div class="table-wrap"><table><thead><tr><th>Identity</th><th>Entities</th><th>Date</th><th>Amount</th><th>Group treatment</th></tr></thead><tbody>
+      <% @transactions.each do |transaction| %><tr><td><strong><%= transaction.transaction_code %></strong><br><small><%= transaction.description %></small></td><td><%= transaction.seller_entity.code %> → <%= transaction.buyer_entity.code %></td><td><%= transaction.posting_date.to_fs(:long) %></td><td class="money"><%= money_amount(transaction.amount_minor, currency: transaction.currency) %></td><td><% if transaction.consolidation_elimination_run %><span class="status-badge status-badge--success">Eliminated</span><% elsif permitted?("consolidation.post") %><%= form_with url: eliminate_consolidation_path(tenant_route_options.merge(id: transaction.id)), method: :post, class: "inline-form" do |form| %><%= form.date_field :posting_date, value: @as_of, required: true, aria: { label: "Elimination date" } %><%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %><%= form.submit "Eliminate", class: "button button--quiet" %><% end %><% else %><span class="status-badge status-badge--pending">Open</span><% end %></td></tr><% end %>
+    </tbody></table></div><% end %>
+  </section>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Group trial balance</p><h2>Consolidated balances</h2></div><%= form_with url: consolidation_path(tenant_route_options), method: :get, class: "inline-form" do |form| %><%= form.date_field :as_of, value: @as_of, required: true, aria: { label: "Report as of" } %><%= form.submit "Refresh", class: "button button--quiet" %><% end %></div>
+    <% if @report.fetch(:rows).empty? %><div class="empty-state"><p>No group postings through <%= @as_of.to_fs(:long) %>.</p></div><% else %><div class="table-wrap"><table><thead><tr><th>Account</th><th>Legal books</th><th>Eliminations</th><th>Consolidated</th></tr></thead><tbody><% @report.fetch(:rows).each do |row| %><tr><td><strong><%= row.fetch(:account_code) %> · <%= row.fetch(:account_name) %></strong></td><td class="money"><%= money_amount(row.fetch(:base_minor), currency: @group.presentation_currency) %></td><td class="money"><%= money_amount(row.fetch(:eliminations_minor), currency: @group.presentation_currency) %></td><td class="money"><strong><%= money_amount(row.fetch(:consolidated_minor), currency: @group.presentation_currency) %></strong></td></tr><% end %></tbody></table></div><% end %>
+  </section>
+</main>

@@ -129,5 +129,19 @@ module Onboarding
         record.valid_from = Date.new(1900, 1, 1)
       end
     end
+
+    def consolidation!(tenant, entity:, actor:)
+      group = ConsolidationGroup.find_or_create_by!(tenant_id: tenant.id, code: "GROUP") do |record|
+        record.name = "#{tenant.name} Group"
+        record.presentation_currency = tenant.functional_currency
+        record.created_by = actor
+      end
+      ConsolidationGroupMember.find_or_create_by!(
+        tenant_id: tenant.id, consolidation_group: group, entity: entity
+      ) do |member|
+        member.ownership_basis_points = 10_000
+        member.effective_from = Date.new(1900, 1, 1)
+      end
+    end
   end
 end

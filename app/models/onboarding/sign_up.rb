@@ -37,6 +37,7 @@ module Onboarding
         Seeds.chart_of_accounts!(tenant, jurisdiction_profile: profile.jurisdiction_profile)
         Seeds.asset_class!(tenant)
         Seeds.controlling!(tenant, entity: spine.fetch(:entity))
+        Seeds.consolidation!(tenant, entity: spine.fetch(:entity), actor: user)
         Seeds.document_types!(tenant)
         Seeds.financial_statements!(tenant)
         Result.new(user: user, tenant: tenant)

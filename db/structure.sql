@@ -37,6 +37,19 @@ $$;
 
 
 --
+-- Name: folio_consolidation_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_consolidation_evidence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: % on row id=% rejected', TG_TABLE_NAME, TG_OP, OLD.id;
+END;
+$$;
+
+
+--
 -- Name: folio_contract_allocations_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -671,6 +684,117 @@ CREATE SEQUENCE public.bank_statement_lines_id_seq
 --
 
 ALTER SEQUENCE public.bank_statement_lines_id_seq OWNED BY public.bank_statement_lines.id;
+
+
+--
+-- Name: consolidation_elimination_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.consolidation_elimination_runs (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    consolidation_group_id bigint NOT NULL,
+    intercompany_transaction_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    ledger_event_id bigint NOT NULL,
+    idempotency_key character varying NOT NULL,
+    request_sha256 character varying NOT NULL,
+    posting_date date NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: consolidation_elimination_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.consolidation_elimination_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: consolidation_elimination_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.consolidation_elimination_runs_id_seq OWNED BY public.consolidation_elimination_runs.id;
+
+
+--
+-- Name: consolidation_group_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.consolidation_group_members (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    consolidation_group_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    ownership_basis_points integer DEFAULT 10000 NOT NULL,
+    effective_from date NOT NULL,
+    effective_to date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT consolidation_members_dates_valid CHECK (((effective_to IS NULL) OR (effective_to >= effective_from))),
+    CONSTRAINT consolidation_members_ownership_valid CHECK ((ownership_basis_points = 10000))
+);
+
+
+--
+-- Name: consolidation_group_members_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.consolidation_group_members_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: consolidation_group_members_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.consolidation_group_members_id_seq OWNED BY public.consolidation_group_members.id;
+
+
+--
+-- Name: consolidation_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.consolidation_groups (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    presentation_currency character varying(3) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: consolidation_groups_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.consolidation_groups_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: consolidation_groups_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.consolidation_groups_id_seq OWNED BY public.consolidation_groups.id;
 
 
 --
@@ -2237,6 +2361,51 @@ ALTER SEQUENCE public.goods_receipts_id_seq OWNED BY public.goods_receipts.id;
 
 
 --
+-- Name: intercompany_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.intercompany_transactions (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    consolidation_group_id bigint NOT NULL,
+    seller_entity_id bigint NOT NULL,
+    buyer_entity_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    ledger_event_id bigint NOT NULL,
+    transaction_code character varying NOT NULL,
+    idempotency_key character varying NOT NULL,
+    request_sha256 character varying NOT NULL,
+    posting_date date NOT NULL,
+    currency character varying(3) NOT NULL,
+    amount_minor bigint NOT NULL,
+    description character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT intercompany_transactions_amount_positive CHECK ((amount_minor > 0)),
+    CONSTRAINT intercompany_transactions_distinct_entities CHECK ((seller_entity_id <> buyer_entity_id))
+);
+
+
+--
+-- Name: intercompany_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.intercompany_transactions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: intercompany_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.intercompany_transactions_id_seq OWNED BY public.intercompany_transactions.id;
+
+
+--
 -- Name: inventory_movements; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3679,6 +3848,27 @@ ALTER TABLE ONLY public.bank_statement_lines ALTER COLUMN id SET DEFAULT nextval
 
 
 --
+-- Name: consolidation_elimination_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_elimination_runs ALTER COLUMN id SET DEFAULT nextval('public.consolidation_elimination_runs_id_seq'::regclass);
+
+
+--
+-- Name: consolidation_group_members id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_group_members ALTER COLUMN id SET DEFAULT nextval('public.consolidation_group_members_id_seq'::regclass);
+
+
+--
+-- Name: consolidation_groups id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_groups ALTER COLUMN id SET DEFAULT nextval('public.consolidation_groups_id_seq'::regclass);
+
+
+--
 -- Name: contract_allocation_lines id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -3914,6 +4104,13 @@ ALTER TABLE ONLY public.goods_receipt_lines ALTER COLUMN id SET DEFAULT nextval(
 --
 
 ALTER TABLE ONLY public.goods_receipts ALTER COLUMN id SET DEFAULT nextval('public.goods_receipts_id_seq'::regclass);
+
+
+--
+-- Name: intercompany_transactions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intercompany_transactions ALTER COLUMN id SET DEFAULT nextval('public.intercompany_transactions_id_seq'::regclass);
 
 
 --
@@ -4251,6 +4448,30 @@ ALTER TABLE ONLY public.bank_statement_lines
 
 
 --
+-- Name: consolidation_elimination_runs consolidation_elimination_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_elimination_runs
+    ADD CONSTRAINT consolidation_elimination_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: consolidation_group_members consolidation_group_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_group_members
+    ADD CONSTRAINT consolidation_group_members_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: consolidation_groups consolidation_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_groups
+    ADD CONSTRAINT consolidation_groups_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: contract_allocation_lines contract_allocation_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4520,6 +4741,14 @@ ALTER TABLE ONLY public.goods_receipt_lines
 
 ALTER TABLE ONLY public.goods_receipts
     ADD CONSTRAINT goods_receipts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: intercompany_transactions intercompany_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intercompany_transactions
+    ADD CONSTRAINT intercompany_transactions_pkey PRIMARY KEY (id);
 
 
 --
@@ -4885,6 +5114,13 @@ CREATE INDEX idx_office_tax_registrations_tenant_registration ON public.office_t
 --
 
 CREATE UNIQUE INDEX idx_office_tax_registrations_unique ON public.office_tax_registrations USING btree (office_id, tax_registration_id);
+
+
+--
+-- Name: idx_on_intercompany_transaction_id_c60befa88e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_intercompany_transaction_id_c60befa88e ON public.consolidation_elimination_runs USING btree (intercompany_transaction_id);
 
 
 --
@@ -5291,6 +5527,76 @@ CREATE UNIQUE INDEX index_bank_statement_lines_on_line_no ON public.bank_stateme
 --
 
 CREATE INDEX index_bank_statement_lines_on_matched_by_id ON public.bank_statement_lines USING btree (matched_by_id);
+
+
+--
+-- Name: index_consolidation_elimination_runs_on_consolidation_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_consolidation_elimination_runs_on_consolidation_group_id ON public.consolidation_elimination_runs USING btree (consolidation_group_id);
+
+
+--
+-- Name: index_consolidation_elimination_runs_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_consolidation_elimination_runs_on_created_by_id ON public.consolidation_elimination_runs USING btree (created_by_id);
+
+
+--
+-- Name: index_consolidation_elimination_runs_on_ledger_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_consolidation_elimination_runs_on_ledger_event_id ON public.consolidation_elimination_runs USING btree (ledger_event_id);
+
+
+--
+-- Name: index_consolidation_eliminations_on_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_consolidation_eliminations_on_idempotency ON public.consolidation_elimination_runs USING btree (tenant_id, idempotency_key);
+
+
+--
+-- Name: index_consolidation_eliminations_on_transaction; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_consolidation_eliminations_on_transaction ON public.consolidation_elimination_runs USING btree (intercompany_transaction_id);
+
+
+--
+-- Name: index_consolidation_group_members_on_consolidation_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_consolidation_group_members_on_consolidation_group_id ON public.consolidation_group_members USING btree (consolidation_group_id);
+
+
+--
+-- Name: index_consolidation_group_members_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_consolidation_group_members_on_entity_id ON public.consolidation_group_members USING btree (entity_id);
+
+
+--
+-- Name: index_consolidation_groups_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_consolidation_groups_on_created_by_id ON public.consolidation_groups USING btree (created_by_id);
+
+
+--
+-- Name: index_consolidation_groups_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_consolidation_groups_on_tenant_id_and_code ON public.consolidation_groups USING btree (tenant_id, code);
+
+
+--
+-- Name: index_consolidation_members_on_group_entity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_consolidation_members_on_group_entity ON public.consolidation_group_members USING btree (consolidation_group_id, entity_id);
 
 
 --
@@ -6183,6 +6489,55 @@ CREATE UNIQUE INDEX index_goods_receipts_on_tenant_id_and_receipt_number ON publ
 
 
 --
+-- Name: index_intercompany_transactions_on_buyer_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intercompany_transactions_on_buyer_entity_id ON public.intercompany_transactions USING btree (buyer_entity_id);
+
+
+--
+-- Name: index_intercompany_transactions_on_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_intercompany_transactions_on_code ON public.intercompany_transactions USING btree (tenant_id, transaction_code);
+
+
+--
+-- Name: index_intercompany_transactions_on_consolidation_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intercompany_transactions_on_consolidation_group_id ON public.intercompany_transactions USING btree (consolidation_group_id);
+
+
+--
+-- Name: index_intercompany_transactions_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intercompany_transactions_on_created_by_id ON public.intercompany_transactions USING btree (created_by_id);
+
+
+--
+-- Name: index_intercompany_transactions_on_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_intercompany_transactions_on_idempotency ON public.intercompany_transactions USING btree (tenant_id, idempotency_key);
+
+
+--
+-- Name: index_intercompany_transactions_on_ledger_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intercompany_transactions_on_ledger_event_id ON public.intercompany_transactions USING btree (ledger_event_id);
+
+
+--
+-- Name: index_intercompany_transactions_on_seller_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_intercompany_transactions_on_seller_entity_id ON public.intercompany_transactions USING btree (seller_entity_id);
+
+
+--
 -- Name: index_inventory_movements_on_item_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6855,6 +7210,13 @@ CREATE TRIGGER asset_transactions_immutable BEFORE DELETE OR UPDATE ON public.as
 
 
 --
+-- Name: consolidation_elimination_runs consolidation_elimination_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER consolidation_elimination_runs_immutable BEFORE DELETE OR UPDATE ON public.consolidation_elimination_runs FOR EACH ROW EXECUTE FUNCTION public.folio_consolidation_evidence_immutable();
+
+
+--
 -- Name: contract_allocation_lines contract_allocation_lines_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -6901,6 +7263,13 @@ CREATE TRIGGER goods_receipt_lines_immutable BEFORE DELETE OR UPDATE ON public.g
 --
 
 CREATE TRIGGER goods_receipts_immutable BEFORE DELETE OR UPDATE ON public.goods_receipts FOR EACH ROW EXECUTE FUNCTION public.folio_procurement_evidence_immutable();
+
+
+--
+-- Name: intercompany_transactions intercompany_transactions_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER intercompany_transactions_immutable BEFORE DELETE OR UPDATE ON public.intercompany_transactions FOR EACH ROW EXECUTE FUNCTION public.folio_consolidation_evidence_immutable();
 
 
 --
@@ -6978,6 +7347,14 @@ ALTER TABLE ONLY public.bank_statement_imports
 
 
 --
+-- Name: consolidation_elimination_runs fk_rails_0342a573f2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_elimination_runs
+    ADD CONSTRAINT fk_rails_0342a573f2 FOREIGN KEY (consolidation_group_id) REFERENCES public.consolidation_groups(id);
+
+
+--
 -- Name: contracts fk_rails_0475753257; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6991,6 +7368,14 @@ ALTER TABLE ONLY public.contracts
 
 ALTER TABLE ONLY public.allocation_runs
     ADD CONSTRAINT fk_rails_0859381c9d FOREIGN KEY (allocation_cycle_id) REFERENCES public.allocation_cycles(id);
+
+
+--
+-- Name: consolidation_elimination_runs fk_rails_088ec40727; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_elimination_runs
+    ADD CONSTRAINT fk_rails_088ec40727 FOREIGN KEY (intercompany_transaction_id) REFERENCES public.intercompany_transactions(id);
 
 
 --
@@ -7031,6 +7416,14 @@ ALTER TABLE ONLY public.procurement_matches
 
 ALTER TABLE ONLY public.user_office_roles
     ADD CONSTRAINT fk_rails_1018c65b31 FOREIGN KEY (role_template_id) REFERENCES public.role_templates(id);
+
+
+--
+-- Name: intercompany_transactions fk_rails_135e87a341; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intercompany_transactions
+    ADD CONSTRAINT fk_rails_135e87a341 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
 
 
 --
@@ -7266,6 +7659,14 @@ ALTER TABLE ONLY public.allocation_receivers
 
 
 --
+-- Name: consolidation_elimination_runs fk_rails_42e60aa5cf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_elimination_runs
+    ADD CONSTRAINT fk_rails_42e60aa5cf FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: bank_statement_lines fk_rails_43220de1f5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7279,6 +7680,14 @@ ALTER TABLE ONLY public.bank_statement_lines
 
 ALTER TABLE ONLY public.exchange_revaluation_runs
     ADD CONSTRAINT fk_rails_43ce24d3c7 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
+
+
+--
+-- Name: intercompany_transactions fk_rails_44ae468242; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intercompany_transactions
+    ADD CONSTRAINT fk_rails_44ae468242 FOREIGN KEY (consolidation_group_id) REFERENCES public.consolidation_groups(id);
 
 
 --
@@ -7375,6 +7784,14 @@ ALTER TABLE ONLY public.cost_centers
 
 ALTER TABLE ONLY public.asset_transactions
     ADD CONSTRAINT fk_rails_6dc5e10bfe FOREIGN KEY (fixed_asset_id) REFERENCES public.fixed_assets(id);
+
+
+--
+-- Name: consolidation_group_members fk_rails_6f6d4ea122; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_group_members
+    ADD CONSTRAINT fk_rails_6f6d4ea122 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -7514,6 +7931,14 @@ ALTER TABLE ONLY public.user_office_roles
 
 
 --
+-- Name: consolidation_groups fk_rails_87ef6a4fbf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_groups
+    ADD CONSTRAINT fk_rails_87ef6a4fbf FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: allocation_cycles fk_rails_897630b18f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7567,6 +7992,22 @@ ALTER TABLE ONLY public.stock_balances
 
 ALTER TABLE ONLY public.contract_allocation_lines
     ADD CONSTRAINT fk_rails_901065d56c FOREIGN KEY (contract_performance_obligation_id) REFERENCES public.contract_performance_obligations(id);
+
+
+--
+-- Name: intercompany_transactions fk_rails_9137d7f075; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intercompany_transactions
+    ADD CONSTRAINT fk_rails_9137d7f075 FOREIGN KEY (seller_entity_id) REFERENCES public.entities(id);
+
+
+--
+-- Name: intercompany_transactions fk_rails_93bfddda2e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.intercompany_transactions
+    ADD CONSTRAINT fk_rails_93bfddda2e FOREIGN KEY (buyer_entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -7922,6 +8363,14 @@ ALTER TABLE ONLY public.contract_schedule_lines
 
 
 --
+-- Name: consolidation_group_members fk_rails_fc2159b0c9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consolidation_group_members
+    ADD CONSTRAINT fk_rails_fc2159b0c9 FOREIGN KEY (consolidation_group_id) REFERENCES public.consolidation_groups(id);
+
+
+--
 -- Name: fixed_assets fk_rails_fc55eb6536; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7952,6 +8401,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801192000'),
 ('20260801191000'),
 ('20260801190000'),
 ('20260801183000'),
