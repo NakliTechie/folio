@@ -11,16 +11,19 @@ module Rbac
                                  bills.create payments.create gst.place_of_supply.override contracts.read
                                  contracts.manage contracts.approve contracts.post
                                  currency.read currency.manage currency.post
-                                 banking.read banking.manage banking.reconcile] },
+                                 banking.read banking.manage banking.reconcile
+                                 inventory.read inventory.manage inventory.post] },
       "operator"   => { name: "Operator",
                         caps: %w[invoices.create bills.create payments.create documents.simulate
                                  accounts.read masters.read reports.read gst.place_of_supply.override
                                  contracts.read] },
       "ca_auditor" => { name: "CA/Auditor",
                         caps: %w[documents.post documents.reverse documents.simulate accounts.read
-                                 masters.read reports.read period.lock contracts.read currency.read banking.read] },
+                                 masters.read reports.read period.lock contracts.read currency.read banking.read
+                                 inventory.read] },
       "viewer"     => { name: "Viewer",
-                        caps: %w[accounts.read masters.read reports.read contracts.read currency.read banking.read] }
+                        caps: %w[accounts.read masters.read reports.read contracts.read currency.read banking.read
+                                 inventory.read] }
     }.freeze
 
     module_function

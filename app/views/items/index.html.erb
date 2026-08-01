@@ -17,13 +17,14 @@
       <div class="table-wrap">
         <table>
           <caption class="sr-only">Products and services for <%= Current.tenant.name %></caption>
-          <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>HSN/SAC</th><th>GST</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Inventory</th><th>HSN/SAC</th><th>GST</th><th>Status</th><th></th></tr></thead>
           <tbody>
             <% @items.each do |item| %>
               <tr>
                 <td><span class="account-code"><%= item.code %></span></td>
                 <td><strong><%= item.name %></strong></td>
                 <td><%= item.item_type.humanize %></td>
+                <td><%= item.good? ? "#{item.inventory_class.humanize} · rev #{item.revision}" : "—" %></td>
                 <td><%= item.hsn_sac_code %></td>
                 <td><%= number_with_precision(item.tax_rate_basis_points / 100.0, precision: 2, strip_insignificant_zeros: true) %>%</td>
                 <td><span class="<%= item.active? ? "status-badge status-badge--success" : "status-badge" %>">

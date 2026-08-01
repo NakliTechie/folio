@@ -5,6 +5,7 @@ module Items
     AUDITED_FIELDS = %w[
       code name item_type description hsn_sac_code unit_of_measure tax_rate_basis_points
       cess_rate_basis_points income_account_code expense_account_code active
+      inventory_class revision valuation_method inventory_account_code
     ].freeze
 
     module_function

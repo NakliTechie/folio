@@ -1,0 +1,60 @@
+<% content_for :title, "Inventory · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div><p class="eyebrow">Perpetual stock ledger</p><h1>Inventory</h1><p>Moving-average valuation serialized with the financial ledger. Every movement freezes item revision, warehouse, quantity, and value in the signed event.</p></div>
+  </header>
+
+  <% if permitted?("inventory.post") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Signed movement</p><h2>Post inventory movement</h2></div></div>
+      <%= form_with scope: :inventory_movement, url: inventory_path(tenant_route_options), method: :post, class: "stacked-form" do |form| %>
+        <%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %>
+        <div class="form-grid">
+          <div class="field"><%= form.label :transaction_type, "Movement" %><%= form.select :transaction_type,
+            [["Receipt", "receipt"], ["Issue", "issue"], ["Warehouse transfer", "transfer"], ["Cycle-count increase", "adjustment_in"], ["Cycle-count decrease", "adjustment_out"]], required: true %></div>
+          <div class="field"><%= form.label :posting_date %><%= form.date_field :posting_date, value: business_date, required: true %></div>
+          <div class="field"><%= form.label :item_id, "Stock item" %><%= form.select :item_id, @items.map { |item| ["#{item.code} · #{item.name} · rev #{item.revision}", item.id] }, required: true %></div>
+          <div class="field"><%= form.label :quantity %><%= form.number_field :quantity, min: "0.000001", step: "0.000001", required: true %></div>
+          <div class="field"><%= form.label :unit_cost, "Unit cost (receipts / increases only)" %><%= form.number_field :unit_cost, min: "0.01", step: "0.01" %></div>
+          <div class="field"><%= form.label :source_warehouse_id, "Source (issues / transfers)" %><%= form.select :source_warehouse_id, [["None", ""]] + @warehouses.map { |warehouse| ["#{warehouse.code} · #{warehouse.name}", warehouse.id] } %></div>
+          <div class="field"><%= form.label :destination_warehouse_id, "Destination (receipts / transfers)" %><%= form.select :destination_warehouse_id, [["None", ""]] + @warehouses.map { |warehouse| ["#{warehouse.code} · #{warehouse.name}", warehouse.id] } %></div>
+          <div class="field"><%= form.label :offset_account_code, "Offset account (not transfers)" %><%= form.select :offset_account_code, [["None for transfer", ""]] + @offset_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] } %></div>
+          <div class="field"><%= form.label :external_reference %><%= form.text_field :external_reference, maxlength: 120, placeholder: "GRN / issue / count reference" %></div>
+          <div class="field"><%= form.label :reason %><%= form.text_field :reason, required: true, maxlength: 255 %></div>
+        </div>
+        <%= form.submit "Post stock and ledger movement", class: "button button--primary", disabled: @items.empty? || @warehouses.empty? %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <% if permitted?("inventory.manage") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Location master</p><h2>Add warehouse</h2></div></div>
+      <%= form_with scope: :warehouse, url: create_warehouse_inventory_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+        <%= form.label :code %><%= form.text_field :code, required: true, maxlength: 24 %>
+        <%= form.label :name %><%= form.text_field :name, required: true, maxlength: 120 %>
+        <%= form.label :warehouse_type, "Type" %><%= form.select :warehouse_type, Warehouse::TYPES.map { |type| [type.humanize, type] }, required: true %>
+        <%= form.submit "Add warehouse", class: "button button--quiet" %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Lockable projection</p><h2>On hand</h2></div></div>
+    <% if @balances.empty? %><div class="empty-state"><p>No stock on hand.</p></div><% else %>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Revision</th><th>Warehouse</th><th>Quantity</th><th>Value</th><th>Average unit cost</th></tr></thead><tbody>
+        <% @balances.each do |balance| %><tr><td><strong><%= balance.item.code %> · <%= balance.item.name %></strong></td><td><%= balance.item.revision %></td><td><%= balance.warehouse.code %> · <%= balance.warehouse.name %></td><td><%= balance.quantity.to_s("F") %> <%= balance.item.unit_of_measure %></td><td class="money"><%= money_amount(balance.inventory_value_minor) %></td><td class="money"><%= money_amount(balance.average_unit_cost_minor) %></td></tr><% end %>
+      </tbody></table></div>
+    <% end %>
+  </section>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Immutable evidence</p><h2>Recent movements</h2></div></div>
+    <% if @transactions.empty? %><div class="empty-state"><p>No inventory movements posted.</p></div><% else %>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Item</th><th>Route</th><th>Quantity</th><th>Value</th><th>Reference</th></tr></thead><tbody>
+        <% @transactions.each do |transaction| %><tr><td><%= transaction.posting_date.to_fs(:long) %></td><td><%= transaction.transaction_type.humanize %></td><td><%= transaction.item.code %></td><td><%= transaction.source_warehouse&.code || "External" %> → <%= transaction.destination_warehouse&.code || "External" %></td><td><%= transaction.quantity.to_s("F") %></td><td class="money"><%= money_amount(transaction.total_value_minor) %></td><td><%= transaction.external_reference.presence || transaction.reason %></td></tr><% end %>
+      </tbody></table></div>
+    <% end %>
+  </section>
+</main>

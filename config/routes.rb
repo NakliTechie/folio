@@ -45,6 +45,9 @@ Rails.application.routes.draw do
       post :finalize
     end
   end
+  resource :inventory, only: %i[show create] do
+    post :create_warehouse
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

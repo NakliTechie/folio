@@ -12,7 +12,8 @@ module Onboarding
       [ "3000", "Capital", "equity" ],
       [ "4000", "Sales", "income" ], [ "4100", "Foreign Exchange Gains", "income" ],
       [ "5000", "Purchases", "expense" ], [ "5100", "Expenses", "expense" ],
-      [ "5200", "Foreign Exchange Losses", "expense" ]
+      [ "5050", "Inventory Adjustments", "expense" ], [ "5200", "Foreign Exchange Losses", "expense" ],
+      [ "1300", "Inventory", "asset" ]
     ].freeze
 
     module_function
@@ -80,8 +81,16 @@ module Onboarding
         record.name = "Primary Ledger"
         record.kind = "standard"
       end
-
       { entity: entity, office: office, ledger: ledger }
+    end
+
+    def warehouse!(tenant, entity:, office:)
+      Warehouse.find_or_create_by!(tenant_id: tenant.id, code: "MAIN") do |record|
+        record.entity = entity
+        record.office = office
+        record.name = "Main warehouse"
+        record.warehouse_type = "general"
+      end
     end
   end
 end

@@ -26,6 +26,7 @@ class OnboardingConcurrencyTest < ActiveSupport::TestCase
       FinancialStatementVersion.where(tenant_id: tenant_ids).delete_all
       Account.where(tenant_id: tenant_ids).delete_all
       DocumentType.where(tenant_id: tenant_ids).delete_all
+      Warehouse.where(tenant_id: tenant_ids).delete_all
       Office.where(tenant_id: tenant_ids).delete_all
       Entity.where(tenant_id: tenant_ids).delete_all
       Ledger.where(tenant_id: tenant_ids).delete_all

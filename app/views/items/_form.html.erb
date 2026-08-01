@@ -49,6 +49,20 @@
   </fieldset>
 
   <fieldset class="profile-fieldset">
+    <legend>Inventory profile</legend>
+    <p class="form-hint">Required for goods and left blank for services. Moving average freezes each issue’s value into the ledger.</p>
+    <div class="form-grid form-grid--two">
+      <div class="form-group"><%= form.label :inventory_class %><%= form.select :inventory_class,
+        [["Not stocked (service)", ""]] + Item::INVENTORY_CLASSES.map { |value| [value.humanize, value] } %></div>
+      <div class="form-group"><%= form.label :revision %><%= form.text_field :revision, maxlength: 32, placeholder: "A" %></div>
+      <div class="form-group"><%= form.label :valuation_method %><%= form.select :valuation_method,
+        [["Not stocked (service)", ""], ["Moving average", "moving_average"]] %></div>
+      <div class="form-group"><%= form.label :inventory_account_code, "Inventory asset account" %><%= form.select :inventory_account_code,
+        [["Not stocked (service)", ""]] + @asset_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] } %></div>
+    </div>
+  </fieldset>
+
+  <fieldset class="profile-fieldset">
     <legend>Account determination</legend>
     <div class="form-grid form-grid--two">
       <div class="form-group">

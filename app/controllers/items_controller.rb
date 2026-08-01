@@ -13,7 +13,8 @@ class ItemsController < BrowserController
   def new
     @item = item_scope.new(
       item_type: "service", unit_of_measure: "OTH", tax_rate_basis_points: 1800,
-      cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000", active: true
+      cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000",
+      revision: nil, valuation_method: nil, inventory_account_code: nil, active: true
     )
     load_accounts
   end
@@ -65,6 +66,7 @@ class ItemsController < BrowserController
   def load_accounts
     @income_accounts = Account.active.where(tenant_id: Current.tenant.id, account_type: "income").in_code_order
     @expense_accounts = Account.active.where(tenant_id: Current.tenant.id, account_type: "expense").in_code_order
+    @asset_accounts = Account.active.where(tenant_id: Current.tenant.id, account_type: "asset").in_code_order
   end
 
   def change_active!(active)
@@ -95,7 +97,8 @@ class ItemsController < BrowserController
   def item_params
     params.require(:item).permit(
       :code, :name, :item_type, :description, :hsn_sac_code, :unit_of_measure,
-      :tax_rate, :cess_rate, :income_account_code, :expense_account_code
+      :tax_rate, :cess_rate, :income_account_code, :expense_account_code,
+      :inventory_class, :revision, :valuation_method, :inventory_account_code
     )
   end
 end

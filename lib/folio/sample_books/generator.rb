@@ -100,7 +100,10 @@ module Folio
               hsn_sac_code: svc.hsn_sac_code, unit_of_measure: "OTH",
               tax_rate_basis_points: svc.rate_basis_points, cess_rate_basis_points: 0,
               income_account_code: "4000", expense_account_code: "5000"
-            },
+            }.merge(svc.item_type == "good" ? {
+              inventory_class: "trading", revision: "A",
+              valuation_method: "moving_average", inventory_account_code: "1300"
+            } : {}),
             actor: @user
           )
         end

@@ -53,6 +53,19 @@ $$;
 
 
 --
+-- Name: folio_inventory_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_inventory_evidence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: % on row id=% rejected', TG_TABLE_NAME, TG_OP, OLD.id;
+END;
+$$;
+
+
+--
 -- Name: folio_ledger_events_append_only(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1562,6 +1575,102 @@ ALTER SEQUENCE public.financial_statement_versions_id_seq OWNED BY public.financ
 
 
 --
+-- Name: inventory_movements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_movements (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    inventory_transaction_id bigint NOT NULL,
+    item_id bigint NOT NULL,
+    warehouse_id bigint NOT NULL,
+    ledger_event_id bigint NOT NULL,
+    entry_line_no integer NOT NULL,
+    quantity numeric(20,6) NOT NULL,
+    inventory_value_minor bigint NOT NULL,
+    balance_quantity_after numeric(20,6) NOT NULL,
+    balance_value_after_minor bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT inventory_movements_balance_quantity_nonnegative CHECK ((balance_quantity_after >= (0)::numeric)),
+    CONSTRAINT inventory_movements_balance_value_nonnegative CHECK ((balance_value_after_minor >= 0)),
+    CONSTRAINT inventory_movements_quantity_nonzero CHECK ((quantity <> (0)::numeric)),
+    CONSTRAINT inventory_movements_value_nonzero CHECK ((inventory_value_minor <> 0))
+);
+
+
+--
+-- Name: inventory_movements_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.inventory_movements_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: inventory_movements_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.inventory_movements_id_seq OWNED BY public.inventory_movements.id;
+
+
+--
+-- Name: inventory_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_transactions (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    item_id bigint NOT NULL,
+    source_warehouse_id bigint,
+    destination_warehouse_id bigint,
+    ledger_event_id bigint NOT NULL,
+    idempotency_key character varying NOT NULL,
+    request_sha256 character varying NOT NULL,
+    transaction_type character varying NOT NULL,
+    posting_date date NOT NULL,
+    quantity numeric(20,6) NOT NULL,
+    unit_cost_minor bigint,
+    total_value_minor bigint NOT NULL,
+    offset_account_code character varying,
+    external_reference character varying,
+    reason character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT inventory_transactions_quantity_positive CHECK ((quantity > (0)::numeric)),
+    CONSTRAINT inventory_transactions_type_valid CHECK (((transaction_type)::text = ANY ((ARRAY['receipt'::character varying, 'issue'::character varying, 'transfer'::character varying, 'adjustment_in'::character varying, 'adjustment_out'::character varying])::text[]))),
+    CONSTRAINT inventory_transactions_value_positive CHECK ((total_value_minor > 0)),
+    CONSTRAINT inventory_transactions_warehouse_coherent CHECK (((((transaction_type)::text = ANY ((ARRAY['issue'::character varying, 'adjustment_out'::character varying])::text[])) AND (source_warehouse_id IS NOT NULL) AND (destination_warehouse_id IS NULL) AND (offset_account_code IS NOT NULL)) OR (((transaction_type)::text = ANY ((ARRAY['receipt'::character varying, 'adjustment_in'::character varying])::text[])) AND (source_warehouse_id IS NULL) AND (destination_warehouse_id IS NOT NULL) AND (offset_account_code IS NOT NULL) AND (unit_cost_minor IS NOT NULL)) OR (((transaction_type)::text = 'transfer'::text) AND (source_warehouse_id IS NOT NULL) AND (destination_warehouse_id IS NOT NULL) AND (source_warehouse_id <> destination_warehouse_id) AND (offset_account_code IS NULL))))
+);
+
+
+--
+-- Name: inventory_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.inventory_transactions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: inventory_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.inventory_transactions_id_seq OWNED BY public.inventory_transactions.id;
+
+
+--
 -- Name: invitations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1618,9 +1727,14 @@ CREATE TABLE public.items (
     active boolean DEFAULT true NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    inventory_class character varying,
+    revision character varying,
+    valuation_method character varying,
+    inventory_account_code character varying,
     CONSTRAINT chk_items_cess_rate CHECK (((cess_rate_basis_points >= 0) AND (cess_rate_basis_points <= 10000))),
     CONSTRAINT chk_items_tax_rate CHECK (((tax_rate_basis_points >= 0) AND (tax_rate_basis_points <= 4000))),
-    CONSTRAINT chk_items_type CHECK (((item_type)::text = ANY ((ARRAY['service'::character varying, 'good'::character varying])::text[])))
+    CONSTRAINT chk_items_type CHECK (((item_type)::text = ANY ((ARRAY['service'::character varying, 'good'::character varying])::text[]))),
+    CONSTRAINT items_inventory_profile_coherent CHECK (((((item_type)::text = 'service'::text) AND (inventory_class IS NULL) AND (revision IS NULL) AND (valuation_method IS NULL) AND (inventory_account_code IS NULL)) OR (((item_type)::text = 'good'::text) AND ((inventory_class)::text = ANY ((ARRAY['raw_material'::character varying, 'wip'::character varying, 'finished_good'::character varying, 'trading'::character varying])::text[])) AND (revision IS NOT NULL) AND ((valuation_method)::text = 'moving_average'::text) AND (inventory_account_code IS NOT NULL))))
 );
 
 
@@ -2250,6 +2364,45 @@ ALTER SEQUENCE public.settlement_reallocations_id_seq OWNED BY public.settlement
 
 
 --
+-- Name: stock_balances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stock_balances (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    item_id bigint NOT NULL,
+    warehouse_id bigint NOT NULL,
+    quantity numeric(20,6) DEFAULT 0.0 NOT NULL,
+    inventory_value_minor bigint DEFAULT 0 NOT NULL,
+    lock_version bigint DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT stock_balances_nonnegative_quantity CHECK ((quantity >= (0)::numeric)),
+    CONSTRAINT stock_balances_nonnegative_value CHECK ((inventory_value_minor >= 0)),
+    CONSTRAINT stock_balances_zero_position_coherent CHECK ((((quantity = (0)::numeric) AND (inventory_value_minor = 0)) OR (quantity > (0)::numeric)))
+);
+
+
+--
+-- Name: stock_balances_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.stock_balances_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: stock_balances_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.stock_balances_id_seq OWNED BY public.stock_balances.id;
+
+
+--
 -- Name: tax_registrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2490,6 +2643,44 @@ ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
 
 
 --
+-- Name: warehouses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.warehouses (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    warehouse_type character varying DEFAULT 'general'::character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT warehouses_type_valid CHECK (((warehouse_type)::text = ANY ((ARRAY['general'::character varying, 'raw_material'::character varying, 'wip'::character varying, 'finished_goods'::character varying])::text[])))
+);
+
+
+--
+-- Name: warehouses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.warehouses_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: warehouses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.warehouses_id_seq OWNED BY public.warehouses.id;
+
+
+--
 -- Name: accounts id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2700,6 +2891,20 @@ ALTER TABLE ONLY public.financial_statement_versions ALTER COLUMN id SET DEFAULT
 
 
 --
+-- Name: inventory_movements id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements ALTER COLUMN id SET DEFAULT nextval('public.inventory_movements_id_seq'::regclass);
+
+
+--
+-- Name: inventory_transactions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions ALTER COLUMN id SET DEFAULT nextval('public.inventory_transactions_id_seq'::regclass);
+
+
+--
 -- Name: invitations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2826,6 +3031,13 @@ ALTER TABLE ONLY public.settlement_reallocations ALTER COLUMN id SET DEFAULT nex
 
 
 --
+-- Name: stock_balances id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_balances ALTER COLUMN id SET DEFAULT nextval('public.stock_balances_id_seq'::regclass);
+
+
+--
 -- Name: tax_registrations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2865,6 +3077,13 @@ ALTER TABLE ONLY public.user_signing_keys ALTER COLUMN id SET DEFAULT nextval('p
 --
 
 ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
+
+
+--
+-- Name: warehouses id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.warehouses ALTER COLUMN id SET DEFAULT nextval('public.warehouses_id_seq'::regclass);
 
 
 --
@@ -3116,6 +3335,22 @@ ALTER TABLE ONLY public.financial_statement_versions
 
 
 --
+-- Name: inventory_movements inventory_movements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT inventory_movements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: inventory_transactions inventory_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT inventory_transactions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: invitations invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3276,6 +3511,14 @@ ALTER TABLE ONLY public.settlement_reallocations
 
 
 --
+-- Name: stock_balances stock_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_balances
+    ADD CONSTRAINT stock_balances_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: tax_registrations tax_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3321,6 +3564,14 @@ ALTER TABLE ONLY public.user_signing_keys
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: warehouses warehouses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.warehouses
+    ADD CONSTRAINT warehouses_pkey PRIMARY KEY (id);
 
 
 --
@@ -4290,6 +4541,97 @@ CREATE INDEX index_financial_statement_assignments_on_account_id ON public.finan
 
 
 --
+-- Name: index_inventory_movements_on_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_item_id ON public.inventory_movements USING btree (item_id);
+
+
+--
+-- Name: index_inventory_movements_on_ledger_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_inventory_movements_on_ledger_identity ON public.inventory_movements USING btree (tenant_id, ledger_event_id, entry_line_no);
+
+
+--
+-- Name: index_inventory_movements_on_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_position ON public.inventory_movements USING btree (tenant_id, item_id, warehouse_id, id);
+
+
+--
+-- Name: index_inventory_movements_on_transaction; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_transaction ON public.inventory_movements USING btree (inventory_transaction_id);
+
+
+--
+-- Name: index_inventory_movements_on_warehouse_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_warehouse_id ON public.inventory_movements USING btree (warehouse_id);
+
+
+--
+-- Name: index_inventory_transactions_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_transactions_on_created_by_id ON public.inventory_transactions USING btree (created_by_id);
+
+
+--
+-- Name: index_inventory_transactions_on_destination_warehouse_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_transactions_on_destination_warehouse_id ON public.inventory_transactions USING btree (destination_warehouse_id);
+
+
+--
+-- Name: index_inventory_transactions_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_transactions_on_entity_id ON public.inventory_transactions USING btree (entity_id);
+
+
+--
+-- Name: index_inventory_transactions_on_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_inventory_transactions_on_idempotency ON public.inventory_transactions USING btree (tenant_id, idempotency_key);
+
+
+--
+-- Name: index_inventory_transactions_on_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_transactions_on_item_id ON public.inventory_transactions USING btree (item_id);
+
+
+--
+-- Name: index_inventory_transactions_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_transactions_on_office_id ON public.inventory_transactions USING btree (office_id);
+
+
+--
+-- Name: index_inventory_transactions_on_posting_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_transactions_on_posting_date ON public.inventory_transactions USING btree (tenant_id, posting_date);
+
+
+--
+-- Name: index_inventory_transactions_on_source_warehouse_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_transactions_on_source_warehouse_id ON public.inventory_transactions USING btree (source_warehouse_id);
+
+
+--
 -- Name: index_invitations_on_one_pending_email; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4500,6 +4842,27 @@ CREATE UNIQUE INDEX index_settlement_reallocations_on_document_allocation_id ON 
 
 
 --
+-- Name: index_stock_balances_on_item_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_stock_balances_on_item_id ON public.stock_balances USING btree (item_id);
+
+
+--
+-- Name: index_stock_balances_on_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_stock_balances_on_position ON public.stock_balances USING btree (tenant_id, item_id, warehouse_id);
+
+
+--
+-- Name: index_stock_balances_on_warehouse_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_stock_balances_on_warehouse_id ON public.stock_balances USING btree (warehouse_id);
+
+
+--
 -- Name: index_tax_registrations_on_entity_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4626,6 +4989,27 @@ CREATE UNIQUE INDEX index_users_on_email_address ON public.users USING btree (em
 
 
 --
+-- Name: index_warehouses_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_warehouses_on_entity_id ON public.warehouses USING btree (entity_id);
+
+
+--
+-- Name: index_warehouses_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_warehouses_on_office_id ON public.warehouses USING btree (office_id);
+
+
+--
+-- Name: index_warehouses_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_warehouses_on_tenant_id_and_code ON public.warehouses USING btree (tenant_id, code);
+
+
+--
 -- Name: contract_allocation_lines contract_allocation_lines_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4658,6 +5042,20 @@ CREATE TRIGGER domain_events_no_truncate BEFORE TRUNCATE ON public.domain_events
 --
 
 CREATE TRIGGER domain_events_no_update BEFORE UPDATE ON public.domain_events FOR EACH ROW EXECUTE FUNCTION public.folio_domain_events_append_only();
+
+
+--
+-- Name: inventory_movements inventory_movements_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER inventory_movements_immutable BEFORE DELETE OR UPDATE ON public.inventory_movements FOR EACH ROW EXECUTE FUNCTION public.folio_inventory_evidence_immutable();
+
+
+--
+-- Name: inventory_transactions inventory_transactions_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER inventory_transactions_immutable BEFORE DELETE OR UPDATE ON public.inventory_transactions FOR EACH ROW EXECUTE FUNCTION public.folio_inventory_evidence_immutable();
 
 
 --
@@ -4761,6 +5159,14 @@ ALTER TABLE ONLY public.contract_posting_run_items
 
 
 --
+-- Name: warehouses fk_rails_18974474f2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.warehouses
+    ADD CONSTRAINT fk_rails_18974474f2 FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
 -- Name: bank_statement_imports fk_rails_1d4ecd5563; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4822,6 +5228,14 @@ ALTER TABLE ONLY public.exchange_rates
 
 ALTER TABLE ONLY public.einvoice_cancellations
     ADD CONSTRAINT fk_rails_3d5576b900 FOREIGN KEY (einvoice_submission_id) REFERENCES public.einvoice_submissions(id);
+
+
+--
+-- Name: inventory_transactions fk_rails_3e52066ab5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT fk_rails_3e52066ab5 FOREIGN KEY (office_id) REFERENCES public.offices(id);
 
 
 --
@@ -4905,11 +5319,35 @@ ALTER TABLE ONLY public.bank_statement_imports
 
 
 --
+-- Name: inventory_transactions fk_rails_64096b371f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT fk_rails_64096b371f FOREIGN KEY (source_warehouse_id) REFERENCES public.warehouses(id);
+
+
+--
+-- Name: warehouses fk_rails_70cd2f2065; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.warehouses
+    ADD CONSTRAINT fk_rails_70cd2f2065 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
+
+
+--
 -- Name: contract_milestones fk_rails_730e2eaf97; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.contract_milestones
     ADD CONSTRAINT fk_rails_730e2eaf97 FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: inventory_transactions fk_rails_735685831f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT fk_rails_735685831f FOREIGN KEY (item_id) REFERENCES public.items(id);
 
 
 --
@@ -4953,6 +5391,14 @@ ALTER TABLE ONLY public.contracts
 
 
 --
+-- Name: inventory_movements fk_rails_7f1cd89715; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT fk_rails_7f1cd89715 FOREIGN KEY (warehouse_id) REFERENCES public.warehouses(id);
+
+
+--
 -- Name: user_office_roles fk_rails_84f904cce7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4969,11 +5415,27 @@ ALTER TABLE ONLY public.settlement_reallocations
 
 
 --
+-- Name: stock_balances fk_rails_8ff754731a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_balances
+    ADD CONSTRAINT fk_rails_8ff754731a FOREIGN KEY (warehouse_id) REFERENCES public.warehouses(id);
+
+
+--
 -- Name: contract_allocation_lines fk_rails_901065d56c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.contract_allocation_lines
     ADD CONSTRAINT fk_rails_901065d56c FOREIGN KEY (contract_performance_obligation_id) REFERENCES public.contract_performance_obligations(id);
+
+
+--
+-- Name: inventory_transactions fk_rails_95c39ffbf9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT fk_rails_95c39ffbf9 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -4990,6 +5452,14 @@ ALTER TABLE ONLY public.memberships
 
 ALTER TABLE ONLY public.contract_schedules
     ADD CONSTRAINT fk_rails_9ac99ed8ec FOREIGN KEY (contract_performance_obligation_id) REFERENCES public.contract_performance_obligations(id);
+
+
+--
+-- Name: inventory_transactions fk_rails_9d376b6b93; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT fk_rails_9d376b6b93 FOREIGN KEY (destination_warehouse_id) REFERENCES public.warehouses(id);
 
 
 --
@@ -5017,11 +5487,27 @@ ALTER TABLE ONLY public.financial_statement_assignments
 
 
 --
+-- Name: inventory_movements fk_rails_a7e956a1f6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT fk_rails_a7e956a1f6 FOREIGN KEY (item_id) REFERENCES public.items(id);
+
+
+--
 -- Name: memberships fk_rails_a959f0d1fb; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.memberships
     ADD CONSTRAINT fk_rails_a959f0d1fb FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
+-- Name: stock_balances fk_rails_aea4178f27; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_balances
+    ADD CONSTRAINT fk_rails_aea4178f27 FOREIGN KEY (item_id) REFERENCES public.items(id);
 
 
 --
@@ -5089,6 +5575,22 @@ ALTER TABLE ONLY public.exchange_revaluation_runs
 
 
 --
+-- Name: inventory_movements fk_rails_e8d059b9f1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT fk_rails_e8d059b9f1 FOREIGN KEY (inventory_transaction_id) REFERENCES public.inventory_transactions(id);
+
+
+--
+-- Name: inventory_transactions fk_rails_eb31e25f55; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_transactions
+    ADD CONSTRAINT fk_rails_eb31e25f55 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: contract_performance_obligations fk_rails_ef44a79072; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5143,6 +5645,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801173000'),
 ('20260801172000'),
 ('20260801171000'),
 ('20260801170000'),
