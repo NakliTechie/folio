@@ -169,6 +169,17 @@ class FinancialStatementsReportTest < ActiveSupport::TestCase
     assert_match(/immutable/, assignment.errors.full_messages.to_sentence)
   end
 
+  test "the default layout remains idempotent after accounts have postings" do
+    post_journal(date: Date.new(2026, 4, 5), debit: "1000", credit: "4000", amount: 100_000)
+    assignments = FinancialStatementAssignment.where(tenant_id: @org.tenant.id)
+    original_ids = assignments.order(:account_id).pluck(:id)
+
+    version = FinancialStatements::DefaultLayout.ensure!(@org.tenant)
+
+    assert_equal "active", version.status
+    assert_equal original_ids, assignments.reload.order(:account_id).pluck(:id)
+  end
+
   test "a new account is mapped across historical and future statement versions" do
     original = FinancialStatementVersion.resolve!(tenant_id: @org.tenant.id, on: Date.current)
     future = FinancialStatements::Versions.clone!(

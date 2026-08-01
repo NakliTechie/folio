@@ -75,6 +75,8 @@ module FinancialStatements
         financial_statement_version_id: version.id,
         account_id: account.id
       )
+      return assignment if assignment.persisted? && assignment.financial_statement_section_id == section.id
+
       assignment.financial_statement_section = section
       assignment.save!
       assignment
