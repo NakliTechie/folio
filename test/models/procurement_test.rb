@@ -87,6 +87,12 @@ class ProcurementTest < ActiveSupport::TestCase
 
     receipt = receive(order, quantity: "10", key: "receipt-1")
     assert_equal receipt.id, receive(order, quantity: "10", key: "receipt-1").id
+    changed_input = Procurement::ReceiveOrder.normalize!(
+      order,
+      { received_on: DATE, external_reference: "DN-1", idempotency_key: "receipt-1" },
+      [ { purchase_order_line_id: order.purchase_order_lines.sole.id, quantity: "9" } ]
+    )
+    refute_equal receipt.request_sha256, changed_input.fetch(:request_sha256)
     assert_match(/already belongs/, assert_raises(Procurement::InvalidProcurement) {
       receive(order, quantity: "9", key: "receipt-1")
     }.message)

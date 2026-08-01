@@ -118,7 +118,9 @@ module Procurement
       {
         "purchaseOrderId" => order.id, "receivedOn" => input.fetch(:received_on).to_s,
         "externalReference" => input[:external_reference],
-        "lines" => input.fetch(:lines).sort.to_h.transform_values { |quantity| quantity.to_s("F") }
+        "lines" => input.fetch(:lines).sort.to_h do |line_id, quantity|
+          [ line_id.to_s, quantity.to_s("F") ]
+        end
       }.compact
     end
 
