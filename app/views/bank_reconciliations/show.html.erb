@@ -1,0 +1,65 @@
+<% content_for :title, "#{@statement.file_name} · Bank reconciliation · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= link_to "← Back to bank reconciliation", bank_reconciliations_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading">
+    <div><p class="eyebrow">Statement <%= @statement.id %></p><h1><%= @statement.file_name %></h1><p><%= @statement.bank_account_code %> · <%= @statement.statement_from.to_fs(:long) %> – <%= @statement.statement_to.to_fs(:long) %></p></div>
+    <span class="<%= status_class(@statement.status) %>"><%= @statement.status.humanize %></span>
+  </header>
+
+  <section class="summary-grid" aria-label="Reconciliation summary">
+    <div><span>Opening</span><strong><%= money_amount(@statement.opening_balance_minor, currency: @statement.currency) %></strong></div>
+    <div><span>Statement movement</span><strong><%= money_amount(@statement.bank_statement_lines.sum(:amount_minor), currency: @statement.currency) %></strong></div>
+    <div><span>Closing</span><strong><%= money_amount(@statement.closing_balance_minor, currency: @statement.currency) %></strong></div>
+    <div><span>Unresolved</span><strong><%= @statement.bank_statement_lines.where(status: "unmatched").count %></strong></div>
+  </section>
+
+  <% if permitted?("banking.reconcile") && @statement.status == "imported" %>
+    <section class="panel">
+      <div class="panel__header"><div><p class="eyebrow">Controlled resolution</p><h2>Reconcile statement</h2></div></div>
+      <div class="split-actions">
+        <%= button_to "Auto-match unambiguous lines", auto_match_bank_reconciliation_path(@statement, tenant_route_options), method: :post, class: "button button--quiet" %>
+        <%= button_to "Close reconciliation", finalize_bank_reconciliation_path(@statement, tenant_route_options), method: :post, class: "button button--primary", data: { turbo_confirm: "Close this statement? No further matching changes will be allowed." } %>
+      </div>
+      <small>Automatic matching requires the same account, signed amount and currency within three days, with exactly one unused ledger candidate.</small>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Line evidence</p><h2>Statement lines</h2></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Line</th><th>Date</th><th>Description</th><th>Reference</th><th>Amount</th><th>Status / resolution</th></tr></thead>
+      <tbody><% @lines.each do |line| %><tr>
+        <td><%= line.line_no %></td><td><%= line.booking_date.to_fs(:long) %></td>
+        <td><strong><%= line.description %></strong><% if line.counterparty.present? %><br><small><%= line.counterparty %></small><% end %></td>
+        <td><%= line.bank_reference.presence || "—" %></td>
+        <td class="money"><%= money_amount(line.amount_minor, currency: line.currency) %></td>
+        <td>
+          <span class="<%= status_class(line.status) %>"><%= line.status.humanize %></span>
+          <% if line.status == "matched" %>
+            <% ledger_line = line.matched_entry_line %>
+            <div><small><%= line.match_method.humanize %> · ledger event <%= line.matched_ledger_event_id %>, line <%= line.matched_entry_line_no %><% if ledger_line %> · <%= ledger_line.entry.posting_date.to_fs(:long) %><% end %></small></div>
+          <% elsif line.status == "ignored" %>
+            <div><small><%= line.ignore_reason %></small></div>
+          <% elsif permitted?("banking.reconcile") && @statement.status == "imported" %>
+            <% candidates = @candidates_by_line.fetch(line, []) %>
+            <% if candidates.any? %>
+              <%= form_with url: manual_match_bank_reconciliation_path(@statement, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+                <%= hidden_field_tag :line_id, line.id %>
+                <%= form.label :entry_line_id, "Ledger candidate", class: "sr-only" %>
+                <%= form.select :entry_line_id, candidates.map { |candidate| ["#{candidate.entry.posting_date.iso8601} · event #{candidate.source_event_id}/#{candidate.line_no}", candidate.id] }, required: true %>
+                <%= form.submit "Match", class: "button button--compact button--quiet" %>
+              <% end %>
+            <% else %><small>No exact nearby ledger candidate.</small><% end %>
+            <%= form_with url: ignore_line_bank_reconciliation_path(@statement, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+              <%= hidden_field_tag :line_id, line.id %>
+              <%= form.label :reason, "Exclusion reason", class: "sr-only" %>
+              <%= form.text_field :reason, required: true, placeholder: "Reason for exclusion" %>
+              <%= form.submit "Exclude", class: "button button--compact button--quiet" %>
+            <% end %>
+          <% end %>
+        </td>
+      </tr><% end %></tbody>
+    </table></div>
+  </section>
+</main>

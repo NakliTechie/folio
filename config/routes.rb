@@ -34,6 +34,17 @@ Rails.application.routes.draw do
   resources :exchange_rates, path: "exchange-rates", only: %i[index create] do
     post :run_revaluation, on: :collection
   end
+  resources :bank_reconciliations, path: "bank-reconciliation", only: %i[index show] do
+    collection do
+      post :import_statement
+    end
+    member do
+      post :auto_match
+      post :manual_match
+      post :ignore_line
+      post :finalize
+    end
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

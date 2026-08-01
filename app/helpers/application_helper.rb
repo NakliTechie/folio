@@ -62,9 +62,11 @@ module ApplicationHelper
 
   def status_class(state)
     case state
-    when "posted", "sent", "verified", "active" then "status-badge status-badge--success"
+    when "posted", "sent", "verified", "active", "matched", "reconciled"
+      "status-badge status-badge--success"
     when "failed", "reversed" then "status-badge status-badge--danger"
-    when "queued", "sending", "draft", "parked" then "status-badge status-badge--pending"
+    when "queued", "sending", "draft", "parked", "imported", "unmatched"
+      "status-badge status-badge--pending"
     else "status-badge"
     end
   end

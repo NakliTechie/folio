@@ -180,6 +180,110 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: bank_statement_imports; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.bank_statement_imports (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    created_domain_event_id bigint NOT NULL,
+    reconciled_domain_event_id bigint,
+    bank_account_code character varying NOT NULL,
+    currency character varying(3) NOT NULL,
+    file_name character varying NOT NULL,
+    source_sha256 character varying NOT NULL,
+    statement_from date NOT NULL,
+    statement_to date NOT NULL,
+    opening_balance_minor bigint NOT NULL,
+    closing_balance_minor bigint NOT NULL,
+    row_count integer NOT NULL,
+    status character varying DEFAULT 'imported'::character varying NOT NULL,
+    reconciled_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT bank_statement_imports_period_valid CHECK ((statement_to >= statement_from)),
+    CONSTRAINT bank_statement_imports_reconciliation_coherent CHECK (((((status)::text = 'imported'::text) AND (reconciled_domain_event_id IS NULL) AND (reconciled_at IS NULL)) OR (((status)::text = 'reconciled'::text) AND (reconciled_domain_event_id IS NOT NULL) AND (reconciled_at IS NOT NULL)))),
+    CONSTRAINT bank_statement_imports_row_count_positive CHECK ((row_count > 0)),
+    CONSTRAINT bank_statement_imports_status_valid CHECK (((status)::text = ANY ((ARRAY['imported'::character varying, 'reconciled'::character varying])::text[])))
+);
+
+
+--
+-- Name: bank_statement_imports_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.bank_statement_imports_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: bank_statement_imports_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.bank_statement_imports_id_seq OWNED BY public.bank_statement_imports.id;
+
+
+--
+-- Name: bank_statement_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.bank_statement_lines (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    bank_statement_import_id bigint NOT NULL,
+    line_no integer NOT NULL,
+    booking_date date NOT NULL,
+    value_date date NOT NULL,
+    amount_minor bigint NOT NULL,
+    currency character varying(3) NOT NULL,
+    bank_reference character varying,
+    description character varying NOT NULL,
+    counterparty character varying,
+    status character varying DEFAULT 'unmatched'::character varying NOT NULL,
+    match_method character varying,
+    matched_ledger_event_id bigint,
+    matched_entry_line_no integer,
+    matched_by_id bigint,
+    matched_at timestamp(6) without time zone,
+    ignore_reason character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT bank_statement_lines_amount_nonzero CHECK ((amount_minor <> 0)),
+    CONSTRAINT bank_statement_lines_match_method_valid CHECK (((match_method IS NULL) OR ((match_method)::text = ANY ((ARRAY['exact'::character varying, 'manual'::character varying])::text[])))),
+    CONSTRAINT bank_statement_lines_matched_line_positive CHECK (((matched_entry_line_no IS NULL) OR (matched_entry_line_no > 0))),
+    CONSTRAINT bank_statement_lines_number_positive CHECK ((line_no > 0)),
+    CONSTRAINT bank_statement_lines_resolution_coherent CHECK (((((status)::text = 'unmatched'::text) AND (match_method IS NULL) AND (matched_ledger_event_id IS NULL) AND (matched_entry_line_no IS NULL) AND (matched_by_id IS NULL) AND (matched_at IS NULL) AND (ignore_reason IS NULL)) OR (((status)::text = 'matched'::text) AND (match_method IS NOT NULL) AND (matched_ledger_event_id IS NOT NULL) AND (matched_entry_line_no IS NOT NULL) AND (matched_by_id IS NOT NULL) AND (matched_at IS NOT NULL) AND (ignore_reason IS NULL)) OR (((status)::text = 'ignored'::text) AND (match_method IS NULL) AND (matched_ledger_event_id IS NULL) AND (matched_entry_line_no IS NULL) AND (matched_by_id IS NULL) AND (matched_at IS NULL) AND (ignore_reason IS NOT NULL)))),
+    CONSTRAINT bank_statement_lines_status_valid CHECK (((status)::text = ANY ((ARRAY['unmatched'::character varying, 'matched'::character varying, 'ignored'::character varying])::text[])))
+);
+
+
+--
+-- Name: bank_statement_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.bank_statement_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: bank_statement_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.bank_statement_lines_id_seq OWNED BY public.bank_statement_lines.id;
+
+
+--
 -- Name: contract_allocation_lines; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2393,6 +2497,20 @@ ALTER TABLE ONLY public.accounts ALTER COLUMN id SET DEFAULT nextval('public.acc
 
 
 --
+-- Name: bank_statement_imports id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_imports ALTER COLUMN id SET DEFAULT nextval('public.bank_statement_imports_id_seq'::regclass);
+
+
+--
+-- Name: bank_statement_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_lines ALTER COLUMN id SET DEFAULT nextval('public.bank_statement_lines_id_seq'::regclass);
+
+
+--
 -- Name: contract_allocation_lines id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2763,6 +2881,22 @@ ALTER TABLE ONLY public.accounts
 
 ALTER TABLE ONLY public.ar_internal_metadata
     ADD CONSTRAINT ar_internal_metadata_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: bank_statement_imports bank_statement_imports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_imports
+    ADD CONSTRAINT bank_statement_imports_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bank_statement_lines bank_statement_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_lines
+    ADD CONSTRAINT bank_statement_lines_pkey PRIMARY KEY (id);
 
 
 --
@@ -3390,6 +3524,76 @@ CREATE UNIQUE INDEX index_accounts_on_tenant_id_and_code ON public.accounts USIN
 --
 
 CREATE INDEX index_accounts_on_tenant_id_and_monetary ON public.accounts USING btree (tenant_id, monetary) WHERE (monetary = true);
+
+
+--
+-- Name: index_bank_statement_imports_on_account_period; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_bank_statement_imports_on_account_period ON public.bank_statement_imports USING btree (tenant_id, bank_account_code, statement_to);
+
+
+--
+-- Name: index_bank_statement_imports_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_bank_statement_imports_on_created_by_id ON public.bank_statement_imports USING btree (created_by_id);
+
+
+--
+-- Name: index_bank_statement_imports_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_bank_statement_imports_on_entity_id ON public.bank_statement_imports USING btree (entity_id);
+
+
+--
+-- Name: index_bank_statement_imports_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_bank_statement_imports_on_office_id ON public.bank_statement_imports USING btree (office_id);
+
+
+--
+-- Name: index_bank_statement_imports_on_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_bank_statement_imports_on_source ON public.bank_statement_imports USING btree (tenant_id, bank_account_code, source_sha256);
+
+
+--
+-- Name: index_bank_statement_lines_for_matching; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_bank_statement_lines_for_matching ON public.bank_statement_lines USING btree (tenant_id, status, booking_date);
+
+
+--
+-- Name: index_bank_statement_lines_on_import; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_bank_statement_lines_on_import ON public.bank_statement_lines USING btree (bank_statement_import_id);
+
+
+--
+-- Name: index_bank_statement_lines_on_ledger_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_bank_statement_lines_on_ledger_identity ON public.bank_statement_lines USING btree (tenant_id, matched_ledger_event_id, matched_entry_line_no) WHERE (matched_ledger_event_id IS NOT NULL);
+
+
+--
+-- Name: index_bank_statement_lines_on_line_no; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_bank_statement_lines_on_line_no ON public.bank_statement_lines USING btree (bank_statement_import_id, line_no);
+
+
+--
+-- Name: index_bank_statement_lines_on_matched_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_bank_statement_lines_on_matched_by_id ON public.bank_statement_lines USING btree (matched_by_id);
 
 
 --
@@ -4501,11 +4705,27 @@ ALTER TABLE ONLY public.office_tax_registrations
 
 
 --
+-- Name: bank_statement_imports fk_rails_01d7729921; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_imports
+    ADD CONSTRAINT fk_rails_01d7729921 FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
 -- Name: contracts fk_rails_0475753257; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.contracts
     ADD CONSTRAINT fk_rails_0475753257 FOREIGN KEY (party_id) REFERENCES public.parties(id);
+
+
+--
+-- Name: bank_statement_lines fk_rails_09ef2d0540; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_lines
+    ADD CONSTRAINT fk_rails_09ef2d0540 FOREIGN KEY (matched_by_id) REFERENCES public.users(id);
 
 
 --
@@ -4538,6 +4758,14 @@ ALTER TABLE ONLY public.user_office_roles
 
 ALTER TABLE ONLY public.contract_posting_run_items
     ADD CONSTRAINT fk_rails_13b10d0e3f FOREIGN KEY (contract_posting_run_id) REFERENCES public.contract_posting_runs(id);
+
+
+--
+-- Name: bank_statement_imports fk_rails_1d4ecd5563; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_imports
+    ADD CONSTRAINT fk_rails_1d4ecd5563 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -4629,6 +4857,14 @@ ALTER TABLE ONLY public.exchange_revaluation_runs
 
 
 --
+-- Name: bank_statement_lines fk_rails_43220de1f5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_lines
+    ADD CONSTRAINT fk_rails_43220de1f5 FOREIGN KEY (bank_statement_import_id) REFERENCES public.bank_statement_imports(id);
+
+
+--
 -- Name: exchange_revaluation_runs fk_rails_43ce24d3c7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4658,6 +4894,14 @@ ALTER TABLE ONLY public.document_allocations
 
 ALTER TABLE ONLY public.exchange_revaluation_items
     ADD CONSTRAINT fk_rails_53a08ec822 FOREIGN KEY (exchange_rate_id) REFERENCES public.exchange_rates(id);
+
+
+--
+-- Name: bank_statement_imports fk_rails_6376db30c1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.bank_statement_imports
+    ADD CONSTRAINT fk_rails_6376db30c1 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
 
 
 --
@@ -4899,6 +5143,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801172000'),
 ('20260801171000'),
 ('20260801170000'),
 ('20260801165000'),

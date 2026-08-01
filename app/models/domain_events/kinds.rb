@@ -30,6 +30,13 @@ module DomainEvents
       "contract.transaction_price_allocated" => "The transaction price was allocated to obligations.",
       "contract.revenue_schedule_generated" => "A versioned revenue schedule was generated.",
 
+      # --- bank reconciliation (Batch 9) ---
+      "bank_statement.imported" => "A bank statement was imported with a source fingerprint.",
+      "bank_statement.auto_matched" => "Unambiguous bank lines were matched automatically.",
+      "bank_statement.line_matched" => "A bank line was matched by an authorized user.",
+      "bank_statement.line_ignored" => "A bank line was explicitly excluded with a reason.",
+      "bank_statement.reconciled" => "A complete bank statement was reconciled and closed.",
+
       # --- procurement / vendor management (Batch 9) ---
       "purchase_order.raised"   => "A purchase order was raised.",
       "purchase_order.approved" => "A purchase order was approved for release.",

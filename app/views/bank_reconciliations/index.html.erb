@@ -1,0 +1,43 @@
+<% content_for :title, "Bank reconciliation · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div><p class="eyebrow">Cash control</p><h1>Bank reconciliation</h1><p>Import statement evidence, match it to immutable ledger events, and close only when every line and the statement balance agree.</p></div>
+  </header>
+
+  <% if permitted?("banking.manage") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">CSV statement</p><h2>Import a statement</h2></div></div>
+      <p>Required columns: <code>booking_date,value_date,amount,reference,description,counterparty</code>. Dates use YYYY-MM-DD; positive amounts increase the bank ledger balance.</p>
+      <%= form_with url: import_statement_bank_reconciliations_path(tenant_route_options), method: :post, multipart: true, class: "stacked-form" do |form| %>
+        <div class="form-grid">
+          <div class="field"><%= form.label :bank_account_code, "Bank ledger" %><%= form.select :bank_account_code, @bank_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :currency %><%= form.select :currency, CurrencyProfile::MINOR_UNIT_EXPONENTS.keys, selected: Current.tenant.functional_currency, required: true %></div>
+          <div class="field"><%= form.label :opening_balance %><%= form.number_field :opening_balance, step: :any, required: true %></div>
+          <div class="field"><%= form.label :closing_balance %><%= form.number_field :closing_balance, step: :any, required: true %></div>
+          <div class="field"><%= form.label :statement_file, "Statement CSV" %><%= form.file_field :statement_file, accept: ".csv,text/csv", required: true %></div>
+        </div>
+        <%= form.submit "Import statement", class: "button button--primary", disabled: @bank_accounts.empty? %>
+        <% if @bank_accounts.empty? %><small>Add or designate an active monetary asset account before importing.</small><% end %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Statement evidence</p><h2>Imported statements</h2></div></div>
+    <% if @statements.empty? %>
+      <div class="empty-state"><p>No statements imported yet.</p></div>
+    <% else %>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Period</th><th>Bank ledger</th><th>File</th><th>Lines</th><th>Closing balance</th><th>Status</th><th></th></tr></thead>
+        <tbody><% @statements.each do |statement| %><tr>
+          <td><%= statement.statement_from.to_fs(:long) %> – <%= statement.statement_to.to_fs(:long) %></td>
+          <td><%= statement.bank_account_code %></td><td><%= statement.file_name %></td><td><%= statement.row_count %></td>
+          <td class="money"><%= money_amount(statement.closing_balance_minor, currency: statement.currency) %></td>
+          <td><span class="<%= status_class(statement.status) %>"><%= statement.status.humanize %></span></td>
+          <td><%= link_to "Review", bank_reconciliation_path(statement, tenant_route_options), class: "button button--compact button--quiet" %></td>
+        </tr><% end %></tbody>
+      </table></div>
+    <% end %>
+  </section>
+</main>
