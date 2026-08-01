@@ -1,0 +1,17 @@
+default: &default
+  store_options:
+    # Rate-limit counters are security state, but they are intentionally short-lived. The wider
+    # cache remains bounded so a small production database cannot grow without limit.
+    max_age: <%= 30.days.to_i %>
+    max_size: <%= 256.megabytes %>
+    namespace: <%= Rails.env %>
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  database: cache
+  <<: *default

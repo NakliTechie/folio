@@ -11,7 +11,11 @@ class Folio::ProductionSettingsTest < ActiveSupport::TestCase
       "FOLIO_SMTP_ADDRESS" => "smtp.acme.test",
       "FOLIO_SMTP_USERNAME" => "folio-account",
       "FOLIO_SMTP_PASSWORD" => "provider-secret",
-      "FOLIO_ALLOWED_HOSTS" => "books.acme.test,internal.acme.test"
+      "FOLIO_ALLOWED_HOSTS" => "books.acme.test,internal.acme.test",
+      "SECRET_KEY_BASE" => "s" * 64,
+      "DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_primary",
+      "QUEUE_DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_queue",
+      "CACHE_DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_cache"
     }
   end
 
@@ -48,5 +52,21 @@ class Folio::ProductionSettingsTest < ActiveSupport::TestCase
     assert_raises(Folio::ProductionSettings::InvalidConfiguration) do
       Folio::ProductionSettings.load!(@environment.merge("FOLIO_SMTP_AUTHENTICATION" => "anything"))
     end
+  end
+
+  test "requires a signing strategy and three distinct databases" do
+    assert_raises(Folio::ProductionSettings::InvalidConfiguration) do
+      Folio::ProductionSettings.load!(@environment.except("SECRET_KEY_BASE"))
+    end
+    assert_raises(Folio::ProductionSettings::InvalidConfiguration) do
+      Folio::ProductionSettings.load!(@environment.except("CACHE_DATABASE_URL"))
+    end
+
+    error = assert_raises(Folio::ProductionSettings::InvalidConfiguration) do
+      Folio::ProductionSettings.load!(
+        @environment.merge("CACHE_DATABASE_URL" => @environment.fetch("QUEUE_DATABASE_URL"))
+      )
+    end
+    assert_match(/three distinct databases/, error.message)
   end
 end

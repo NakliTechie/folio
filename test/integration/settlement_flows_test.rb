@@ -45,6 +45,8 @@ class SettlementFlowsTest < ActionDispatch::IntegrationTest
       tenant: @org.tenant, party_id: vendor.id, tax_registration_id: registration.id,
       document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
       place_of_supply_state_code: "27", external_reference: "V-INV-001",
+      place_of_supply_override_reason: "Supplier invoice records Maharashtra as the place of supply",
+      actor: @org.user,
       lines: [ { item_id: service.id, quantity: "2", unit_price: "50.00" } ]
     )
     Documents::Post.call(bill, actor: "u:#{@org.user.id}")

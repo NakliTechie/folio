@@ -387,6 +387,7 @@ CREATE TABLE public.documents (
     tds_prior_deducted_base_minor bigint DEFAULT 0 NOT NULL,
     tds_deductible_base_minor bigint DEFAULT 0 NOT NULL,
     tds_minor bigint DEFAULT 0 NOT NULL,
+    place_of_supply_evidence jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying, 'quantity_underbilling'::character varying])::text[])))),
     CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
     CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
@@ -457,6 +458,57 @@ CREATE SEQUENCE public.domain_events_id_seq
 --
 
 ALTER SEQUENCE public.domain_events_id_seq OWNED BY public.domain_events.id;
+
+
+--
+-- Name: einvoice_cancellations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.einvoice_cancellations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    einvoice_submission_id bigint NOT NULL,
+    requested_by_id bigint NOT NULL,
+    provider character varying NOT NULL,
+    status character varying DEFAULT 'prepared'::character varying NOT NULL,
+    request_id character varying NOT NULL,
+    reason_code character varying(1) NOT NULL,
+    remarks character varying(100) NOT NULL,
+    requested_at timestamp(6) without time zone NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    last_attempt_at timestamp(6) without time zone,
+    cancelled_at timestamp(6) without time zone,
+    provider_response jsonb,
+    provider_response_sha256 character varying(64),
+    error_code character varying,
+    error_message text,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT einvoice_cancellations_attempt_count_nonnegative CHECK ((attempt_count >= 0)),
+    CONSTRAINT einvoice_cancellations_evidence_complete CHECK ((((status)::text <> 'cancelled'::text) OR ((cancelled_at IS NOT NULL) AND (provider_response IS NOT NULL) AND (provider_response_sha256 IS NOT NULL)))),
+    CONSTRAINT einvoice_cancellations_reason_valid CHECK (((reason_code)::text = ANY ((ARRAY['1'::character varying, '2'::character varying])::text[]))),
+    CONSTRAINT einvoice_cancellations_status_valid CHECK (((status)::text = ANY ((ARRAY['prepared'::character varying, 'submitting'::character varying, 'cancelled'::character varying, 'rejected'::character varying, 'indeterminate'::character varying])::text[])))
+);
+
+
+--
+-- Name: einvoice_cancellations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.einvoice_cancellations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: einvoice_cancellations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.einvoice_cancellations_id_seq OWNED BY public.einvoice_cancellations.id;
 
 
 --
@@ -1730,6 +1782,13 @@ ALTER TABLE ONLY public.domain_events ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
+-- Name: einvoice_cancellations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.einvoice_cancellations ALTER COLUMN id SET DEFAULT nextval('public.einvoice_cancellations_id_seq'::regclass);
+
+
+--
 -- Name: einvoice_submissions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2001,6 +2060,14 @@ ALTER TABLE ONLY public.documents
 
 ALTER TABLE ONLY public.domain_events
     ADD CONSTRAINT domain_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: einvoice_cancellations einvoice_cancellations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.einvoice_cancellations
+    ADD CONSTRAINT einvoice_cancellations_pkey PRIMARY KEY (id);
 
 
 --
@@ -2589,6 +2656,34 @@ CREATE UNIQUE INDEX index_domain_events_on_tenant_id_and_seq ON public.domain_ev
 
 
 --
+-- Name: index_einvoice_cancellations_on_einvoice_submission_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_einvoice_cancellations_on_einvoice_submission_id ON public.einvoice_cancellations USING btree (einvoice_submission_id);
+
+
+--
+-- Name: index_einvoice_cancellations_on_requested_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_einvoice_cancellations_on_requested_by_id ON public.einvoice_cancellations USING btree (requested_by_id);
+
+
+--
+-- Name: index_einvoice_cancellations_on_tenant_id_and_request_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_einvoice_cancellations_on_tenant_id_and_request_id ON public.einvoice_cancellations USING btree (tenant_id, request_id);
+
+
+--
+-- Name: index_einvoice_cancellations_on_tenant_id_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_einvoice_cancellations_on_tenant_id_and_status ON public.einvoice_cancellations USING btree (tenant_id, status);
+
+
+--
 -- Name: index_einvoice_submissions_on_document_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3149,6 +3244,22 @@ ALTER TABLE ONLY public.office_tax_registrations
 
 
 --
+-- Name: einvoice_cancellations fk_rails_3d5576b900; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.einvoice_cancellations
+    ADD CONSTRAINT fk_rails_3d5576b900 FOREIGN KEY (einvoice_submission_id) REFERENCES public.einvoice_submissions(id);
+
+
+--
+-- Name: einvoice_cancellations fk_rails_40be4a3449; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.einvoice_cancellations
+    ADD CONSTRAINT fk_rails_40be4a3449 FOREIGN KEY (requested_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: einvoice_submissions fk_rails_41f91a62ff; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3267,6 +3378,8 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801150000'),
+('20260801140000'),
 ('20260801130000'),
 ('20260801120000'),
 ('20260801110000'),

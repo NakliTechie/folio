@@ -56,6 +56,7 @@ module Posting
             due_date: document.due_date,
             extra: {
               "partySnapshot" => document.party_snapshot,
+              "placeOfSupplyEvidence" => document.place_of_supply_evidence,
               "sourcePurchaseBillId" => document.debit_note_for_document_id,
               "supplierDebitNoteNumber" => document.external_reference
             },
@@ -113,7 +114,7 @@ module Posting
         def header_matches_source?(document, source)
           %i[
             entity_id office_id party_id tax_registration_id supply_type place_of_supply_state_code
-            currency minor_unit_exponent party_snapshot tax_registration_snapshot
+            currency minor_unit_exponent party_snapshot tax_registration_snapshot place_of_supply_evidence
           ].all? { |attribute| document.public_send(attribute) == source.public_send(attribute) }
         end
 

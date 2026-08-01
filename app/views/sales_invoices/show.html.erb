@@ -18,6 +18,10 @@
       <div><dt>Seller GSTIN</dt><dd><%= @document.tax_registration_snapshot.fetch("identifier") %></dd></div>
       <div><dt>Customer GSTIN</dt><dd><%= @document.party_snapshot.fetch("gstin") %></dd></div>
       <div><dt>Place of supply</dt><dd>State <%= @document.place_of_supply_state_code %></dd></div>
+      <div><dt>Place-of-supply basis</dt><dd><%= @document.place_of_supply_evidence.fetch("basis").humanize %></dd></div>
+      <% if @document.place_of_supply_evidence["reason"].present? %>
+        <div><dt>Override evidence</dt><dd><%= @document.place_of_supply_evidence["reason"] %></dd></div>
+      <% end %>
       <div><dt>Customer reference</dt><dd><%= @document.external_reference.presence || "—" %></dd></div>
     </dl>
 
@@ -53,8 +57,24 @@
     <section class="panel posting-panel" aria-labelledby="einvoice-heading">
       <div>
         <p class="eyebrow">GST e-invoice · INV-01 v1.1</p>
-        <h2 id="einvoice-heading"><%= @einvoice_submission&.acknowledged? ? "IRN acknowledged" : @einvoice_submission ? "JSON prepared — IRN not generated" : "Prepare the IRP request" %></h2>
-        <% if @einvoice_submission&.acknowledged? %>
+        <h2 id="einvoice-heading"><%=
+          if @einvoice_cancellation&.cancelled?
+            "IRN cancelled"
+          elsif @einvoice_cancellation
+            "IRN cancellation #{@einvoice_cancellation.status.humanize.downcase}"
+          elsif @einvoice_submission&.acknowledged?
+            "IRN acknowledged"
+          elsif @einvoice_submission
+            "JSON prepared — IRN not generated"
+          else
+            "Prepare the IRP request"
+          end
+        %></h2>
+        <% if @einvoice_cancellation&.cancelled? %>
+          <p>IRN <strong><%= @einvoice_submission.irn %></strong> was cancelled at <%= @einvoice_cancellation.cancelled_at.to_fs(:long) %>. The statutory cancellation is retained separately from the accounting reversal.</p>
+        <% elsif @einvoice_cancellation %>
+          <p>Reason <%= @einvoice_cancellation.reason_code %> · <%= @einvoice_cancellation.remarks %>. Do not retry an indeterminate request until the provider is reconciled by IRN.</p>
+        <% elsif @einvoice_submission&.acknowledged? %>
           <p>IRN <strong><%= @einvoice_submission.irn %></strong> · acknowledgement <%= @einvoice_submission.ack_number %>. Signature status: <%= @einvoice_submission.signature_status.humanize.downcase %>.</p>
         <% elsif @einvoice_submission %>
           <p>This immutable request is ready for offline upload or a future reviewed provider adapter. Folio has not contacted an IRP, generated an IRN, or verified a signature.</p>

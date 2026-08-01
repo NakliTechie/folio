@@ -45,6 +45,8 @@ module Onboarding
         Rbac::Presets.seed_for!(inv.tenant)
         role = Rbac::Presets.role_for(inv.tenant, inv.role_code)
         UserOfficeRole.create!(user: user, tenant_id: inv.tenant_id, office_id: nil, role_template: role)
+        # Possession of the single-use invitation link proves control of this mailbox.
+        user.verify! unless user.verified?
         inv.update!(accepted_at: Time.current)
         Acceptance.new(user: user, tenant: inv.tenant)
       end

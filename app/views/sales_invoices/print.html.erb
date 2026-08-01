@@ -29,6 +29,9 @@
         <% if @einvoice_submission&.acknowledged? %>
           <div><dt>IRN</dt><dd><strong><%= @einvoice_submission.irn %></strong></dd></div>
           <div><dt>IRP acknowledgement</dt><dd><%= @einvoice_submission.ack_number %> · <%= @einvoice_submission.acknowledged_at.to_fs(:long) %></dd></div>
+          <% if @einvoice_cancellation&.cancelled? %>
+            <div><dt>IRN status</dt><dd><strong>Cancelled</strong> · <%= @einvoice_cancellation.cancelled_at.to_fs(:long) %></dd></div>
+          <% end %>
         <% end %>
       </dl>
     </header>
@@ -47,6 +50,9 @@
       </div>
       <dl>
         <div><dt>Place of supply</dt><dd><%= Taxes::India::StateCodes.name_for(@document.place_of_supply_state_code) %> (<%= @document.place_of_supply_state_code %>)</dd></div>
+        <% if @document.place_of_supply_evidence["reason"].present? %>
+          <div><dt>Place-of-supply evidence</dt><dd><%= @document.place_of_supply_evidence["reason"] %></dd></div>
+        <% end %>
         <div><dt>Supply</dt><dd><%= seller.fetch("stateCode") == @document.place_of_supply_state_code ? "Intra-state" : "Inter-state" %></dd></div>
         <div><dt>Customer reference</dt><dd><%= @document.external_reference.presence || "—" %></dd></div>
       </dl>
@@ -55,7 +61,10 @@
     <% if @einvoice_submission&.acknowledged? %>
       <section class="einvoice-proof" aria-label="IRP-signed e-invoice QR code">
         <div class="einvoice-proof__qr"><%= einvoice_qr_svg(@einvoice_submission) %></div>
-        <div><strong>IRP-signed QR code</strong><p>Scan with the GSTN e-Invoice verification app. Folio signature status: <%= @einvoice_submission.signature_status.humanize.downcase %>.</p></div>
+        <div>
+          <strong><%= @einvoice_cancellation&.cancelled? ? "Cancelled IRN — retained audit artifact" : "IRP-signed QR code" %></strong>
+          <p><%= @einvoice_cancellation&.cancelled? ? "Do not issue this copy as an active e-invoice. The IRP cancellation remains auditable." : "Scan with the GSTN e-Invoice verification app. Folio signature status: #{@einvoice_submission.signature_status.humanize.downcase}." %></p>
+        </div>
       </section>
     <% end %>
 

@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+ENV["RAILS_ENV"] ||= "production"
+require_relative "../config/environment"
+require "digest"
+require "fileutils"
+require "json"
+require "open3"
+require "pathname"
+require "time"
+
+abort "backup only runs with RAILS_ENV=production" unless Rails.env.production?
+
+requested_root = ENV.fetch("FOLIO_BACKUP_DIR", "").strip
+abort "set FOLIO_BACKUP_DIR to an explicit backup directory" if requested_root.empty?
+
+root = Pathname.new(requested_root).expand_path
+forbidden = [ Pathname.new("/"), Pathname.new(Dir.home).expand_path, Rails.root ]
+abort "refusing an unsafe backup directory" if forbidden.include?(root)
+
+FileUtils.mkdir_p(root, mode: 0o700)
+stamp = Time.now.utc.strftime("%Y%m%dT%H%M%SZ")
+destination = root.join("folio-#{stamp}")
+destination.mkdir(0o700)
+
+archives = %w[primary queue cache].map do |name|
+  db_config = ActiveRecord::Base.configurations.configs_for(env_name: Rails.env, name: name)
+  abort "database configuration #{name} is unavailable" unless db_config
+
+  config = db_config.configuration_hash
+  output = destination.join("#{name}.dump")
+  command = [ "pg_dump", "--format=custom", "--compress=9", "--no-owner", "--no-privileges",
+              "--file=#{output}", "--dbname=#{config.fetch(:database)}" ]
+  command << "--host=#{config.fetch(:host)}" if config[:host].present?
+  command << "--port=#{config.fetch(:port)}" if config[:port].present?
+  command << "--username=#{config.fetch(:username)}" if config[:username].present?
+  environment = { "PGPASSWORD" => config[:password].to_s }
+  _stdout, stderr, status = Open3.capture3(environment, *command)
+  abort "#{name} backup failed: #{stderr.lines.first.to_s.strip}" unless status.success?
+  output.chmod(0o600)
+  { name: name, file: output.basename.to_s, sha256: Digest::SHA256.file(output).hexdigest,
+    bytes: output.size }
+end
+
+manifest = {
+  format: "folio-postgresql-custom-v1",
+  created_at: Time.now.utc.iso8601,
+  archives: archives
+}
+manifest_path = destination.join("manifest.json")
+manifest_path.write("#{JSON.pretty_generate(manifest)}\n")
+manifest_path.chmod(0o600)
+puts destination

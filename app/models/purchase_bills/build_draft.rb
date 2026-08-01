@@ -8,7 +8,7 @@ module PurchaseBills
 
     def call(tenant:, party_id:, tax_registration_id:, document_date:, due_date:,
              place_of_supply_state_code:, external_reference:, lines:, narration: nil,
-             tds_section: nil)
+             tds_section: nil, place_of_supply_override_reason: nil, actor: nil)
       bill_date = parse_date!(document_date, "supplier invoice date")
       payment_due = parse_date!(due_date, "due date")
       raise InvalidBill, "due date cannot be before the supplier invoice date" if payment_due < bill_date
@@ -61,6 +61,10 @@ module PurchaseBills
       unless Taxes::India::StateCodes.valid?(place_state)
         raise InvalidBill, "place of supply must be a valid GST state code"
       end
+      place_evidence = Taxes::India::PlaceOfSupplyEvidence.build!(
+        tenant: tenant, party: vendor, selected_state_code: place_state, actor: actor,
+        override_reason: place_of_supply_override_reason, error_class: InvalidBill
+      )
 
       normalized_lines = normalize_lines!(
         tenant: tenant, entity: entity, vendor_registration: vendor_registration,
@@ -97,6 +101,7 @@ module PurchaseBills
           external_reference: supplier_reference, narration: narration,
           state: "draft", party: vendor, tax_registration: buyer_registration,
           supply_type: "B2B", place_of_supply_state_code: place_state,
+          place_of_supply_evidence: place_evidence,
           currency: currency, minor_unit_exponent: exponent,
           subtotal_minor: subtotal, tax_minor: tax_total, total_minor: subtotal + tax_total,
           party_snapshot: party_snapshot(vendor, vendor_registration),

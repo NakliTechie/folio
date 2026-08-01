@@ -120,6 +120,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_redirected_to root_path(tenant_id: org.tenant.id)
     joiner = User.find_by(email_address: "joiner@x.com")
     assert_equal [ org.tenant.id ], joiner.tenants.pluck(:id)
+    assert joiner.verified?, "the single-use invitation proves control of the invited mailbox"
   end
 
   test "accepting an invite with a blank password re-renders, not a 500" do
@@ -131,10 +132,59 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_nil User.find_by(email_address: "j3@x.com")
   end
 
-  test "the email-verification link marks the user verified" do
+  test "the email-verification link requires a CSRF-protected confirmation before marking the user verified" do
     user = User.create!(email_address: "v@x.com", password: "correct-horse-battery")
-    get verify_email_path(token: user.generate_token_for(:email_verification))
+    token = user.generate_token_for(:email_verification)
+
+    get verify_email_path(token: token)
+    assert_response :success
+    assert_not user.reload.verified?, "mail scanners must not mutate verification state with GET"
+    assert_select "form[action='#{confirm_email_verification_path}'][method=post]" do
+      assert_select "input[name=token][value=?]", token
+    end
+
+    post confirm_email_verification_path, params: { token: token }
+    assert_redirected_to root_path
     assert user.reload.verified?
+  end
+
+  test "production verification policy permits reads and recovery but rejects authenticated writes" do
+    previous = Rails.application.config.x.email_verification_required
+    Rails.application.config.x.email_verification_required = true
+    org = Onboarding::SignUp.call(
+      email: "unverified@folio.invalid", password: "correct-horse-battery", org_name: "Unverified Books"
+    )
+    sign_in_as(org.user)
+
+    get api_v1_accounts_path
+    assert_response :success
+
+    assert_no_difference "Account.count" do
+      post api_v1_accounts_path,
+        params: { code: "6999", name: "Must verify", account_type: "expense" },
+        as: :json
+    end
+    assert_response :forbidden
+    assert_equal "email verification required before writes", JSON.parse(response.body).fetch("error")
+
+    assert_enqueued_with(job: VerificationDeliveryJob, args: [ org.user.id ]) do
+      post verification_delivery_path
+    end
+    assert_redirected_to root_path(tenant_id: org.tenant.id)
+    assert_equal "queued", org.user.reload.verification_delivery_state
+
+    token = org.user.generate_token_for(:email_verification)
+    post confirm_email_verification_path, params: { token: token }
+    assert org.user.reload.verified?
+
+    assert_difference "Account.count", 1 do
+      post api_v1_accounts_path,
+        params: { code: "6999", name: "Now verified", account_type: "expense" },
+        as: :json
+    end
+    assert_response :created
+  ensure
+    Rails.application.config.x.email_verification_required = previous
   end
 
   test "bearer tokens are query parameters rather than raw request-path segments" do
@@ -165,5 +215,6 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_response :success
     assert_select "body", text: /Signed in as #{Regexp.escape(existing.email_address)}/
+    assert existing.reload.verified?
   end
 end

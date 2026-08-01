@@ -162,6 +162,8 @@ class CreditNoteTest < ActiveSupport::TestCase
       document_date: DOCUMENT_DATE,
       due_date: DOCUMENT_DATE + 30,
       place_of_supply_state_code: "29",
+      place_of_supply_override_reason: "Contract identifies Karnataka as the place of supply",
+      actor: @org.user,
       lines: [ { item_id: @service.id, quantity: "3", unit_price: "0.01" } ]
     )
     Documents::Post.call(tiny_invoice, actor: "u:#{@org.user.id}")

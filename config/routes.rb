@@ -147,6 +147,7 @@ Rails.application.routes.draw do
   end
   resource :registration, only: %i[new create]
   get "verify", to: "registrations#verify", as: :verify_email
+  post "verify", to: "registrations#confirm_verification", as: :confirm_email_verification
   resource :verification_delivery, only: :create
   resources :invitations, only: :create do
     post :resend, on: :member
@@ -162,6 +163,7 @@ Rails.application.routes.draw do
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
+  get "ready" => "readiness#show", as: :readiness
   get "favicon.ico", to: redirect("/icon.png")
 
   # Defines the root path route ("/")

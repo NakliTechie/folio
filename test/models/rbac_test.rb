@@ -48,7 +48,20 @@ class RbacTest < ActiveSupport::TestCase
     refute Rbac::Presets.role_for(@tenant, "operator").permits?("documents.post"), "operator cannot post vouchers"
     refute Rbac::Presets.role_for(@tenant, "operator").permits?("accounts.manage"), "operator cannot edit the COA"
     assert Rbac::Presets.role_for(@tenant, "viewer").permits?("reports.read")
+    assert Rbac::Presets.role_for(@tenant, "viewer").permits?("masters.read")
+    assert Rbac::Presets.role_for(@tenant, "viewer").permits?("accounts.read")
     refute Rbac::Presets.role_for(@tenant, "viewer").permits?("documents.post"), "viewer is read-only"
+  end
+
+  test "centrally managed presets remove retired authority during reconciliation" do
+    viewer = Rbac::Presets.role_for(@tenant, "viewer")
+    viewer.role_permissions.create!(capability: "retired.manage")
+    viewer.role_permissions.find_by!(capability: "masters.read").destroy!
+
+    Rbac::Presets.seed_for!(@tenant)
+
+    assert_equal Rbac::Presets::MATRIX.fetch("viewer").fetch(:caps).sort,
+      viewer.reload.role_permissions.pluck(:capability).sort
   end
 
   test "Authorization.permits? resolves the user's role in the given tenant" do

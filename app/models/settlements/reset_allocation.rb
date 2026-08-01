@@ -4,7 +4,7 @@ module Settlements
   module ResetAllocation
     module_function
 
-    def call(document:, allocation_id:, actor:, reset_on: nil)
+    def call(document:, allocation_id:, actor:, user:, reset_on: nil)
       reset_on ||= Tenant.find(document.tenant_id).business_date
       ActiveRecord::Base.transaction do
         LedgerEvent.acquire_tenant_lock!(document.tenant_id)
@@ -17,6 +17,10 @@ module Settlements
         unless allocation.applied? && allocation.settlement_reallocation.nil?
           raise InvalidReset, "allocation is not currently applied"
         end
+
+        target_item = allocation.target_item
+        settlement_item = settlement_line_for(document, allocation)
+        PeriodGuard.assert_mutable!(lines: [ target_item, settlement_item ], user: user)
 
         target_event = clearing_event!(document, allocation.target_clearing_event_id)
         settlement_event = clearing_event!(document, allocation.settlement_clearing_event_id)
@@ -42,6 +46,14 @@ module Settlements
 
     def clearing_event!(document, event_id)
       LedgerEvent.find_by!(tenant_id: document.tenant_id, id: event_id, action: "items.cleared")
+    end
+
+    def settlement_line_for(document, allocation)
+      EntryLine.joins(:entry).find_by!(
+        tenant_id: document.tenant_id,
+        entries: { document_id: document.id },
+        line_no: allocation.line_no + 1
+      )
     end
   end
 end

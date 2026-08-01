@@ -9,6 +9,7 @@ module Api
     class BaseController < ActionController::Base
       include Authentication
       include TenantScoped
+      include EmailVerificationGate
       protect_from_forgery with: :exception
 
       rescue_from ActiveRecord::RecordNotFound, with: :not_found
@@ -50,6 +51,10 @@ module Api
 
       def request_authentication
         render json: { error: "authentication required" }, status: :unauthorized
+      end
+
+      def deny_unverified_email_write
+        render_error("email verification required before writes", :forbidden)
       end
 
       def current_user

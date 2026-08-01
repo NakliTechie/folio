@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class PartiesController < BrowserController
+  before_action -> { require_capability!("masters.read") }, only: :index
   before_action -> { require_capability!("masters.manage") },
     only: %i[new create edit update deactivate reactivate]
   before_action :set_party, only: %i[edit update deactivate reactivate]

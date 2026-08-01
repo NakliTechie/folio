@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+ENV["RAILS_ENV"] ||= "production"
+require_relative "../config/environment"
+require "json"
+
+abort "production-check only runs with RAILS_ENV=production" unless Rails.env.production?
+
+Rails.application.eager_load!
+readiness = Folio::Readiness.call(include_auxiliary: true)
+abort "dependency readiness failed: #{readiness.fetch(:unavailable).join(', ')}" unless readiness.fetch(:status) == "ok"
+
+key = "production-check:#{SecureRandom.uuid}"
+begin
+  Rails.cache.write(key, "ok", expires_in: 1.minute)
+  abort "shared cache read/write check failed" unless Rails.cache.read(key) == "ok"
+ensure
+  Rails.cache.delete(key)
+end
+
+puts JSON.generate(
+  status: "ok",
+  environment: Rails.env,
+  dependencies: readiness.fetch(:checks),
+  shared_cache: "read_write_ok",
+  mail_delivery: Rails.application.config.action_mailer.delivery_method
+)

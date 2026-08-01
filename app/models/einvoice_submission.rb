@@ -15,6 +15,7 @@ class EinvoiceSubmission < ApplicationRecord
 
   belongs_to :document
   belongs_to :tax_registration
+  has_one :einvoice_cancellation, dependent: :restrict_with_exception
 
   validates :tenant_id, :provider, :status, :schema_version, :request_id,
     :payload, :payload_sha256, :signature_status, presence: true
@@ -34,6 +35,7 @@ class EinvoiceSubmission < ApplicationRecord
 
   def acknowledged? = status == "acknowledged"
   def unresolved? = %w[submitting indeterminate].include?(status)
+  def cancelled? = einvoice_cancellation&.cancelled? || false
 
   private
 

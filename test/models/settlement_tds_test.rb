@@ -143,6 +143,8 @@ class SettlementTdsTest < ActiveSupport::TestCase
       tenant: @org.tenant, party_id: @vendor.id, tax_registration_id: @registration.id,
       document_date: date, due_date: date + 30,
       place_of_supply_state_code: "27", external_reference: reference,
+      place_of_supply_override_reason: "Supplier invoice identifies the Maharashtra recipient location",
+      actor: @org.user,
       tds_section: tds_section,
       lines: [ { item_id: @service.id, quantity: quantity, unit_price: amount } ]
     )

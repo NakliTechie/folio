@@ -22,6 +22,16 @@ module Taxes
               raise Provider::ConfigurationError,
                 "IRP reconciliation is disabled until a reviewed provider is configured"
             end
+
+            def cancel_irn(irn:, reason_code:, remarks:, request_id:)
+              raise Provider::ConfigurationError,
+                "IRP cancellation is disabled until a reviewed provider is configured"
+            end
+
+            def fetch_by_irn(irn:)
+              raise Provider::ConfigurationError,
+                "IRP cancellation reconciliation is disabled until a reviewed provider is configured"
+            end
           end
         end
       end

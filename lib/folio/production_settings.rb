@@ -40,6 +40,8 @@ module Folio
     def validate!
       missing = REQUIRED.select { |name| value(name).empty? }
       fail_with("required settings are blank: #{missing.join(', ')}") if missing.any?
+      validate_signing_secret!
+      validate_database_topology!
       validate_host!(app_host, "FOLIO_APP_HOST")
       validate_host!(smtp_address, "FOLIO_SMTP_ADDRESS")
       validate_host!(smtp_domain, "FOLIO_SMTP_DOMAIN")
@@ -87,6 +89,44 @@ module Folio
     def validate_host!(host, name)
       fail_with("#{name} must be a real hostname without a scheme or path") if
         host.empty? || !host.match?(HOST) || placeholder?(host)
+    end
+
+    def validate_signing_secret!
+      master_key = value("RAILS_MASTER_KEY")
+      secret_key_base = value("SECRET_KEY_BASE")
+      return if master_key.present? || secret_key_base.length >= 64
+
+      fail_with("set RAILS_MASTER_KEY or a SECRET_KEY_BASE of at least 64 characters")
+    end
+
+    def validate_database_topology!
+      urls = %w[DATABASE_URL QUEUE_DATABASE_URL CACHE_DATABASE_URL].to_h do |name|
+        [ name, value(name) ]
+      end
+      if urls.values.any?(&:present?)
+        missing = urls.select { |_name, url| url.blank? }.keys
+        fail_with("database URL topology is incomplete: #{missing.join(', ')}") if missing.any?
+        identities = urls.transform_values { |url| database_identity!(url) }
+        if identities.values.uniq.length != identities.length
+          fail_with("primary, queue, and cache database URLs must name three distinct databases")
+        end
+        return
+      end
+
+      password = value("FOLIO_DATABASE_PASSWORD")
+      if password.blank? || placeholder?(password)
+        fail_with("set all three database URLs or a non-placeholder FOLIO_DATABASE_PASSWORD")
+      end
+    end
+
+    def database_identity!(url)
+      uri = URI.parse(url)
+      unless %w[postgres postgresql].include?(uri.scheme) && uri.host.present? && uri.path.to_s.delete_prefix("/").present?
+        fail_with("database URLs must be PostgreSQL URLs with a host and database name")
+      end
+      [ uri.host.downcase, uri.port, uri.path.delete_prefix("/") ]
+    rescue URI::InvalidURIError
+      fail_with("database URLs must be valid PostgreSQL URLs")
     end
 
     def placeholder?(value)

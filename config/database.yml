@@ -84,7 +84,21 @@ production:
     database: folio_production
     username: folio
     password: <%= ENV["FOLIO_DATABASE_PASSWORD"] %>
+    <% unless ENV["DATABASE_URL"].to_s.empty? %>
+    url: <%= ENV["DATABASE_URL"] %>
+    <% end %>
   queue:
     <<: *primary_production
     database: folio_production_queue
     migrations_paths: db/queue_migrate
+    schema_format: ruby
+    <% unless ENV["QUEUE_DATABASE_URL"].to_s.empty? %>
+    url: <%= ENV["QUEUE_DATABASE_URL"] %>
+    <% end %>
+  cache:
+    <<: *primary_production
+    database: folio_production_cache
+    migrations_paths: db/cache_migrate
+    <% unless ENV["CACHE_DATABASE_URL"].to_s.empty? %>
+    url: <%= ENV["CACHE_DATABASE_URL"] %>
+    <% end %>

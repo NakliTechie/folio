@@ -11,6 +11,8 @@ module Taxes
             :irn, :ack_number, :acknowledged_at, :signed_invoice, :signed_qr_code,
             :raw_response, :signature_status
           )
+          CancellationAcknowledgement = Data.define(:irn, :cancelled_at, :raw_response)
+          IrnStatus = Data.define(:irn, :status, :cancelled_at, :raw_response)
 
           class Error < StandardError
             attr_reader :code, :raw_response
@@ -37,6 +39,16 @@ module Taxes
             # Used after an ambiguous transport failure; adapters must query by statutory
             # document identity instead of blindly generating the same IRN again.
             def fetch_by_document(seller_gstin:, document_type:, document_number:, document_date:)
+              raise NotImplementedError
+            end
+
+            def cancel_irn(irn:, reason_code:, remarks:, request_id:)
+              raise NotImplementedError
+            end
+
+            # Used after an ambiguous cancellation. Returns normalized active/cancelled state;
+            # adapters must not infer cancellation from an HTTP timeout.
+            def fetch_by_irn(irn:)
               raise NotImplementedError
             end
           end
@@ -66,6 +78,27 @@ module Taxes
               raise InvalidPayload, "IRP raw response must be retained as an object"
             end
             acknowledgement
+          end
+
+          def validate_cancellation_acknowledgement!(acknowledgement)
+            unless acknowledgement.is_a?(CancellationAcknowledgement) &&
+                   acknowledgement.irn.to_s.match?(/\A[0-9a-fA-F]{64}\z/) &&
+                   acknowledgement.cancelled_at.respond_to?(:iso8601) &&
+                   acknowledgement.raw_response.is_a?(Hash)
+              raise InvalidPayload, "IRP adapter returned invalid cancellation evidence"
+            end
+            acknowledgement
+          end
+
+          def validate_irn_status!(status)
+            unless status.is_a?(IrnStatus) && status.irn.to_s.match?(/\A[0-9a-fA-F]{64}\z/) &&
+                   %w[active cancelled].include?(status.status) && status.raw_response.is_a?(Hash)
+              raise InvalidPayload, "IRP adapter returned an invalid IRN status"
+            end
+            if status.status == "cancelled" && !status.cancelled_at.respond_to?(:iso8601)
+              raise InvalidPayload, "cancelled IRN status is missing its cancellation time"
+            end
+            status
           end
         end
       end

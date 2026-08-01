@@ -91,7 +91,7 @@ cannot enter the product until selected-office context and complete read/write i
 | **Accountant** | governed masters, journals, invoices/bills, settlements, and reports |
 | **Operator** | invoices, bills, receipts/payments, preview, and reports; no COA or period close |
 | **CA / Auditor** | reports, adjustment journals, and period control; no master edits |
-| **Viewer** | read-only (reports, ledgers) |
+| **Viewer** | read-only reports, ledgers, accounts, and master data |
 
 Capability checks run server-side. Posted entries freeze the resolved role/limit authority; the event
 log is hash-chained but not yet cryptographically signed by the user.
@@ -161,9 +161,12 @@ DATABASE_URL=postgresql:///folio_release_baseline_YYYYMMDD \
 The current checkpoint includes the governed ledger, India B2B sales/purchases and linked
 adjustments, cash settlement/correction, current-state ageing and party ledgers, GST day book and
 filing JSON, credit-event/GST-exclusive TDS, period controls, tenant-wide RBAC, replay recovery, and
-browser/API flows. INV-01 v1.1 requests and IRP acknowledgement artifacts have a persistent provider
-seam, but live IRP/GSP submission is deliberately disabled until a provider and credentials are
-chosen; an offline export is never presented as an IRN. The remaining sequence is production launch,
+browser/API flows. INV-01 v1.1 requests, IRP acknowledgement artifacts, and the governed IRN
+cancellation/reconciliation boundary have a persistent provider seam. Live IRP/GSP calls remain
+deliberately disabled until a provider, credentials, and sandbox certification are approved; an
+offline export is never presented as an IRN. The launch image, shared cache, readiness checks,
+backup verifier, and Cloudflare Tunnel topology are prepared. Real host/mail/provider values and a
+trusted deployed-origin acceptance run remain operator activation gates. The subsequent sequence is
 contract management, full-suite accounting, multi-office/multi-country depth, and the complete
 `.khata` bridge.
 
@@ -172,7 +175,8 @@ contract management, full-suite accounting, multi-office/multi-country depth, an
 2. **Repo shape** — monorepo (Bahi + Folio + shared corpus package, keeps corpus authoritative) vs
    separate repos sharing a published corpus package. Leaning a shared `khata-conformance`
    repo/package both depend on (Bahi is its own repo today).
-3. **Self-host packaging** — Docker Compose vs single-binary-ish; how far to go for v1.
+3. **Launch host/provider** — the Docker image and Cloudflare Tunnel topology are fixed; select the
+   real origin host, public hostname, and operational owner.
 4. **Managed billing** model + tenant provisioning.
 
 ## 15. Production configuration
@@ -182,9 +186,10 @@ is not accepted. Configure these environment variables through the deployment se
 
 - One Rails signing strategy: `RAILS_MASTER_KEY` for encrypted credentials containing
   `secret_key_base`, or a generated `SECRET_KEY_BASE`. Never reuse development/test values.
-- Database topology: either `DATABASE_URL` and `QUEUE_DATABASE_URL`, or
-  `FOLIO_DATABASE_PASSWORD` with the configured `folio_production` and `folio_production_queue`
-  databases/users. The web and worker processes need the same signing secret.
+- Database topology: either all of `DATABASE_URL`, `QUEUE_DATABASE_URL`, and `CACHE_DATABASE_URL`
+  naming three distinct PostgreSQL databases, or `FOLIO_DATABASE_PASSWORD` with the configured
+  `folio_production`, `folio_production_queue`, and `folio_production_cache` databases/users. The web
+  and worker processes need the same signing secret.
 - `FOLIO_APP_HOST` — public hostname only, without a scheme.
 - `FOLIO_MAIL_FROM` — verified sender address.
 - `FOLIO_SMTP_ADDRESS`, `FOLIO_SMTP_USERNAME`, `FOLIO_SMTP_PASSWORD` — provider connection.
@@ -197,16 +202,15 @@ durable Solid Queue database; run `bin/jobs` as a worker, or set `SOLID_QUEUE_IN
 single-server deployment. SMTP submission requires STARTTLS and peer verification; a relay that
 does not advertise STARTTLS fails before authentication.
 
-Folio does not currently ship an attachment surface or a shared Rails cache. Active Storage and
-unused Solid Cache scaffolding are intentionally absent. Before a multi-process launch, choose and
-verify the shared rate-limit/cache topology recorded in the roadmap decision queue.
+Folio does not currently ship an attachment surface. Production uses Solid Cache in its own shared
+PostgreSQL database; signup, verification, invitation, and recovery throttles therefore remain
+consistent across web processes.
 
 Prepare and smoke-test all databases before booting the web or worker processes:
 
 ```sh
 RAILS_ENV=production bin/rails db:prepare
-RAILS_ENV=production bin/rails runner 'puts Rails.application.config.x.mail_from'
-RAILS_ENV=production bin/rails runner 'abort "database unavailable" unless LedgerEvent.limit(1).count >= 0'
+RAILS_ENV=production bin/production-check
 ```
 
 Configure the reverse proxy/access logger to omit query strings or redact the `token` parameter.
@@ -214,6 +218,10 @@ Rails filters token query parameters, and verification/invitation/reset tokens a
 longer embedded in path segments, but an upstream proxy must apply the same rule. Start the web
 process only after `db:prepare`; start `bin/jobs`, then exercise `/up`, signup, invitation, password
 reset, and one worker restart against the deployed mail provider.
+
+The full topology, deploy order, backup/restore policy, monitoring signals, and activation gates are
+in [`docs/production-launch.md`](docs/production-launch.md). The disabled-by-default IRP/GSP contract
+and cancellation rules are in [`docs/irp-adapter-contract.md`](docs/irp-adapter-contract.md).
 
 ---
 

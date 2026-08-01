@@ -3,6 +3,7 @@
 module Api
   module V1
     class AccountsController < BaseController
+      before_action -> { require_capability!("accounts.read") }, only: %i[index show]
       before_action -> { require_capability!("accounts.manage") }, only: %i[create update]
       before_action :set_account, only: %i[show update]
 

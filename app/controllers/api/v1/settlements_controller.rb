@@ -45,7 +45,8 @@ module Api
       def reset
         allocation = Settlements::ResetAllocation.call(
           document: @document, allocation_id: params[:allocation_id],
-          actor: "u:#{current_user.id}", reset_on: [ business_date, @document.document_date ].max
+          actor: "u:#{current_user.id}", user: current_user,
+          reset_on: [ business_date, @document.document_date ].max
         )
         render json: { allocation: allocation_json(allocation) }
       end
@@ -55,7 +56,8 @@ module Api
           document: @document, allocation_id: params[:allocation_id],
           target_entry_line_id: params[:target_entry_line_id],
           clearing_mode: params[:clearing_mode],
-          actor: "u:#{current_user.id}", applied_on: [ business_date, @document.document_date ].max
+          actor: "u:#{current_user.id}", user: current_user,
+          applied_on: [ business_date, @document.document_date ].max
         )
         render json: {
           reallocation: {

@@ -51,6 +51,17 @@ class WalkthroughRoleMatrixTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "all presets can read tenant business masters without gaining mutation authority" do
+    @users.each_key do |role_code|
+      as_role(role_code) do
+        %w[accounts parties items tax_registrations].each do |resource|
+          get "/api/v1/#{resource}"
+          assert_response :success, "#{role_code} should have the explicit read capability for #{resource}"
+        end
+      end
+    end
+  end
+
   test "only owner and close-authorized auditor can change a period state" do
     allowed = %w[owner ca_auditor]
     @users.each_key.with_index do |role_code, index|

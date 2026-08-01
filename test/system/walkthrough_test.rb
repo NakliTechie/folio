@@ -281,6 +281,8 @@ class WalkthroughTest < ApplicationSystemTestCase
     set_date_field "Supplier invoice date", "2026-07-31"
     set_date_field "Due date", "2026-08-30"
     select "27 · Maharashtra", from: "Place of supply (state code)"
+    fill_in "Reason if this differs from the vendor state",
+      with: "Supplier invoice identifies the Maharashtra recipient location"
     select "LEGAL · Legal services", from: "Product or service for line 1"
     fill_in "Quantity for line 1", with: "2"
     fill_in "Unit price for line 1", with: "50.00"
@@ -497,7 +499,7 @@ class WalkthroughTest < ApplicationSystemTestCase
       when "operator"
         open_primary_nav "Settings"
         assert_no_link "Team"
-        assert_no_link "Tax registrations"
+        assert_link "Tax registrations"
         assert_no_link "Choose your first business event"
         open_primary_nav "Purchases"
         click_link "Purchase bills"
@@ -525,7 +527,7 @@ class WalkthroughTest < ApplicationSystemTestCase
       when "ca_auditor"
         open_primary_nav "Settings"
         assert_no_link "Team"
-        assert_no_link "Tax registrations"
+        assert_link "Tax registrations"
         assert_link "Choose your first business event"
         click_link "Reports"
         click_link "Period close"
@@ -541,7 +543,7 @@ class WalkthroughTest < ApplicationSystemTestCase
       when "viewer"
         open_primary_nav "Settings"
         assert_no_link "Team"
-        assert_no_link "Tax registrations"
+        assert_link "Tax registrations"
         assert_no_link "Choose your first business event"
         click_link "Reports"
         assert_selector "h1", text: "Trial balance"
@@ -699,6 +701,8 @@ class WalkthroughTest < ApplicationSystemTestCase
       tenant: org.tenant, party_id: vendor.id, tax_registration_id: registration.id,
       document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
       place_of_supply_state_code: "27", external_reference: "V-INV-1042",
+      place_of_supply_override_reason: "Supplier invoice identifies the Maharashtra recipient location",
+      actor: org.user,
       lines: [ { item_id: service.id, quantity: "2", unit_price: "50.00" } ]
     )
     Documents::Post.call(bill, actor: "u:#{org.user.id}")

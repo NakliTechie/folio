@@ -19,6 +19,10 @@
       <div><dt>Vendor GSTIN</dt><dd><%= @document.party_snapshot.fetch("gstin") %></dd></div>
       <div><dt>Buyer GSTIN</dt><dd><%= @document.tax_registration_snapshot.fetch("identifier") %></dd></div>
       <div><dt>Place of supply</dt><dd><%= Taxes::India::StateCodes.name_for(@document.place_of_supply_state_code) %> (<%= @document.place_of_supply_state_code %>)</dd></div>
+      <div><dt>Place-of-supply basis</dt><dd><%= @document.place_of_supply_evidence.fetch("basis").humanize %></dd></div>
+      <% if @document.place_of_supply_evidence["reason"].present? %>
+        <div><dt>Override evidence</dt><dd><%= @document.place_of_supply_evidence["reason"] %></dd></div>
+      <% end %>
     </dl>
 
     <div class="table-wrap">

@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${1:-}" == "bin/thrust" && "${2:-}" == "bin/rails" && "${3:-}" == "server" ]]; then
+  bin/rails db:prepare
+fi
+
+exec "$@"

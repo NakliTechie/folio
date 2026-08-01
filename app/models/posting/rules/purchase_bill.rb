@@ -18,6 +18,7 @@ module Posting
           required_header = %i[
             party_id tax_registration_id place_of_supply_state_code due_date currency minor_unit_exponent
             subtotal_minor tax_minor total_minor party_snapshot tax_registration_snapshot tax_breakdown
+            place_of_supply_evidence
           ]
           missing = required_header.select { |attribute| document.public_send(attribute).blank? }
           raise Documents::InvalidDocument, "purchase bill is missing: #{missing.join(", ")}" if missing.any?
@@ -35,6 +36,7 @@ module Posting
              buyer_fields.any? { |field| document.tax_registration_snapshot[field].blank? }
             raise Documents::InvalidDocument, "purchase bill statutory snapshots are incomplete"
           end
+          Taxes::India::PlaceOfSupplyEvidence.validate!(document)
 
           validate_lines!(document, lines)
           validate_tds_snapshot!(document)
@@ -64,6 +66,7 @@ module Posting
             due_date: document.due_date,
             extra: {
               "partySnapshot" => document.party_snapshot,
+              "placeOfSupplyEvidence" => document.place_of_supply_evidence,
               "supplierInvoiceNumber" => document.external_reference
             }.compact,
             amounts: [ amount.call(-(document.total_minor - document.tds_minor)) ]

@@ -71,6 +71,13 @@
           <small>This determines whether Folio applies IGST or CGST plus SGST/UTGST.</small>
         </div>
         <div class="form-group">
+          <%= form.label :place_of_supply_override_reason, "Reason if this differs from the customer state" %>
+          <%= form.text_area :place_of_supply_override_reason, rows: 2, maxlength: 500,
+            value: params.dig(:sales_invoice, :place_of_supply_override_reason),
+            placeholder: "For example, contract-specific place-of-supply rule and supporting reference" %>
+          <small>Required only for an override. Folio freezes the explanation and the authorized user with the invoice.</small>
+        </div>
+        <div class="form-group">
           <%= form.label :external_reference, "Customer reference (optional)" %>
           <%= form.text_field :external_reference, maxlength: 100,
             value: params.dig(:sales_invoice, :external_reference), placeholder: "Purchase order or contract" %>

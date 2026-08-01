@@ -25,6 +25,8 @@ module Api
           document_date: params[:document_date],
           due_date: params[:due_date],
           place_of_supply_state_code: params[:place_of_supply_state_code],
+          place_of_supply_override_reason: params[:place_of_supply_override_reason],
+          actor: current_user,
           external_reference: params[:external_reference],
           narration: params[:narration],
           lines: lines_params
@@ -97,6 +99,7 @@ module Api
           document_date: document.document_date,
           due_date: document.due_date,
           place_of_supply_state_code: document.place_of_supply_state_code,
+          place_of_supply_evidence: document.place_of_supply_evidence,
           supply_type: document.supply_type,
           currency: document.currency,
           subtotal_minor: document.subtotal_minor,
@@ -144,6 +147,24 @@ module Api
           error_code: submission.error_code,
           error_message: submission.error_message
         }
+        cancellation = submission.einvoice_cancellation
+        result[:cancellation_eligible_until] =
+          Taxes::India::Gst::EInvoice::Cancellation.eligible_until(submission) if submission.acknowledged?
+        result[:cancellation] = if cancellation
+          {
+            id: cancellation.id,
+            status: cancellation.status,
+            provider: cancellation.provider,
+            request_id: cancellation.request_id,
+            reason_code: cancellation.reason_code,
+            remarks: cancellation.remarks,
+            requested_at: cancellation.requested_at,
+            attempt_count: cancellation.attempt_count,
+            cancelled_at: cancellation.cancelled_at,
+            error_code: cancellation.error_code,
+            error_message: cancellation.error_message
+          }
+        end
         result[:payload] = submission.payload if include_payload
         result
       end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class VerificationDeliveriesController < BrowserController
+  allow_unverified_write_access only: :create
   def create
     if Current.user.verified?
       redirect_to root_path(tenant_route_options), notice: "Your email is already verified."

@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "digest"
+require "json"
+require "open3"
+require "pathname"
+
+directory = Pathname.new(ARGV.fetch(0) { abort "usage: bin/verify-backup /absolute/path/to/folio-TIMESTAMP" }).expand_path
+manifest_path = directory.join("manifest.json")
+abort "backup manifest is unavailable" unless directory.directory? && manifest_path.file?
+
+manifest = JSON.parse(manifest_path.read)
+abort "unsupported backup format" unless manifest["format"] == "folio-postgresql-custom-v1"
+
+manifest.fetch("archives").each do |archive|
+  path = directory.join(archive.fetch("file"))
+  abort "#{archive.fetch('name')} archive is unavailable" unless path.file?
+  abort "#{archive.fetch('name')} checksum mismatch" unless Digest::SHA256.file(path).hexdigest == archive.fetch("sha256")
+
+  _stdout, stderr, status = Open3.capture3("pg_restore", "--list", path.to_s)
+  abort "#{archive.fetch('name')} archive cannot be read: #{stderr.lines.first.to_s.strip}" unless status.success?
+end
+
+puts "backup verified: #{manifest.fetch('archives').map { |archive| archive.fetch('name') }.join(', ')}"

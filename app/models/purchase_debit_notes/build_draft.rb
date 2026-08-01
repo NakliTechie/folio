@@ -53,6 +53,7 @@ module PurchaseDebitNotes
           party_id: bill.party_id, tax_registration_id: bill.tax_registration_id,
           supply_type: bill.supply_type,
           place_of_supply_state_code: bill.place_of_supply_state_code,
+          place_of_supply_evidence: bill.place_of_supply_evidence,
           currency: bill.currency, minor_unit_exponent: bill.minor_unit_exponent,
           subtotal_minor: subtotal, tax_minor: tax_total, total_minor: subtotal + tax_total,
           party_snapshot: bill.party_snapshot,

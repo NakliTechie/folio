@@ -7,7 +7,8 @@ module SalesInvoices
     module_function
 
     def call(tenant:, party_id:, tax_registration_id:, document_date:, due_date:,
-             place_of_supply_state_code:, lines:, external_reference: nil, narration: nil)
+             place_of_supply_state_code:, lines:, external_reference: nil, narration: nil,
+             place_of_supply_override_reason: nil, actor: nil)
       invoice_date = parse_date!(document_date, "invoice date")
       payment_due = parse_date!(due_date, "due date")
       raise InvalidInvoice, "due date cannot be before the invoice date" if payment_due < invoice_date
@@ -47,6 +48,10 @@ module SalesInvoices
       unless Taxes::India::StateCodes.valid?(place_state)
         raise InvalidInvoice, "place of supply must be a valid GST state code"
       end
+      place_evidence = Taxes::India::PlaceOfSupplyEvidence.build!(
+        tenant: tenant, party: party, selected_state_code: place_state, actor: actor,
+        override_reason: place_of_supply_override_reason, error_class: InvalidInvoice
+      )
 
       normalized_lines = normalize_lines!(
         tenant: tenant, entity: entity, seller_registration: seller_registration,
@@ -69,6 +74,7 @@ module SalesInvoices
           external_reference: external_reference.presence, narration: narration,
           state: "draft", party: party, tax_registration: seller_registration,
           supply_type: "B2B", place_of_supply_state_code: place_state,
+          place_of_supply_evidence: place_evidence,
           currency: currency, minor_unit_exponent: exponent,
           subtotal_minor: subtotal, tax_minor: tax_total, total_minor: subtotal + tax_total,
           party_snapshot: party_snapshot(party, party_registration),

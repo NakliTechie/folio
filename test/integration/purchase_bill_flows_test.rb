@@ -165,6 +165,7 @@ class PurchaseBillFlowsTest < ActionDispatch::IntegrationTest
         document_date: "2026-07-31",
         due_date: "2026-08-30",
         place_of_supply_state_code: "27",
+        place_of_supply_override_reason: "Supplier invoice identifies the Maharashtra recipient location",
         external_reference: "V-INV-001",
         narration: "July legal fees",
         lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
@@ -177,7 +178,7 @@ class PurchaseBillFlowsTest < ActionDispatch::IntegrationTest
   end
 
   def builder_attributes
-    api_bill_params.merge(tenant: @org.tenant)
+    api_bill_params.merge(tenant: @org.tenant, actor: @org.user)
   end
 
   def invite_user(email, role_code)

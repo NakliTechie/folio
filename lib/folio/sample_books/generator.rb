@@ -151,6 +151,8 @@ module Folio
             tenant: @tenant, party_id: vendor.id, tax_registration_id: @registration.id,
             document_date: purchase.date, due_date: purchase.due_date,
             place_of_supply_state_code: s.home_state, external_reference: purchase.supplier_ref,
+            place_of_supply_override_reason: "Supplier invoice identifies the recipient's registered office",
+            actor: @user,
             tds_section: purchase.tds_section,
             lines: [ { item_id: @items.fetch(purchase.service_code).id,
                        quantity: purchase.quantity, unit_price: purchase.unit_price } ],

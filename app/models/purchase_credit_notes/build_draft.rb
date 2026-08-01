@@ -50,6 +50,7 @@ module PurchaseCreditNotes
           party_id: source.party_id, tax_registration_id: source.tax_registration_id,
           supply_type: source.supply_type,
           place_of_supply_state_code: source.place_of_supply_state_code,
+          place_of_supply_evidence: source.place_of_supply_evidence,
           currency: source.currency, minor_unit_exponent: source.minor_unit_exponent,
           subtotal_minor: subtotal, tax_minor: tax_total, total_minor: subtotal + tax_total,
           party_snapshot: source.party_snapshot,

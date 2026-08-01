@@ -1,0 +1,11 @@
+# Copy outside the repository and replace every placeholder. Keep the credentials file in a
+# provider secret store or a root-only runtime mount; never commit it.
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /run/secrets/cloudflared-credentials.json
+
+ingress:
+  - hostname: books.your-real-domain.tld
+    service: http://127.0.0.1:3000
+    originRequest:
+      connectTimeout: 10s
+  - service: http_status:404

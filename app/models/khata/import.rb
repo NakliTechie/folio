@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "sqlite3"
 require "tempfile"
 
 # B3.5 — the THIN .khata import (the seed of the M4 bridge, not M4 itself).
@@ -161,6 +160,7 @@ module Khata
     end
 
     def with_books
+      require "sqlite3"
       tmp = Tempfile.new([ "khata-import", ".sqlite" ])
       tmp.close
       unless system("unzip", "-p", @khata_path, "books.sqlite", out: tmp.path)

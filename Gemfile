@@ -27,6 +27,9 @@ gem "tzinfo-data", platforms: %i[ windows jruby ]
 # Use the database-backed adapter for Active Job
 gem "solid_queue"
 
+# Share cache entries and application rate-limit counters across production processes.
+gem "solid_cache", "~> 1.0"
+
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
 

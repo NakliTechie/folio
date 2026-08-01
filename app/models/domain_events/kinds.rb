@@ -36,6 +36,11 @@ module DomainEvents
       "einvoice.acknowledged"  => "An IRP acknowledged a document and returned an IRN.",
       "einvoice.rejected"      => "An IRP rejected an e-invoice request.",
       "einvoice.indeterminate" => "An IRP attempt ended without a conclusive response.",
+      "einvoice.cancellation_prepared" => "An immutable IRN cancellation request was prepared.",
+      "einvoice.cancelled" => "An IRP conclusively cancelled an IRN.",
+      "einvoice.cancellation_rejected" => "An IRP rejected an IRN cancellation request.",
+      "einvoice.cancellation_indeterminate" => "An IRN cancellation ended without a conclusive response.",
+      "einvoice.cancellation_reconciled_active" => "IRP reconciliation confirmed that an IRN remains active.",
 
       # --- tenant / membership lifecycle (non-financial governance) ---
       "member.invited"  => "A user was invited to join a tenant with a role.",

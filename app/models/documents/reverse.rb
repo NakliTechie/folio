@@ -32,6 +32,7 @@ module Documents
           party_id: document.party_id, tax_registration_id: document.tax_registration_id,
           supply_type: document.supply_type,
           place_of_supply_state_code: document.place_of_supply_state_code,
+          place_of_supply_evidence: document.place_of_supply_evidence,
           due_date: document.due_date, currency: document.currency,
           minor_unit_exponent: document.minor_unit_exponent,
           subtotal_minor: document.subtotal_minor, tax_minor: document.tax_minor,

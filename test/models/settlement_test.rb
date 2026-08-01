@@ -49,6 +49,8 @@ class SettlementTest < ActiveSupport::TestCase
       tenant: @org.tenant, party_id: @vendor.id, tax_registration_id: @registration.id,
       document_date: Date.new(2026, 7, 31), due_date: Date.new(2026, 8, 30),
       place_of_supply_state_code: "27", external_reference: "V-INV-001",
+      place_of_supply_override_reason: "Supplier invoice records Maharashtra as the place of supply",
+      actor: @org.user,
       lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
     )
     Documents::Post.call(@bill, actor: "u:#{@org.user.id}")
@@ -208,7 +210,7 @@ class SettlementTest < ActiveSupport::TestCase
 
     Settlements::ResetAllocation.call(
       document: receipt, allocation_id: allocation.id,
-      actor: "u:#{@org.user.id}", reset_on: Date.new(2026, 8, 20)
+      actor: "u:#{@org.user.id}", user: @org.user, reset_on: Date.new(2026, 8, 20)
     )
 
     assert allocation.reload.reset?
@@ -230,6 +232,77 @@ class SettlementTest < ActiveSupport::TestCase
     assert_equal 4_000, Posting::Clearing.open_amount(rebuilt_settlement)
   end
 
+  test "a closed originating period blocks allocation reset without appending events" do
+    receipt = build_settlement("RC", @receivable, amount: "40.00", mode: "partial")
+    Documents::Post.call(receipt, actor: "u:#{@org.user.id}")
+    allocation = receipt.document_allocations.first
+    close_period_for!(@receivable)
+
+    assert_no_difference -> { LedgerEvent.where(action: "items.clearing_reset").count } do
+      error = assert_raises(Settlements::InvalidReset) do
+        Settlements::ResetAllocation.call(
+          document: receipt, allocation_id: allocation.id,
+          actor: "u:#{@org.user.id}", user: @org.user, reset_on: Date.new(2026, 8, 20)
+        )
+      end
+      assert_match(/period .* is closed/, error.message)
+    end
+    assert allocation.reload.applied?
+  end
+
+  test "a restricted originating period requires period-lock authority for reset" do
+    receipt = build_settlement("RC", @receivable, amount: "40.00", mode: "partial")
+    Documents::Post.call(receipt, actor: "u:#{@org.user.id}")
+    allocation = receipt.document_allocations.first
+    control_period_for!(@receivable, state: "restricted", capability: "period.lock")
+    operator = invite_user("settlement-period-operator@folio.invalid", "operator")
+
+    error = assert_raises(Settlements::InvalidReset) do
+      Settlements::ResetAllocation.call(
+        document: receipt, allocation_id: allocation.id,
+        actor: "u:#{operator.id}", user: operator, reset_on: Date.new(2026, 8, 20)
+      )
+    end
+    assert_match(/capability 'period.lock'/, error.message)
+
+    Settlements::ResetAllocation.call(
+      document: receipt, allocation_id: allocation.id,
+      actor: "u:#{@org.user.id}", user: @org.user, reset_on: Date.new(2026, 8, 20)
+    )
+    assert allocation.reload.reset?
+  end
+
+  test "a closed new-target period blocks reallocation and preserves unapplied cash" do
+    receipt = build_settlement("RC", @receivable, amount: "40.00", mode: "partial")
+    Documents::Post.call(receipt, actor: "u:#{@org.user.id}")
+    allocation = receipt.document_allocations.first
+    Settlements::ResetAllocation.call(
+      document: receipt, allocation_id: allocation.id,
+      actor: "u:#{@org.user.id}", user: @org.user, reset_on: Date.new(2026, 8, 20)
+    )
+    later_invoice = SalesInvoices::BuildDraft.call(
+      tenant: @org.tenant, party_id: @customer.id, tax_registration_id: @registration.id,
+      document_date: Date.new(2026, 9, 1), due_date: Date.new(2026, 9, 30),
+      place_of_supply_state_code: "27",
+      lines: [ { item_id: @service.id, quantity: "1", unit_price: "50.00" } ]
+    )
+    Documents::Post.call(later_invoice, actor: "u:#{@org.user.id}")
+    target = stable_item(later_invoice, "1200")
+    close_period_for!(target)
+
+    assert_no_difference "SettlementReallocation.count" do
+      error = assert_raises(Settlements::InvalidReset) do
+        Settlements::Reallocate.call(
+          document: receipt, allocation_id: allocation.id, target_entry_line_id: target.id,
+          clearing_mode: "partial", actor: "u:#{@org.user.id}", user: @org.user,
+          applied_on: Date.new(2026, 9, 5)
+        )
+      end
+      assert_match(/period .* is closed/, error.message)
+    end
+    assert allocation.reload.reset?
+  end
+
   test "a reset receipt can be governedly reapplied to another invoice for the same customer" do
     second_invoice = SalesInvoices::BuildDraft.call(
       tenant: @org.tenant, party_id: @customer.id, tax_registration_id: @registration.id,
@@ -244,13 +317,13 @@ class SettlementTest < ActiveSupport::TestCase
     allocation = receipt.document_allocations.first
     Settlements::ResetAllocation.call(
       document: receipt, allocation_id: allocation.id,
-      actor: "u:#{@org.user.id}", reset_on: Date.new(2026, 8, 20)
+      actor: "u:#{@org.user.id}", user: @org.user, reset_on: Date.new(2026, 8, 20)
     )
 
     reallocation = Settlements::Reallocate.call(
       document: receipt, allocation_id: allocation.id,
       target_entry_line_id: second_receivable.id, clearing_mode: "partial",
-      actor: "u:#{@org.user.id}", applied_on: Date.new(2026, 8, 21)
+      actor: "u:#{@org.user.id}", user: @org.user, applied_on: Date.new(2026, 8, 21)
     )
 
     assert reallocation.persisted?
@@ -271,7 +344,7 @@ class SettlementTest < ActiveSupport::TestCase
 
     Settlements::ResetAllocation.call(
       document: receipt, allocation_id: allocation.id,
-      actor: "u:#{@org.user.id}", reset_on: Date.new(2026, 8, 20)
+      actor: "u:#{@org.user.id}", user: @org.user, reset_on: Date.new(2026, 8, 20)
     )
 
     assert_not allocation.target_item.residuals.exists?
@@ -315,5 +388,27 @@ class SettlementTest < ActiveSupport::TestCase
 
   def allocation(target, amount, mode = "partial")
     { target_entry_line_id: target.id, amount: amount, clearing_mode: mode }
+  end
+
+  def close_period_for!(line)
+    control_period_for!(line, state: "closed")
+  end
+
+  def control_period_for!(line, state:, capability: nil)
+    PeriodControl.create!(
+      tenant_id: line.tenant_id, entity_id: line.entity_id, ledger_id: line.ledger_id,
+      account_class: Posting::PostEntry.account_class_for(party_role: line.party_role),
+      fiscal_year: line.entry.fiscal_year, period_no: line.entry.period_no,
+      state: state, capability: capability, domain: "posting"
+    )
+  end
+
+  def invite_user(email, role_code)
+    invitation = Onboarding::Invite.create!(
+      tenant: @org.tenant, email: email, role_code: role_code, invited_by: @org.user
+    )
+    Onboarding::Invite.accept!(
+      token: invitation.generate_token_for(:invite), password: "correct-horse-battery"
+    )
   end
 end

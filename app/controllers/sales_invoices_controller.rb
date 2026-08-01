@@ -13,10 +13,12 @@ class SalesInvoicesController < BrowserController
   def show
     @simulation = Documents::Simulate.call(@document) if @document.postable?
     @einvoice_submission = @document.einvoice_submission
+    @einvoice_cancellation = @einvoice_submission&.einvoice_cancellation
   end
 
   def print
     @einvoice_submission = @document.einvoice_submission
+    @einvoice_cancellation = @einvoice_submission&.einvoice_cancellation
     return if @document.statutory_printable?
 
     redirect_to sales_invoice_path(@document, tenant_route_options),
@@ -65,6 +67,8 @@ class SalesInvoicesController < BrowserController
       document_date: invoice_params[:document_date],
       due_date: invoice_params[:due_date],
       place_of_supply_state_code: invoice_params[:place_of_supply_state_code],
+      place_of_supply_override_reason: invoice_params[:place_of_supply_override_reason],
+      actor: Current.user,
       external_reference: invoice_params[:external_reference],
       narration: invoice_params[:narration],
       lines: invoice_params[:lines]
@@ -149,6 +153,7 @@ class SalesInvoicesController < BrowserController
       :document_date,
       :due_date,
       :place_of_supply_state_code,
+      :place_of_supply_override_reason,
       :external_reference,
       :narration,
       lines: %i[item_id quantity unit_price]

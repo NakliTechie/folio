@@ -1,12 +1,20 @@
 # frozen_string_literal: true
 
+require "digest"
+
 # The invite path. An owner (users.manage) invites an email into the current tenant with a
 # role; the invitee accepts via the signed token. Accept is unauthenticated (they may have no
 # account yet) and needs no current tenant.
 class InvitationsController < ApplicationController
   include TenantScoped
   allow_unauthenticated_access only: %i[accept do_accept]
+  allow_unverified_write_access only: :do_accept
   skip_before_action :require_tenant, only: %i[accept do_accept]
+  rate_limit to: 20, within: 10.minutes, only: :do_accept, name: "ip",
+    with: -> { redirect_to accept_invitation_path(token: params[:token]), alert: "Too many attempts. Try again later." }
+  rate_limit to: 8, within: 10.minutes, only: :do_accept, name: "token",
+    by: -> { Digest::SHA256.hexdigest(params[:token].to_s) },
+    with: -> { redirect_to accept_invitation_path(token: params[:token]), alert: "Too many attempts for this invitation. Try again later." }
 
   def create
     return head :forbidden unless owner?

@@ -1,0 +1,14 @@
+<% content_for :title, "Verify your email · Folio" %>
+
+<main id="main-content" class="auth-shell">
+  <section class="auth-card" aria-labelledby="verification-title">
+    <p class="eyebrow">Email verification</p>
+    <h1 id="verification-title">Confirm this mailbox</h1>
+    <p>The link is valid for <strong><%= @user.email_address %></strong>. Confirming proves that Folio can reach you for account recovery and company invitations.</p>
+
+    <%= form_with url: confirm_email_verification_path, method: :post do |form| %>
+      <%= form.hidden_field :token, value: @token %>
+      <%= form.submit "Verify email", class: "button" %>
+    <% end %>
+  </section>
+</main>

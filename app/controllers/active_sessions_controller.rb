@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class ActiveSessionsController < BrowserController
+  allow_unverified_write_access only: :destroy
   def destroy
     target = Current.user.sessions.find(params[:id])
     if target.id == Current.session.id

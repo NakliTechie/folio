@@ -37,5 +37,6 @@ module Folio
     # Non-production environments use the reserved .invalid domain. Production overrides this
     # with a required sender identity in config/environments/production.rb.
     config.x.mail_from = "folio@example.invalid"
+    config.x.email_verification_required = false
   end
 end

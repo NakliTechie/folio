@@ -86,11 +86,21 @@ class PurchaseBillTest < ActiveSupport::TestCase
   test "an inter-state bill posts IGST to the input-credit account" do
     bill = build_bill(place_of_supply_state_code: "29")
     assert_equal({ "igst" => 1_800 }, bill.tax_breakdown)
+    assert_equal "manual_override", bill.place_of_supply_evidence.fetch("basis")
 
     entry = Documents::Post.call(bill, actor: "u:#{@org.user.id}")
     tax_line = entry.entry_lines.find_by!(account_code: "1210")
     assert_equal "igst", tax_line.tax_component
     assert_equal 1_800, tax_line.amounts.find_by!(slot_role: "transaction").amount_minor
+  end
+
+  test "a purchase place-of-supply override requires frozen evidence" do
+    error = assert_raises(PurchaseBills::InvalidBill) do
+      build_bill(place_of_supply_state_code: "29", override_evidence: false)
+    end
+
+    assert_match(/explain why/, error.message)
+    assert_equal "party_address", build_bill.place_of_supply_evidence.fetch("basis")
   end
 
   test "supplier invoice references are case-insensitively unique per vendor" do
@@ -202,7 +212,10 @@ class PurchaseBillTest < ActiveSupport::TestCase
 
   private
 
-  def build_bill(party_id: @vendor.id, place_of_supply_state_code: "27", external_reference: "V-INV-001")
+  def build_bill(party_id: @vendor.id, place_of_supply_state_code: "27", external_reference: "V-INV-001",
+                 override_evidence: true)
+    vendor = Party.find(party_id)
+    override = place_of_supply_state_code != vendor.state_code && override_evidence
     PurchaseBills::BuildDraft.call(
       tenant: @org.tenant,
       party_id: party_id,
@@ -210,6 +223,8 @@ class PurchaseBillTest < ActiveSupport::TestCase
       document_date: BILL_DATE,
       due_date: BILL_DATE + 30,
       place_of_supply_state_code: place_of_supply_state_code,
+      place_of_supply_override_reason: override ? "Supplier invoice records Karnataka as the place of supply" : nil,
+      actor: override ? @org.user : nil,
       external_reference: external_reference,
       narration: "July legal fees",
       lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]

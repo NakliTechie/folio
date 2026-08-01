@@ -3,6 +3,7 @@
 module Api
   module V1
     class ItemsController < BaseController
+      before_action -> { require_capability!("masters.read") }, only: %i[index show]
       before_action -> { require_capability!("masters.manage") }, only: %i[create update]
       before_action :set_item, only: %i[show update]
 

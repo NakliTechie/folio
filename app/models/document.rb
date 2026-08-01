@@ -33,7 +33,7 @@ class Document < ApplicationRecord
   def postable? = %w[draft parked].include?(state)
   def reversible?
     posted? && reversed_by_document_id.nil? && !%w[CN PC PD RC PY RF].include?(doc_type) &&
-      !einvoice_submission &&
+      (!einvoice_submission || einvoice_submission.cancelled?) &&
       !settlement_activity? &&
       !credit_notes.where(state: %w[posted reversed]).exists? &&
       !debit_notes.where(state: %w[posted reversed]).exists?

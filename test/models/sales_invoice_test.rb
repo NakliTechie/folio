@@ -8,14 +8,20 @@ class SalesInvoiceTest < ActiveSupport::TestCase
   class FakeIrpProvider
     include Taxes::India::Gst::EInvoice::Provider::Contract
 
-    attr_reader :generate_calls, :fetch_calls
+    attr_reader :generate_calls, :fetch_calls, :cancel_calls, :fetch_irn_calls
 
-    def initialize(generate_result: nil, generate_error: nil, fetch_result: nil)
+    def initialize(generate_result: nil, generate_error: nil, fetch_result: nil,
+                   cancel_result: nil, cancel_error: nil, fetch_irn_result: nil)
       @generate_result = generate_result
       @generate_error = generate_error
       @fetch_result = fetch_result
+      @cancel_result = cancel_result
+      @cancel_error = cancel_error
+      @fetch_irn_result = fetch_irn_result
       @generate_calls = 0
       @fetch_calls = 0
+      @cancel_calls = 0
+      @fetch_irn_calls = 0
     end
 
     def name = "fake_irp"
@@ -31,6 +37,18 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     def fetch_by_document(seller_gstin:, document_type:, document_number:, document_date:)
       @fetch_calls += 1
       @fetch_result
+    end
+
+    def cancel_irn(irn:, reason_code:, remarks:, request_id:)
+      @cancel_calls += 1
+      raise @cancel_error if @cancel_error
+
+      @cancel_result
+    end
+
+    def fetch_by_irn(irn:)
+      @fetch_irn_calls += 1
+      @fetch_irn_result
     end
   end
 
@@ -124,12 +142,26 @@ class SalesInvoiceTest < ActiveSupport::TestCase
   test "an inter-state invoice posts IGST instead of CGST and SGST" do
     invoice = build_invoice(place_of_supply_state_code: "29")
     assert_equal({ "igst" => 1_800 }, invoice.tax_breakdown)
+    assert_equal "manual_override", invoice.place_of_supply_evidence.fetch("basis")
+    assert_equal @org.user.id, invoice.place_of_supply_evidence.fetch("actorId")
 
     entry = Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
     tax_line = entry.entry_lines.find_by!(account_code: "2100")
     assert_equal "igst", tax_line.tax_component
     assert_equal 1800, tax_line.tax_rate_basis_points
     assert_equal(-1_800, tax_line.amounts.find_by!(slot_role: "transaction").amount_minor)
+    assert_equal "Contract identifies Karnataka as the place of supply",
+      JSON.parse(LedgerEvent.find(entry.ledger_event_id).payload)
+        .fetch("lines").first.dig("extra", "placeOfSupplyEvidence", "reason")
+  end
+
+  test "a place-of-supply override requires frozen evidence" do
+    error = assert_raises(SalesInvoices::InvalidInvoice) do
+      build_invoice(place_of_supply_state_code: "29", override_evidence: false)
+    end
+
+    assert_match(/explain why/, error.message)
+    assert_equal "party_address", build_invoice.place_of_supply_evidence.fetch("basis")
   end
 
   test "posting rejects altered frozen tax before allocating a number" do
@@ -459,9 +491,158 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     assert_equal 1, DomainEvent.where(action: "einvoice.indeterminate").count
   end
 
+  test "IRP cancellation requires reason remarks authority and the 24-hour window" do
+    _invoice, submission = acknowledged_invoice
+    within_window = submission.acknowledged_at + 1.hour
+
+    assert_raises(Taxes::India::Gst::EInvoice::NotReady) do
+      Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
+        submission: submission, reason_code: "4", remarks: "Other", actor: @org.user,
+        at: within_window
+      )
+    end
+    assert_raises(Taxes::India::Gst::EInvoice::NotReady) do
+      Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
+        submission: submission, reason_code: "2", remarks: "", actor: @org.user,
+        at: within_window
+      )
+    end
+    error = assert_raises(Taxes::India::Gst::EInvoice::NotReady) do
+      Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
+        submission: submission, reason_code: "2", remarks: "Incorrect recipient details",
+        actor: @org.user, at: submission.acknowledged_at + 24.hours + 1.second
+      )
+    end
+    assert_match(/credit note and return adjustment/, error.message)
+    operator = Onboarding::Invite.accept!(
+      token: Onboarding::Invite.create!(
+        tenant: @org.tenant, email: "irp-cancel-operator@folio.invalid",
+        role_code: "operator", invited_by: @org.user
+      ).generate_token_for(:invite),
+      password: "correct-horse-battery"
+    )
+    authority_error = assert_raises(Taxes::India::Gst::EInvoice::NotReady) do
+      Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
+        submission: submission, reason_code: "2", remarks: "Incorrect recipient details",
+        actor: operator, at: within_window
+      )
+    end
+    assert_match(/documents.reverse authority/, authority_error.message)
+    assert_equal 0, EinvoiceCancellation.count
+  end
+
+  test "a conclusive IRP cancellation freezes evidence and separately unlocks accounting reversal" do
+    invoice, submission = acknowledged_invoice
+    cancellation = nil
+    assert_difference -> { DomainEvent.where(action: "einvoice.cancellation_prepared").count }, 1 do
+      cancellation = Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
+        submission: submission, reason_code: "2", remarks: "Incorrect recipient details",
+        actor: @org.user, at: submission.acknowledged_at + 1.hour
+      )
+    end
+    assert_no_difference "EinvoiceCancellation.count" do
+      repeated = Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
+        submission: submission, reason_code: "2", remarks: "Incorrect recipient details",
+        actor: @org.user, at: submission.acknowledged_at + 2.hours
+      )
+      assert_equal cancellation.id, repeated.id
+    end
+    refute invoice.reload.reversible?
+
+    disabled = Taxes::India::Gst::EInvoice::Providers::Disabled.new
+    assert_raises(Taxes::India::Gst::EInvoice::Provider::ConfigurationError) do
+      Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
+        cancellation: cancellation, actor: @org.user, provider: disabled
+      )
+    end
+    result = irp_cancellation_acknowledgement(submission.irn)
+    provider = FakeIrpProvider.new(cancel_result: result)
+    operator = invited_user(role_code: "operator", email: "cancel-submit-operator@folio.invalid")
+    authority_error = assert_raises(Taxes::India::Gst::EInvoice::NotReady) do
+      Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
+        cancellation: cancellation, actor: operator, provider: provider
+      )
+    end
+    assert_match(/documents.reverse authority/, authority_error.message)
+    assert_equal "prepared", cancellation.reload.status
+    assert_equal 0, provider.cancel_calls
+
+    assert_difference -> { DomainEvent.where(action: "einvoice.cancelled").count }, 1 do
+      Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
+        cancellation: cancellation, actor: @org.user, provider: provider
+      )
+    end
+
+    assert cancellation.reload.cancelled?
+    assert_equal result.cancelled_at, cancellation.cancelled_at
+    assert_equal 1, provider.cancel_calls
+    assert invoice.reload.reversible?, "IRP cancellation and accounting reversal are separate governed steps"
+
+    Documents::Reverse.call(
+      invoice, actor: "u:#{@org.user.id}", authorize: { user: @org.user }
+    )
+    assert_equal "reversed", invoice.reload.state
+    assert cancellation.reload.cancelled?
+  end
+
+  test "an ambiguous IRP cancellation cannot retry until get-by-IRN reconciliation" do
+    _invoice, submission = acknowledged_invoice
+    cancellation = Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
+      submission: submission, reason_code: "1", remarks: "Duplicate invoice transmission",
+      actor: @org.user, at: submission.acknowledged_at + 1.hour
+    )
+    transport_error = Taxes::India::Gst::EInvoice::Provider::TransportError.new(
+      "connection ended after cancellation", code: "timeout"
+    )
+    provider = FakeIrpProvider.new(cancel_error: transport_error)
+
+    assert_raises(Taxes::India::Gst::EInvoice::Provider::TransportError) do
+      Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
+        cancellation: cancellation, actor: @org.user, provider: provider
+      )
+    end
+    assert_equal "indeterminate", cancellation.reload.status
+    assert_raises(Taxes::India::Gst::EInvoice::Provider::Error) do
+      Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
+        cancellation: cancellation, actor: @org.user, provider: provider
+      )
+    end
+    assert_equal 1, provider.cancel_calls
+
+    status = Taxes::India::Gst::EInvoice::Provider::IrnStatus.new(
+      irn: submission.irn, status: "cancelled",
+      cancelled_at: submission.acknowledged_at + 2.hours,
+      raw_response: { "Status" => "Cancelled", "Irn" => submission.irn }
+    )
+    reconciliation = FakeIrpProvider.new(fetch_irn_result: status)
+    operator = invited_user(role_code: "operator", email: "cancel-reconcile-operator@folio.invalid")
+    assert_raises(Taxes::India::Gst::EInvoice::NotReady) do
+      Taxes::India::Gst::EInvoice::Cancellation::Reconcile.call(
+        cancellation: cancellation, actor: operator, provider: reconciliation
+      )
+    end
+    assert_equal 0, reconciliation.fetch_irn_calls
+
+    Taxes::India::Gst::EInvoice::Cancellation::Reconcile.call(
+      cancellation: cancellation, actor: @org.user, provider: reconciliation
+    )
+    assert cancellation.reload.cancelled?
+    assert_equal 1, reconciliation.fetch_irn_calls
+  end
+
   private
 
-  def build_invoice(place_of_supply_state_code: "27")
+  def invited_user(role_code:, email:)
+    invitation = Onboarding::Invite.create!(
+      tenant: @org.tenant, email: email, role_code: role_code, invited_by: @org.user
+    )
+    Onboarding::Invite.accept!(
+      token: invitation.generate_token_for(:invite), password: "correct-horse-battery"
+    )
+  end
+
+  def build_invoice(place_of_supply_state_code: "27", override_evidence: true)
+    override = place_of_supply_state_code != @customer.state_code && override_evidence
     SalesInvoices::BuildDraft.call(
       tenant: @org.tenant,
       party_id: @customer.id,
@@ -469,6 +650,8 @@ class SalesInvoiceTest < ActiveSupport::TestCase
       document_date: INVOICE_DATE,
       due_date: INVOICE_DATE + 30,
       place_of_supply_state_code: place_of_supply_state_code,
+      place_of_supply_override_reason: override ? "Contract identifies Karnataka as the place of supply" : nil,
+      actor: override ? @org.user : nil,
       narration: "July consulting",
       lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
     )
@@ -486,6 +669,28 @@ class SalesInvoiceTest < ActiveSupport::TestCase
         "Data" => { "Irn" => "a" * 64, "AckNo" => "112026000000001" }
       },
       signature_status: "provider_verified"
+    )
+  end
+
+  def acknowledged_invoice
+    invoice = build_invoice
+    Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+    submission = Taxes::India::Gst::EInvoice::Prepare.call(
+      document: invoice, actor: "u:#{@org.user.id}", actor_user_id: @org.user.id
+    )
+    provider = FakeIrpProvider.new(generate_result: irp_acknowledgement)
+    Taxes::India::Gst::EInvoice::Submit.call(
+      submission: submission, actor: "u:#{@org.user.id}", actor_user_id: @org.user.id,
+      provider: provider
+    )
+    [ invoice, submission.reload ]
+  end
+
+  def irp_cancellation_acknowledgement(irn)
+    Taxes::India::Gst::EInvoice::Provider::CancellationAcknowledgement.new(
+      irn: irn,
+      cancelled_at: Time.zone.parse("2026-07-31 14:00:00"),
+      raw_response: { "Status" => "Cancelled", "Irn" => irn, "CancelDate" => "31/07/2026 14:00:00" }
     )
   end
 end

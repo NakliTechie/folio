@@ -38,6 +38,7 @@ module CreditNotes
           party_id: invoice.party_id, tax_registration_id: invoice.tax_registration_id,
           supply_type: invoice.supply_type,
           place_of_supply_state_code: invoice.place_of_supply_state_code,
+          place_of_supply_evidence: invoice.place_of_supply_evidence,
           currency: invoice.currency, minor_unit_exponent: invoice.minor_unit_exponent,
           subtotal_minor: subtotal, tax_minor: tax_total, total_minor: subtotal + tax_total,
           party_snapshot: invoice.party_snapshot,

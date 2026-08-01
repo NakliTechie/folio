@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 class TaxRegistrationsController < BrowserController
-  before_action -> { require_capability!("masters.manage") }
+  before_action -> { require_capability!("masters.read") }, only: :index
+  before_action -> { require_capability!("masters.manage") },
+    only: %i[new create edit update deactivate reactivate]
   before_action :set_registration, only: %i[edit update deactivate reactivate]
 
   def index

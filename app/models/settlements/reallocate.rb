@@ -4,7 +4,7 @@ module Settlements
   module Reallocate
     module_function
 
-    def call(document:, allocation_id:, target_entry_line_id:, clearing_mode:, actor:, applied_on: nil)
+    def call(document:, allocation_id:, target_entry_line_id:, clearing_mode:, actor:, user:, applied_on: nil)
       applied_on ||= Tenant.find(document.tenant_id).business_date
       ActiveRecord::Base.transaction do
         LedgerEvent.acquire_tenant_lock!(document.tenant_id)
@@ -21,6 +21,9 @@ module Settlements
         EntryLine.where(id: [ target.id, settlement_line.id ]).order(:id).lock.load
         target.reload
         settlement_line.reload
+        PeriodGuard.assert_mutable!(
+          lines: [ allocation.target_item, target, settlement_line ], user: user
+        )
         validate_pair!(document, allocation, target, settlement_line, config, clearing_mode)
 
         reallocation = SettlementReallocation.create!(

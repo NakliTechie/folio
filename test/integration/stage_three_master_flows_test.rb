@@ -109,7 +109,7 @@ class StageThreeMasterFlowsTest < ActionDispatch::IntegrationTest
     get items_path
     assert_response :success
     get tax_registrations_path
-    assert_redirected_to root_path(tenant_id: @org.tenant.id)
+    assert_response :success
 
     assert_no_difference "Party.count" do
       post parties_path, params: {

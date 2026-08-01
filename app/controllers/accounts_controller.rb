@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class AccountsController < BrowserController
+  before_action -> { require_capability!("accounts.read") }, only: :index
   before_action -> { require_capability!("accounts.manage") },
     only: %i[new create edit update deactivate reactivate]
   before_action :set_account, only: %i[edit update deactivate reactivate]
