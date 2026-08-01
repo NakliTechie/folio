@@ -24,6 +24,19 @@ COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiS
 
 
 --
+-- Name: folio_asset_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_asset_evidence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: % on row id=% rejected', TG_TABLE_NAME, TG_OP, OLD.id;
+END;
+$$;
+
+
+--
 -- Name: folio_contract_allocations_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -190,6 +203,181 @@ CREATE TABLE public.ar_internal_metadata (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+
+--
+-- Name: asset_classes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.asset_classes (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    apc_account_code character varying NOT NULL,
+    accumulated_depreciation_account_code character varying NOT NULL,
+    depreciation_expense_account_code character varying NOT NULL,
+    gain_account_code character varying NOT NULL,
+    loss_account_code character varying NOT NULL,
+    default_useful_life_months integer NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT asset_classes_useful_life_positive CHECK ((default_useful_life_months > 0))
+);
+
+
+--
+-- Name: asset_classes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.asset_classes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: asset_classes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.asset_classes_id_seq OWNED BY public.asset_classes.id;
+
+
+--
+-- Name: asset_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.asset_transactions (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    fixed_asset_id bigint NOT NULL,
+    asset_valuation_id bigint NOT NULL,
+    depreciation_run_id bigint,
+    created_by_id bigint NOT NULL,
+    ledger_event_id bigint,
+    idempotency_key character varying NOT NULL,
+    transaction_type character varying NOT NULL,
+    valuation_code character varying NOT NULL,
+    asset_value_date date NOT NULL,
+    posting_date date NOT NULL,
+    amount_minor bigint NOT NULL,
+    details jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT asset_transactions_amount_positive CHECK ((amount_minor > 0)),
+    CONSTRAINT asset_transactions_code_valid CHECK (((valuation_code)::text = ANY ((ARRAY['BOOK'::character varying, 'TAX_IT'::character varying])::text[]))),
+    CONSTRAINT asset_transactions_type_valid CHECK (((transaction_type)::text = ANY ((ARRAY['acquisition'::character varying, 'depreciation'::character varying])::text[])))
+);
+
+
+--
+-- Name: asset_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.asset_transactions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: asset_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.asset_transactions_id_seq OWNED BY public.asset_transactions.id;
+
+
+--
+-- Name: asset_valuation_terms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.asset_valuation_terms (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    fixed_asset_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    created_domain_event_id bigint NOT NULL,
+    valuation_code character varying NOT NULL,
+    posts_to_ledger boolean DEFAULT false NOT NULL,
+    depreciation_method character varying DEFAULT 'straight_line'::character varying NOT NULL,
+    useful_life_months integer NOT NULL,
+    residual_value_minor bigint DEFAULT 0 NOT NULL,
+    depreciation_start_date date NOT NULL,
+    valid_from date NOT NULL,
+    valid_to date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT asset_valuation_terms_code_valid CHECK (((valuation_code)::text = ANY ((ARRAY['BOOK'::character varying, 'TAX_IT'::character varying])::text[]))),
+    CONSTRAINT asset_valuation_terms_life_positive CHECK ((useful_life_months > 0)),
+    CONSTRAINT asset_valuation_terms_method_valid CHECK (((depreciation_method)::text = 'straight_line'::text)),
+    CONSTRAINT asset_valuation_terms_range_valid CHECK (((valid_to IS NULL) OR (valid_to >= valid_from))),
+    CONSTRAINT asset_valuation_terms_residual_nonnegative CHECK ((residual_value_minor >= 0))
+);
+
+
+--
+-- Name: asset_valuation_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.asset_valuation_terms_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: asset_valuation_terms_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.asset_valuation_terms_id_seq OWNED BY public.asset_valuation_terms.id;
+
+
+--
+-- Name: asset_valuations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.asset_valuations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    fixed_asset_id bigint NOT NULL,
+    asset_valuation_term_id bigint NOT NULL,
+    valuation_code character varying NOT NULL,
+    posts_to_ledger boolean NOT NULL,
+    gross_block_minor bigint DEFAULT 0 NOT NULL,
+    accumulated_depreciation_minor bigint DEFAULT 0 NOT NULL,
+    depreciation_posted_through date,
+    lock_version bigint DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT asset_valuations_code_valid CHECK (((valuation_code)::text = ANY ((ARRAY['BOOK'::character varying, 'TAX_IT'::character varying])::text[]))),
+    CONSTRAINT asset_valuations_values_coherent CHECK (((gross_block_minor >= 0) AND (accumulated_depreciation_minor >= 0) AND (accumulated_depreciation_minor <= gross_block_minor)))
+);
+
+
+--
+-- Name: asset_valuations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.asset_valuations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: asset_valuations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.asset_valuations_id_seq OWNED BY public.asset_valuations.id;
 
 
 --
@@ -767,6 +955,49 @@ ALTER SEQUENCE public.contracts_id_seq OWNED BY public.contracts.id;
 
 
 --
+-- Name: depreciation_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.depreciation_runs (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    idempotency_key character varying NOT NULL,
+    request_sha256 character varying NOT NULL,
+    mode character varying NOT NULL,
+    status character varying NOT NULL,
+    through_date date NOT NULL,
+    posting_date date NOT NULL,
+    result jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT depreciation_runs_mode_valid CHECK (((mode)::text = ANY ((ARRAY['simulate'::character varying, 'post'::character varying])::text[]))),
+    CONSTRAINT depreciation_runs_status_valid CHECK (((status)::text = ANY ((ARRAY['simulated'::character varying, 'posted'::character varying])::text[])))
+);
+
+
+--
+-- Name: depreciation_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.depreciation_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: depreciation_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.depreciation_runs_id_seq OWNED BY public.depreciation_runs.id;
+
+
+--
 -- Name: dimensions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1314,6 +1545,8 @@ CREATE TABLE public.entry_lines (
     tax_component character varying,
     tax_rate_basis_points integer,
     taxable_amount_minor bigint,
+    fixed_asset_id bigint,
+    asset_value_date date,
     CONSTRAINT chk_entry_lines_tax_component CHECK (((tax_component IS NULL) OR ((tax_component)::text = ANY ((ARRAY['cgst'::character varying, 'sgst'::character varying, 'utgst'::character varying, 'igst'::character varying, 'cess'::character varying])::text[]))))
 );
 
@@ -1572,6 +1805,57 @@ CREATE SEQUENCE public.financial_statement_versions_id_seq
 --
 
 ALTER SEQUENCE public.financial_statement_versions_id_seq OWNED BY public.financial_statement_versions.id;
+
+
+--
+-- Name: fixed_assets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixed_assets (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    asset_class_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    created_domain_event_id bigint NOT NULL,
+    asset_number character varying NOT NULL,
+    component_number character varying DEFAULT '0000'::character varying NOT NULL,
+    name character varying NOT NULL,
+    description text,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    acquired_on date,
+    capitalization_date date NOT NULL,
+    quantity numeric(20,6) DEFAULT 1.0 NOT NULL,
+    unit_of_measure character varying DEFAULT 'EA'::character varying NOT NULL,
+    serial_number character varying,
+    inventory_number character varying,
+    manufacturer character varying,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT fixed_assets_quantity_positive CHECK ((quantity > (0)::numeric)),
+    CONSTRAINT fixed_assets_status_valid CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'active'::character varying, 'retired'::character varying])::text[])))
+);
+
+
+--
+-- Name: fixed_assets_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.fixed_assets_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: fixed_assets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.fixed_assets_id_seq OWNED BY public.fixed_assets.id;
 
 
 --
@@ -2688,6 +2972,34 @@ ALTER TABLE ONLY public.accounts ALTER COLUMN id SET DEFAULT nextval('public.acc
 
 
 --
+-- Name: asset_classes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_classes ALTER COLUMN id SET DEFAULT nextval('public.asset_classes_id_seq'::regclass);
+
+
+--
+-- Name: asset_transactions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_transactions ALTER COLUMN id SET DEFAULT nextval('public.asset_transactions_id_seq'::regclass);
+
+
+--
+-- Name: asset_valuation_terms id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_valuation_terms ALTER COLUMN id SET DEFAULT nextval('public.asset_valuation_terms_id_seq'::regclass);
+
+
+--
+-- Name: asset_valuations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_valuations ALTER COLUMN id SET DEFAULT nextval('public.asset_valuations_id_seq'::regclass);
+
+
+--
 -- Name: bank_statement_imports id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2769,6 +3081,13 @@ ALTER TABLE ONLY public.contract_schedules ALTER COLUMN id SET DEFAULT nextval('
 --
 
 ALTER TABLE ONLY public.contracts ALTER COLUMN id SET DEFAULT nextval('public.contracts_id_seq'::regclass);
+
+
+--
+-- Name: depreciation_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.depreciation_runs ALTER COLUMN id SET DEFAULT nextval('public.depreciation_runs_id_seq'::regclass);
 
 
 --
@@ -2888,6 +3207,13 @@ ALTER TABLE ONLY public.financial_statement_sections ALTER COLUMN id SET DEFAULT
 --
 
 ALTER TABLE ONLY public.financial_statement_versions ALTER COLUMN id SET DEFAULT nextval('public.financial_statement_versions_id_seq'::regclass);
+
+
+--
+-- Name: fixed_assets id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixed_assets ALTER COLUMN id SET DEFAULT nextval('public.fixed_assets_id_seq'::regclass);
 
 
 --
@@ -3103,6 +3429,38 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 
 --
+-- Name: asset_classes asset_classes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_classes
+    ADD CONSTRAINT asset_classes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: asset_transactions asset_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_transactions
+    ADD CONSTRAINT asset_transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: asset_valuation_terms asset_valuation_terms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_valuation_terms
+    ADD CONSTRAINT asset_valuation_terms_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: asset_valuations asset_valuations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_valuations
+    ADD CONSTRAINT asset_valuations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: bank_statement_imports bank_statement_imports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3196,6 +3554,14 @@ ALTER TABLE ONLY public.contract_schedules
 
 ALTER TABLE ONLY public.contracts
     ADD CONSTRAINT contracts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: depreciation_runs depreciation_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.depreciation_runs
+    ADD CONSTRAINT depreciation_runs_pkey PRIMARY KEY (id);
 
 
 --
@@ -3332,6 +3698,14 @@ ALTER TABLE ONLY public.financial_statement_sections
 
 ALTER TABLE ONLY public.financial_statement_versions
     ADD CONSTRAINT financial_statement_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: fixed_assets fixed_assets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixed_assets
+    ADD CONSTRAINT fixed_assets_pkey PRIMARY KEY (id);
 
 
 --
@@ -3659,6 +4033,13 @@ CREATE UNIQUE INDEX idx_on_tenant_id_kind_identifier_valid_from_f473959005 ON pu
 
 
 --
+-- Name: idx_on_tenant_id_status_capitalization_date_d37ddd9c8f; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_tenant_id_status_capitalization_date_d37ddd9c8f ON public.fixed_assets USING btree (tenant_id, status, capitalization_date);
+
+
+--
 -- Name: idx_party_tax_registrations_identity; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3775,6 +4156,111 @@ CREATE UNIQUE INDEX index_accounts_on_tenant_id_and_code ON public.accounts USIN
 --
 
 CREATE INDEX index_accounts_on_tenant_id_and_monetary ON public.accounts USING btree (tenant_id, monetary) WHERE (monetary = true);
+
+
+--
+-- Name: index_asset_classes_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_asset_classes_on_tenant_id_and_code ON public.asset_classes USING btree (tenant_id, code);
+
+
+--
+-- Name: index_asset_terms_on_effective_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_asset_terms_on_effective_identity ON public.asset_valuation_terms USING btree (tenant_id, fixed_asset_id, valuation_code, valid_from);
+
+
+--
+-- Name: index_asset_terms_on_one_current_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_asset_terms_on_one_current_term ON public.asset_valuation_terms USING btree (fixed_asset_id, valuation_code) WHERE (valid_to IS NULL);
+
+
+--
+-- Name: index_asset_transactions_on_asset_valuation_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_transactions_on_asset_valuation_id ON public.asset_transactions USING btree (asset_valuation_id);
+
+
+--
+-- Name: index_asset_transactions_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_transactions_on_created_by_id ON public.asset_transactions USING btree (created_by_id);
+
+
+--
+-- Name: index_asset_transactions_on_depreciation_run_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_transactions_on_depreciation_run_id ON public.asset_transactions USING btree (depreciation_run_id);
+
+
+--
+-- Name: index_asset_transactions_on_fixed_asset_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_transactions_on_fixed_asset_id ON public.asset_transactions USING btree (fixed_asset_id);
+
+
+--
+-- Name: index_asset_transactions_on_history; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_transactions_on_history ON public.asset_transactions USING btree (tenant_id, fixed_asset_id, valuation_code, asset_value_date);
+
+
+--
+-- Name: index_asset_transactions_on_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_asset_transactions_on_idempotency ON public.asset_transactions USING btree (tenant_id, idempotency_key, valuation_code);
+
+
+--
+-- Name: index_asset_valuation_terms_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_valuation_terms_on_created_by_id ON public.asset_valuation_terms USING btree (created_by_id);
+
+
+--
+-- Name: index_asset_valuation_terms_on_created_domain_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_valuation_terms_on_created_domain_event_id ON public.asset_valuation_terms USING btree (created_domain_event_id);
+
+
+--
+-- Name: index_asset_valuation_terms_on_fixed_asset_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_valuation_terms_on_fixed_asset_id ON public.asset_valuation_terms USING btree (fixed_asset_id);
+
+
+--
+-- Name: index_asset_valuations_on_asset_valuation_term_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_valuations_on_asset_valuation_term_id ON public.asset_valuations USING btree (asset_valuation_term_id);
+
+
+--
+-- Name: index_asset_valuations_on_fixed_asset_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_asset_valuations_on_fixed_asset_id ON public.asset_valuations USING btree (fixed_asset_id);
+
+
+--
+-- Name: index_asset_valuations_on_view; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_asset_valuations_on_view ON public.asset_valuations USING btree (tenant_id, fixed_asset_id, valuation_code);
 
 
 --
@@ -4135,6 +4621,34 @@ CREATE INDEX index_contracts_on_tenant_id_and_status_and_end_date ON public.cont
 
 
 --
+-- Name: index_depreciation_runs_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_depreciation_runs_on_created_by_id ON public.depreciation_runs USING btree (created_by_id);
+
+
+--
+-- Name: index_depreciation_runs_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_depreciation_runs_on_entity_id ON public.depreciation_runs USING btree (entity_id);
+
+
+--
+-- Name: index_depreciation_runs_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_depreciation_runs_on_office_id ON public.depreciation_runs USING btree (office_id);
+
+
+--
+-- Name: index_depreciation_runs_on_tenant_id_and_idempotency_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_depreciation_runs_on_tenant_id_and_idempotency_key ON public.depreciation_runs USING btree (tenant_id, idempotency_key);
+
+
+--
 -- Name: index_dimensions_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4429,6 +4943,13 @@ CREATE UNIQUE INDEX index_entry_lines_on_entry_ledger_line_no ON public.entry_li
 
 
 --
+-- Name: index_entry_lines_on_fixed_asset_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entry_lines_on_fixed_asset_id ON public.entry_lines USING btree (fixed_asset_id);
+
+
+--
 -- Name: index_entry_lines_on_ledger_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4538,6 +5059,48 @@ CREATE INDEX index_exchange_revaluation_runs_on_office_id ON public.exchange_rev
 --
 
 CREATE INDEX index_financial_statement_assignments_on_account_id ON public.financial_statement_assignments USING btree (account_id);
+
+
+--
+-- Name: index_fixed_assets_on_asset_class_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_fixed_assets_on_asset_class_id ON public.fixed_assets USING btree (asset_class_id);
+
+
+--
+-- Name: index_fixed_assets_on_component_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_fixed_assets_on_component_identity ON public.fixed_assets USING btree (tenant_id, asset_number, component_number);
+
+
+--
+-- Name: index_fixed_assets_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_fixed_assets_on_created_by_id ON public.fixed_assets USING btree (created_by_id);
+
+
+--
+-- Name: index_fixed_assets_on_created_domain_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_fixed_assets_on_created_domain_event_id ON public.fixed_assets USING btree (created_domain_event_id);
+
+
+--
+-- Name: index_fixed_assets_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_fixed_assets_on_entity_id ON public.fixed_assets USING btree (entity_id);
+
+
+--
+-- Name: index_fixed_assets_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_fixed_assets_on_office_id ON public.fixed_assets USING btree (office_id);
 
 
 --
@@ -5010,6 +5573,13 @@ CREATE UNIQUE INDEX index_warehouses_on_tenant_id_and_code ON public.warehouses 
 
 
 --
+-- Name: asset_transactions asset_transactions_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER asset_transactions_immutable BEFORE DELETE OR UPDATE ON public.asset_transactions FOR EACH ROW EXECUTE FUNCTION public.folio_asset_evidence_immutable();
+
+
+--
 -- Name: contract_allocation_lines contract_allocation_lines_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -5151,6 +5721,14 @@ ALTER TABLE ONLY public.user_office_roles
 
 
 --
+-- Name: asset_valuation_terms fk_rails_137e7c59b8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_valuation_terms
+    ADD CONSTRAINT fk_rails_137e7c59b8 FOREIGN KEY (fixed_asset_id) REFERENCES public.fixed_assets(id);
+
+
+--
 -- Name: contract_posting_run_items fk_rails_13b10d0e3f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5159,11 +5737,35 @@ ALTER TABLE ONLY public.contract_posting_run_items
 
 
 --
+-- Name: fixed_assets fk_rails_1586b3a455; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixed_assets
+    ADD CONSTRAINT fk_rails_1586b3a455 FOREIGN KEY (asset_class_id) REFERENCES public.asset_classes(id);
+
+
+--
+-- Name: asset_valuation_terms fk_rails_1678955eff; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_valuation_terms
+    ADD CONSTRAINT fk_rails_1678955eff FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: warehouses fk_rails_18974474f2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.warehouses
     ADD CONSTRAINT fk_rails_18974474f2 FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
+-- Name: entry_lines fk_rails_1d40e13a42; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entry_lines
+    ADD CONSTRAINT fk_rails_1d40e13a42 FOREIGN KEY (fixed_asset_id) REFERENCES public.fixed_assets(id);
 
 
 --
@@ -5199,11 +5801,27 @@ ALTER TABLE ONLY public.contract_schedules
 
 
 --
+-- Name: asset_valuations fk_rails_2e18d9c8af; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_valuations
+    ADD CONSTRAINT fk_rails_2e18d9c8af FOREIGN KEY (fixed_asset_id) REFERENCES public.fixed_assets(id);
+
+
+--
 -- Name: financial_statement_assignments fk_rails_2e41516b26; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.financial_statement_assignments
     ADD CONSTRAINT fk_rails_2e41516b26 FOREIGN KEY (financial_statement_section_id) REFERENCES public.financial_statement_sections(id);
+
+
+--
+-- Name: depreciation_runs fk_rails_3043c4acf0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.depreciation_runs
+    ADD CONSTRAINT fk_rails_3043c4acf0 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -5327,6 +5945,22 @@ ALTER TABLE ONLY public.inventory_transactions
 
 
 --
+-- Name: asset_valuations fk_rails_68c92c7954; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_valuations
+    ADD CONSTRAINT fk_rails_68c92c7954 FOREIGN KEY (asset_valuation_term_id) REFERENCES public.asset_valuation_terms(id);
+
+
+--
+-- Name: asset_transactions fk_rails_6dc5e10bfe; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_transactions
+    ADD CONSTRAINT fk_rails_6dc5e10bfe FOREIGN KEY (fixed_asset_id) REFERENCES public.fixed_assets(id);
+
+
+--
 -- Name: warehouses fk_rails_70cd2f2065; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5399,11 +6033,27 @@ ALTER TABLE ONLY public.inventory_movements
 
 
 --
+-- Name: fixed_assets fk_rails_7fe8af0c4c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixed_assets
+    ADD CONSTRAINT fk_rails_7fe8af0c4c FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
 -- Name: user_office_roles fk_rails_84f904cce7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.user_office_roles
     ADD CONSTRAINT fk_rails_84f904cce7 FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: asset_transactions fk_rails_89a5245dab; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_transactions
+    ADD CONSTRAINT fk_rails_89a5245dab FOREIGN KEY (asset_valuation_id) REFERENCES public.asset_valuations(id);
 
 
 --
@@ -5428,6 +6078,14 @@ ALTER TABLE ONLY public.stock_balances
 
 ALTER TABLE ONLY public.contract_allocation_lines
     ADD CONSTRAINT fk_rails_901065d56c FOREIGN KEY (contract_performance_obligation_id) REFERENCES public.contract_performance_obligations(id);
+
+
+--
+-- Name: depreciation_runs fk_rails_94f7109ada; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.depreciation_runs
+    ADD CONSTRAINT fk_rails_94f7109ada FOREIGN KEY (created_by_id) REFERENCES public.users(id);
 
 
 --
@@ -5511,6 +6169,22 @@ ALTER TABLE ONLY public.stock_balances
 
 
 --
+-- Name: asset_transactions fk_rails_b44828b607; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_transactions
+    ADD CONSTRAINT fk_rails_b44828b607 FOREIGN KEY (depreciation_run_id) REFERENCES public.depreciation_runs(id);
+
+
+--
+-- Name: depreciation_runs fk_rails_b757bb7aba; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.depreciation_runs
+    ADD CONSTRAINT fk_rails_b757bb7aba FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
 -- Name: party_tax_registrations fk_rails_ba92ab1221; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5559,6 +6233,14 @@ ALTER TABLE ONLY public.contract_posting_runs
 
 
 --
+-- Name: asset_transactions fk_rails_d8285cb68e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.asset_transactions
+    ADD CONSTRAINT fk_rails_d8285cb68e FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: documents fk_rails_dd14d0c95c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5572,6 +6254,14 @@ ALTER TABLE ONLY public.documents
 
 ALTER TABLE ONLY public.exchange_revaluation_runs
     ADD CONSTRAINT fk_rails_de5b7fed5a FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
+-- Name: fixed_assets fk_rails_dfa102c168; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixed_assets
+    ADD CONSTRAINT fk_rails_dfa102c168 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -5623,6 +6313,14 @@ ALTER TABLE ONLY public.contract_schedule_lines
 
 
 --
+-- Name: fixed_assets fk_rails_fc55eb6536; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixed_assets
+    ADD CONSTRAINT fk_rails_fc55eb6536 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: user_office_roles fk_user_limits_same_tenant; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5645,6 +6343,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801180000'),
 ('20260801173000'),
 ('20260801172000'),
 ('20260801171000'),

@@ -48,6 +48,13 @@ Rails.application.routes.draw do
   resource :inventory, only: %i[show create] do
     post :create_warehouse
   end
+  resources :fixed_assets, path: "fixed-assets", only: %i[index create] do
+    member { post :acquire }
+    collection do
+      post :create_class
+      post :run_depreciation
+    end
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

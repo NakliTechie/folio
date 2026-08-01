@@ -88,7 +88,7 @@
             </div>
           </details>
 
-          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("journal_vouchers", "opening_balances", "settlements", "accounts", "exchange_rates", "bank_reconciliations", "inventories") %>">
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("journal_vouchers", "opening_balances", "settlements", "accounts", "exchange_rates", "bank_reconciliations", "inventories", "fixed_assets") %>">
             <summary>Accounting</summary>
             <div class="nav-group__menu">
               <%= link_to "Transactions", journal_vouchers_path(tenant_route_options), class: navigation_class("journal_vouchers") %>
@@ -98,6 +98,7 @@
               <%= link_to "Exchange rates", exchange_rates_path(tenant_route_options), class: navigation_class("exchange_rates") if permitted?("currency.read") %>
               <%= link_to "Bank reconciliation", bank_reconciliations_path(tenant_route_options), class: navigation_class("bank_reconciliations") if permitted?("banking.read") %>
               <%= link_to "Inventory", inventory_path(tenant_route_options), class: navigation_class("inventories") if permitted?("inventory.read") %>
+              <%= link_to "Fixed assets", fixed_assets_path(tenant_route_options), class: navigation_class("fixed_assets") if permitted?("assets.read") %>
             </div>
           </details>
 

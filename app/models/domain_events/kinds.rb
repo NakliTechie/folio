@@ -30,6 +30,10 @@ module DomainEvents
       "contract.transaction_price_allocated" => "The transaction price was allocated to obligations.",
       "contract.revenue_schedule_generated" => "A versioned revenue schedule was generated.",
 
+      # --- fixed assets (Batch 9) ---
+      "asset.created" => "A fixed-asset component and its valuation terms were created.",
+      "asset.acquired" => "A fixed asset was capitalized into its book and tax valuations.",
+
       # --- bank reconciliation (Batch 9) ---
       "bank_statement.imported" => "A bank statement was imported with a source fingerprint.",
       "bank_statement.auto_matched" => "Unambiguous bank lines were matched automatically.",

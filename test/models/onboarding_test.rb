@@ -10,7 +10,7 @@ class OnboardingTest < ActiveSupport::TestCase
     assert_equal "acme-consulting", r.tenant.slug
     assert_includes r.user.tenants, r.tenant
     assert_equal "owner", r.user.user_office_roles.first.role_template.code
-    assert_equal 17, Account.where(tenant_id: r.tenant.id).count
+    assert_equal 22, Account.where(tenant_id: r.tenant.id).count
     assert Account.where(tenant_id: r.tenant.id).exists?(code: "1000")
     assert DocumentType.where(tenant_id: r.tenant.id).exists?(code: "JV")
     entity = Entity.find_by!(tenant_id: r.tenant.id, code: "PRIMARY")
@@ -18,6 +18,7 @@ class OnboardingTest < ActiveSupport::TestCase
     assert_equal entity.id, Office.find_by!(tenant_id: r.tenant.id, code: "PRIMARY").entity_id
     assert Ledger.where(tenant_id: r.tenant.id).exists?(code: "PRIMARY")
     assert Warehouse.where(tenant_id: r.tenant.id).exists?(code: "MAIN")
+    assert AssetClass.where(tenant_id: r.tenant.id).exists?(code: "PPE")
     assert_equal 5, RoleTemplate.where(tenant_id: r.tenant.id).count
     assert Authorization.permits?(user: r.user, tenant_id: r.tenant.id, capability: "documents.post"),
       "the new owner can post immediately"

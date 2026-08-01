@@ -13,7 +13,12 @@ module Onboarding
       [ "4000", "Sales", "income" ], [ "4100", "Foreign Exchange Gains", "income" ],
       [ "5000", "Purchases", "expense" ], [ "5100", "Expenses", "expense" ],
       [ "5050", "Inventory Adjustments", "expense" ], [ "5200", "Foreign Exchange Losses", "expense" ],
-      [ "1300", "Inventory", "asset" ]
+      [ "1300", "Inventory", "asset" ],
+      [ "1400", "Property, Plant and Equipment", "asset" ],
+      [ "1410", "Accumulated Depreciation", "asset" ],
+      [ "5150", "Depreciation Expense", "expense" ],
+      [ "4200", "Gain on Asset Disposal", "income" ],
+      [ "5155", "Loss on Asset Disposal", "expense" ]
     ].freeze
 
     module_function
@@ -90,6 +95,18 @@ module Onboarding
         record.office = office
         record.name = "Main warehouse"
         record.warehouse_type = "general"
+      end
+    end
+
+    def asset_class!(tenant)
+      AssetClass.find_or_create_by!(tenant_id: tenant.id, code: "PPE") do |record|
+        record.name = "Property, plant and equipment"
+        record.apc_account_code = "1400"
+        record.accumulated_depreciation_account_code = "1410"
+        record.depreciation_expense_account_code = "5150"
+        record.gain_account_code = "4200"
+        record.loss_account_code = "5155"
+        record.default_useful_life_months = 60
       end
     end
   end

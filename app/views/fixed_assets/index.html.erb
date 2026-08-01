@@ -1,0 +1,100 @@
+<% content_for :title, "Fixed assets · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div><p class="eyebrow">Component asset subledger</p><h1>Fixed assets</h1><p>Maintain separate BOOK and non-posting TAX_IT carrying amounts. Depreciation runs calculate a cumulative daily target and post only the delta.</p></div>
+  </header>
+
+  <% if permitted?("assets.manage") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Account determination</p><h2>Add asset class</h2></div></div>
+      <%= form_with scope: :asset_class, url: create_class_fixed_assets_path(tenant_route_options), method: :post, class: "stacked-form" do |form| %>
+        <div class="form-grid">
+          <div class="field"><%= form.label :code %><%= form.text_field :code, required: true, maxlength: 24 %></div>
+          <div class="field"><%= form.label :name %><%= form.text_field :name, required: true, maxlength: 120 %></div>
+          <div class="field"><%= form.label :default_useful_life_months %><%= form.number_field :default_useful_life_months, min: 1, required: true %></div>
+          <div class="field"><%= form.label :apc_account_code, "Acquisition account" %><%= form.select :apc_account_code, @asset_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :accumulated_depreciation_account_code %><%= form.select :accumulated_depreciation_account_code, @asset_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :depreciation_expense_account_code %><%= form.select :depreciation_expense_account_code, @expense_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :gain_account_code %><%= form.select :gain_account_code, @income_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :loss_account_code %><%= form.select :loss_account_code, @expense_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+        </div>
+        <%= form.submit "Add asset class", class: "button button--quiet" %>
+      <% end %>
+    </section>
+
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Asset workbench</p><h2>Create component asset</h2></div></div>
+      <%= form_with scope: :fixed_asset, url: fixed_assets_path(tenant_route_options), class: "stacked-form" do |form| %>
+        <div class="form-grid">
+          <div class="field"><%= form.label :asset_class_id, "Asset class" %><%= form.select :asset_class_id, @asset_classes.map { |klass| ["#{klass.code} · #{klass.name}", klass.id] }, required: true %></div>
+          <div class="field"><%= form.label :asset_number %><%= form.text_field :asset_number, required: true, maxlength: 32 %></div>
+          <div class="field"><%= form.label :component_number %><%= form.text_field :component_number, value: "0000", required: true, maxlength: 16 %></div>
+          <div class="field"><%= form.label :name %><%= form.text_field :name, required: true, maxlength: 160 %></div>
+          <div class="field"><%= form.label :capitalization_date %><%= form.date_field :capitalization_date, value: business_date, required: true %></div>
+          <div class="field"><%= form.label :quantity %><%= form.number_field :quantity, value: 1, min: "0.000001", step: "0.000001", required: true %></div>
+          <div class="field"><%= form.label :unit_of_measure %><%= form.text_field :unit_of_measure, value: "EA", required: true, maxlength: 16 %></div>
+          <div class="field"><%= form.label :serial_number %><%= form.text_field :serial_number, maxlength: 100 %></div>
+          <div class="field"><%= form.label :inventory_number %><%= form.text_field :inventory_number, maxlength: 100 %></div>
+          <div class="field"><%= form.label :manufacturer %><%= form.text_field :manufacturer, maxlength: 120 %></div>
+          <div class="field"><%= form.label :book_useful_life_months, "BOOK useful life (months)" %><%= form.number_field :book_useful_life_months, value: 60, min: 1, required: true %></div>
+          <div class="field"><%= form.label :book_residual_value, "BOOK residual value" %><%= form.number_field :book_residual_value, value: 0, min: 0, step: "0.01", required: true %></div>
+          <div class="field"><%= form.label :book_depreciation_start_date, "BOOK depreciation start" %><%= form.date_field :book_depreciation_start_date, value: business_date, required: true %></div>
+          <div class="field"><%= form.label :tax_useful_life_months, "TAX_IT useful life (months)" %><%= form.number_field :tax_useful_life_months, value: 60, min: 1, required: true %></div>
+          <div class="field"><%= form.label :tax_residual_value, "TAX_IT residual value" %><%= form.number_field :tax_residual_value, value: 0, min: 0, step: "0.01", required: true %></div>
+          <div class="field"><%= form.label :tax_depreciation_start_date, "TAX_IT depreciation start" %><%= form.date_field :tax_depreciation_start_date, value: business_date, required: true %></div>
+          <div class="field field--wide"><%= form.label :description %><%= form.text_area :description, rows: 2 %></div>
+        </div>
+        <%= form.submit "Create fixed asset", class: "button button--primary", disabled: @asset_classes.empty? %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <% if permitted?("assets.post") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Period run</p><h2>Calculate depreciation</h2></div></div>
+      <%= form_with url: run_depreciation_fixed_assets_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+        <%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %>
+        <%= form.label :through_date %><%= form.date_field :through_date, value: business_date, required: true %>
+        <%= form.label :posting_date %><%= form.date_field :posting_date, value: business_date, required: true %>
+        <%= form.label :mode %><%= form.select :mode, [["Simulate", "simulate"], ["Post delta", "post"]], required: true %>
+        <%= form.submit "Run depreciation", class: "button button--quiet" %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Asset history sheet</p><h2>Carrying amounts</h2></div></div>
+    <% if @fixed_assets.empty? %><div class="empty-state"><p>No fixed assets yet.</p></div><% else %>
+      <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Class</th><th>Status</th><th>Valuation</th><th>Gross block</th><th>Accumulated depreciation</th><th>Net block</th><th>Capitalization</th></tr></thead><tbody>
+        <% @fixed_assets.each do |asset| %>
+          <% asset.asset_valuations.sort_by(&:valuation_code).each_with_index do |valuation, index| %>
+            <tr><td><% if index.zero? %><strong><%= asset.identity %> · <%= asset.name %></strong><% end %></td><td><%= asset.asset_class.code %></td><td><span class="status-badge"><%= asset.status.humanize %></span></td><td><%= valuation.valuation_code %><%= " · non-posting" unless valuation.posts_to_ledger? %></td><td class="money"><%= money_amount(valuation.gross_block_minor) %></td><td class="money"><%= money_amount(valuation.accumulated_depreciation_minor) %></td><td class="money"><%= money_amount(valuation.net_book_value_minor) %></td><td><%= asset.capitalization_date.to_fs(:long) %></td></tr>
+          <% end %>
+          <% if asset.status == "draft" && permitted?("assets.post") %>
+            <tr><td colspan="8">
+              <%= form_with scope: :acquisition, url: acquire_fixed_asset_path(asset, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+                <%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %>
+                <%= form.label :amount %><%= form.number_field :amount, min: "0.01", step: "0.01", required: true %>
+                <%= form.label :offset_account_code, "Offset" %><%= form.select :offset_account_code, @offset_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %>
+                <%= form.label :asset_value_date %><%= form.date_field :asset_value_date, value: asset.capitalization_date, required: true %>
+                <%= form.label :posting_date %><%= form.date_field :posting_date, value: business_date, required: true %>
+                <%= form.label :external_reference %><%= form.text_field :external_reference, maxlength: 120 %>
+                <%= form.submit "Capitalize", class: "button button--quiet" %>
+              <% end %>
+            </td></tr>
+          <% end %>
+        <% end %>
+      </tbody></table></div>
+    <% end %>
+  </section>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Immutable subledger</p><h2>Recent value movements</h2></div></div>
+    <% if @transactions.empty? %><div class="empty-state"><p>No asset transactions posted.</p></div><% else %>
+      <div class="table-wrap"><table><thead><tr><th>Value date</th><th>Asset</th><th>Type</th><th>Valuation</th><th>Amount</th><th>Ledger</th></tr></thead><tbody>
+        <% @transactions.each do |transaction| %><tr><td><%= transaction.asset_value_date.to_fs(:long) %></td><td><%= transaction.fixed_asset.identity %></td><td><%= transaction.transaction_type.humanize %></td><td><%= transaction.valuation_code %></td><td class="money"><%= money_amount(transaction.amount_minor) %></td><td><%= transaction.ledger_event_id ? "Event #{transaction.ledger_event_id}" : "Statistical" %></td></tr><% end %>
+      </tbody></table></div>
+    <% end %>
+  </section>
+</main>
