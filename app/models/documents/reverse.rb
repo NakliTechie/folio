@@ -56,6 +56,7 @@ module Documents
             tenant_id: document.tenant_id, line_no: dl.line_no, account_code: dl.account_code,
             amount_minor: -dl.amount_minor, currency: dl.currency,
             minor_unit_exponent: dl.minor_unit_exponent, narration: dl.narration,
+            extra: ForeignExchange.reverse_extra(dl.extra),
             item_id: dl.item_id, quantity: dl.quantity, unit_price_minor: dl.unit_price_minor,
             taxable_minor: dl.taxable_minor, hsn_sac_code: dl.hsn_sac_code,
             tax_rate_basis_points: dl.tax_rate_basis_points,

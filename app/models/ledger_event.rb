@@ -40,8 +40,10 @@ class LedgerEvent < ApplicationRecord
       )
       if actor_user_id && signature.nil?
         signed = EventSigning.sign(user_id: actor_user_id, hash_hex: hash_hex)
-        signature = signed.signature
-        signing_key_id = signed.key.id
+        if signed
+          signature = signed.signature
+          signing_key_id = signed.key.id
+        end
       end
 
       create!(

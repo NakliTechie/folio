@@ -37,6 +37,9 @@ class Account < ApplicationRecord
     if will_save_change_to_account_type? && posted?
       errors.add(:account_type, "cannot change after the account has postings")
     end
+    if will_save_change_to_monetary? && posted?
+      errors.add(:monetary, "classification cannot change after the account has postings")
+    end
     if will_save_change_to_active?(from: true, to: false) && open_draft_references?
       errors.add(:active, "cannot be deactivated while an open draft references the account")
     end

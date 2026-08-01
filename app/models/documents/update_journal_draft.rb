@@ -8,7 +8,7 @@ module Documents
       posting_on = BuildDraft.parse_date!(posting_date, "posting date")
       tenant = Tenant.find(document.tenant_id)
       entity = Entity.find_by!(tenant_id: tenant.id, id: document.entity_id)
-      normalized_lines = BuildDraft.normalize_lines!(tenant, lines)
+      normalized_lines = BuildDraft.normalize_lines!(tenant, lines, posting_date: posting_on)
 
       Document.transaction do
         document.lock!

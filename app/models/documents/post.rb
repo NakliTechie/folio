@@ -89,14 +89,13 @@ module Documents
       lines = document.document_lines.to_a
       Documents.rule_for(document).validate_document!(document)
 
-      expected_currency = tenant.functional_currency
-      expected_exponent = CurrencyProfile.exponent_for!(expected_currency)
       lines.each do |line|
         raise InvalidDocument, "document line tenant mismatch" unless line.tenant_id == document.tenant_id
         raise InvalidDocument, "document lines must be non-zero" if line.amount_minor.zero?
-        unless line.currency == expected_currency && line.minor_unit_exponent == expected_exponent
+        expected_exponent = CurrencyProfile.exponent_for!(line.currency)
+        unless line.minor_unit_exponent == expected_exponent
           raise InvalidDocument,
-            "#{line.account_code} must use #{expected_currency} with minor-unit exponent #{expected_exponent}"
+            "#{line.account_code} must use #{line.currency} with minor-unit exponent #{expected_exponent}"
         end
       end
     end

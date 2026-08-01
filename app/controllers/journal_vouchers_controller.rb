@@ -119,7 +119,10 @@ class JournalVouchersController < BrowserController
     @draft_values = {
       posting_date: document.posting_date,
       narration: document.narration,
-      amount: helpers.money_input_value(debit&.amount_minor, currency: Current.tenant.functional_currency),
+      amount: helpers.money_input_value(
+        debit&.amount_minor, currency: debit&.currency || Current.tenant.functional_currency
+      ),
+      currency: debit&.currency,
       debit_account_code: debit&.account_code,
       credit_account_code: credit&.account_code
     }
@@ -135,12 +138,14 @@ class JournalVouchersController < BrowserController
       :narration,
       :debit_account_code,
       :credit_account_code,
-      :amount
+      :amount,
+      :currency
     )
   end
 
   def journal_attributes
-    amount_minor = amount_minor!(voucher_params[:amount])
+    currency = voucher_params[:currency].presence || Current.tenant.functional_currency
+    amount_minor = amount_minor!(voucher_params[:amount], currency)
     posting_date = Date.iso8601(voucher_params[:posting_date])
     event_kind = voucher_params[:event_kind].presence || "journal"
 
@@ -174,18 +179,20 @@ class JournalVouchersController < BrowserController
       posting_date: posting_date,
       narration: narration,
       lines: [
-        { account_code: debit_code, amount_minor: amount_minor },
-        { account_code: credit_code, amount_minor: -amount_minor }
+        { account_code: debit_code, amount_minor: amount_minor, currency: currency },
+        { account_code: credit_code, amount_minor: -amount_minor, currency: currency }
       ]
     }
   rescue Date::Error
     raise ArgumentError, "Posting date must be a valid date"
   end
 
-  def amount_minor!(raw_amount)
+  def amount_minor!(raw_amount, currency)
+    exponent = CurrencyProfile.exponent_for!(currency)
     amount = Documents::DecimalInput.parse!(
-      raw_amount, label: "Amount", scale: 2, minimum: BigDecimal("0.01"), error_class: ArgumentError
+      raw_amount, label: "Amount", scale: exponent,
+      minimum: BigDecimal("1") / (10**exponent), error_class: ArgumentError
     )
-    (amount * 100).to_i
+    (amount * (10**exponent)).to_i
   end
 end

@@ -17,7 +17,7 @@ module Documents
       end
       resolved_fiscal_year = Documents.fiscal_year(posting_on, variant: entity.fiscal_year_variant)
       assert_fiscal_year!(fiscal_year, resolved_fiscal_year)
-      normalized_lines = normalize_lines!(tenant, lines)
+      normalized_lines = normalize_lines!(tenant, lines, posting_date: posting_on)
 
       Document.transaction do
         document = Document.create!(
@@ -48,12 +48,11 @@ module Documents
       end
     end
 
-    def normalize_lines!(tenant, lines)
+    def normalize_lines!(tenant, lines, posting_date:)
       rows = Array(lines)
       raise InvalidDocument, "a document needs at least two non-zero lines" if rows.size < 2
 
       expected_currency = tenant.functional_currency
-      expected_exponent = CurrencyProfile.exponent_for!(expected_currency)
       active_codes = Account.active.where(tenant_id: tenant.id,
         code: rows.map { |line| value(line, :account_code).to_s }).pluck(:code)
 
@@ -65,14 +64,27 @@ module Documents
         raise InvalidDocument, "amount_minor for #{code} must be non-zero" if amount.zero?
 
         currency = (value(line, :currency).presence || expected_currency).to_s.upcase
+        expected_exponent = CurrencyProfile.exponent_for!(currency)
         exponent = if value(line, :minor_unit_exponent).present?
           strict_integer!(value(line, :minor_unit_exponent), "minor_unit_exponent for #{code}")
         else
           expected_exponent
         end
-        unless currency == expected_currency && exponent == expected_exponent
+        unless exponent == expected_exponent
           raise InvalidDocument,
-            "#{code} must use #{expected_currency} with minor-unit exponent #{expected_exponent}"
+            "#{code} must use #{currency} with minor-unit exponent #{expected_exponent}"
+        end
+
+        extra = value(line, :extra).to_h.deep_stringify_keys
+        if currency != expected_currency
+          translation = ForeignExchange.translate(
+            tenant_id: tenant.id, amount_minor: amount,
+            from_currency: currency, to_currency: expected_currency,
+            on: posting_date, rate_type: "spot"
+          )
+          extra["currencyTranslation"] = ForeignExchange.snapshot(
+            translation, functional_currency: expected_currency
+          )
         end
 
         {
@@ -81,7 +93,7 @@ module Documents
           currency: currency,
           minor_unit_exponent: exponent,
           narration: value(line, :narration),
-          extra: value(line, :extra)
+          extra: extra.presence
         }
       end
     end

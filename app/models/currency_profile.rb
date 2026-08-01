@@ -10,8 +10,14 @@ module CurrencyProfile
     "INR" => 2,
     "EUR" => 2,
     "GBP" => 2,
+    "JPY" => 0,
+    "KRW" => 0,
     "USD" => 2,
-    "MYR" => 2
+    "MYR" => 2,
+    "SGD" => 2,
+    "AED" => 2,
+    "BHD" => 3,
+    "KWD" => 3
   }.freeze
 
   module_function

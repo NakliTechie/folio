@@ -9,6 +9,10 @@
       <small>Use a durable code, such as 5200 or AR-20. It locks when first referenced.</small>
     <% end %>
   </div>
+  <label class="check-field">
+    <%= form.check_box :monetary, disabled: account.persisted? && account.posted? %>
+    <span>Monetary account — revalue foreign-currency balances at period end</span>
+  </label>
   <div class="form-group">
     <%= form.label :name, "Account name" %>
     <%= form.text_field :name, required: true, autocomplete: "off" %>

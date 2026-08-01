@@ -60,6 +60,6 @@ class AccountsController < BrowserController
   end
 
   def account_params
-    params.require(:account).permit(:code, :name, :account_type)
+    params.require(:account).permit(:code, :name, :account_type, :monetary)
   end
 end

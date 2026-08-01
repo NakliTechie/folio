@@ -31,6 +31,9 @@ Rails.application.routes.draw do
       post :run_revenue_recognition
     end
   end
+  resources :exchange_rates, path: "exchange-rates", only: %i[index create] do
+    post :run_revaluation, on: :collection
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

@@ -9,6 +9,8 @@ module Posting
       def self.validate_document!(document)
         lines = document.document_lines.to_a
         raise Documents::InvalidDocument, "a document needs at least two non-zero lines" if lines.size < 2
+        tenant = Tenant.find(document.tenant_id)
+        lines.each { |line| ForeignExchange.validate_snapshot!(tenant: tenant, line: line) }
       end
 
       def self.entry_lines(document)
@@ -19,13 +21,26 @@ module Posting
         # §7 that distinction is unrecoverable from the amounts alone once on the append-only log.
         negative = document.reverses_document_id.present?
         document.document_lines.map do |dl|
+          amounts = [ {
+            slot_role: "transaction", currency: dl.currency,
+            minor_unit_exponent: dl.minor_unit_exponent, amount_minor: dl.amount_minor
+          } ]
+          translation = dl.extra.to_h["currencyTranslation"]
+          if translation
+            amounts << {
+              slot_role: "functional", currency: translation.fetch("functionalCurrency"),
+              minor_unit_exponent: CurrencyProfile.exponent_for!(translation.fetch("functionalCurrency")),
+              amount_minor: Integer(translation.fetch("functionalAmountMinor")),
+              rate: BigDecimal(translation.fetch("rate")),
+              rate_date: Date.iso8601(translation.fetch("rateDate")),
+              rate_source: translation.fetch("rateSource"),
+              rate_basis: translation.fetch("rateBasis")
+            }
+          end
           line = {
             line_no: dl.line_no, account_code: dl.account_code, ledger_id: ledger.id,
             entity_id: document.entity_id, office_id: document.office_id,
-            amounts: [ {
-              slot_role: "transaction", currency: dl.currency,
-              minor_unit_exponent: dl.minor_unit_exponent, amount_minor: dl.amount_minor
-            } ]
+            amounts: amounts
           }
           line[:is_negative_posting] = true if negative
           line

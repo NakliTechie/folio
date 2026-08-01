@@ -9,16 +9,17 @@ module Rbac
                         caps: %w[documents.post documents.reverse documents.simulate accounts.manage
                                  accounts.read masters.manage masters.read reports.read invoices.create
                                  bills.create payments.create gst.place_of_supply.override contracts.read
-                                 contracts.manage contracts.approve contracts.post] },
+                                 contracts.manage contracts.approve contracts.post
+                                 currency.read currency.manage currency.post] },
       "operator"   => { name: "Operator",
                         caps: %w[invoices.create bills.create payments.create documents.simulate
                                  accounts.read masters.read reports.read gst.place_of_supply.override
                                  contracts.read] },
       "ca_auditor" => { name: "CA/Auditor",
                         caps: %w[documents.post documents.reverse documents.simulate accounts.read
-                                 masters.read reports.read period.lock contracts.read] },
+                                 masters.read reports.read period.lock contracts.read currency.read] },
       "viewer"     => { name: "Viewer",
-                        caps: %w[accounts.read masters.read reports.read contracts.read] }
+                        caps: %w[accounts.read masters.read reports.read contracts.read currency.read] }
     }.freeze
 
     module_function

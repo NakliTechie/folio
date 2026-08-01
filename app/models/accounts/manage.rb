@@ -4,7 +4,7 @@ module Accounts
   # The only product write path for account-master changes. It keeps statement mappings in sync
   # and appends an immutable, hash-chained audit event in the same transaction as the mutation.
   module Manage
-    AUDITED_FIELDS = %w[code name account_type active].freeze
+    AUDITED_FIELDS = %w[code name account_type monetary active].freeze
 
     module_function
 
@@ -49,6 +49,7 @@ module Accounts
           "code" => account.code,
           "name" => account.name,
           "accountType" => account.account_type,
+          "monetary" => account.monetary,
           "active" => account.active
         },
         "changes" => changes

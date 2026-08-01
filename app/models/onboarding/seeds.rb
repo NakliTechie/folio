@@ -10,7 +10,9 @@ module Onboarding
       [ "2000", "Sundry Creditors", "liability" ], [ "2100", "GST Payable", "liability" ],
       [ "2110", "TDS Payable", "liability" ], [ "2200", "Contract Liabilities (Deferred Revenue)", "liability" ],
       [ "3000", "Capital", "equity" ],
-      [ "4000", "Sales", "income" ], [ "5000", "Purchases", "expense" ], [ "5100", "Expenses", "expense" ]
+      [ "4000", "Sales", "income" ], [ "4100", "Foreign Exchange Gains", "income" ],
+      [ "5000", "Purchases", "expense" ], [ "5100", "Expenses", "expense" ],
+      [ "5200", "Foreign Exchange Losses", "expense" ]
     ].freeze
 
     module_function
@@ -18,7 +20,11 @@ module Onboarding
     def chart_of_accounts!(tenant, jurisdiction_profile: "IN")
       COA.each do |code, name, type|
         name = "Tax Payable" if code == "2100" && jurisdiction_profile != "IN"
-        Account.find_or_create_by!(tenant_id: tenant.id, code: code) { |a| a.name = name; a.account_type = type }
+        Account.find_or_create_by!(tenant_id: tenant.id, code: code) do |account|
+          account.name = name
+          account.account_type = type
+          account.monetary = %w[1000 1010 1190 1200 2000 2100 2110 2200].include?(code)
+        end
       end
     end
 

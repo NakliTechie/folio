@@ -22,7 +22,7 @@
       <table>
         <caption class="sr-only">Accounts for <%= Current.tenant.name %></caption>
         <thead>
-          <tr><th scope="col">Code</th><th scope="col">Account</th><th scope="col">Type</th>
+          <tr><th scope="col">Code</th><th scope="col">Account</th><th scope="col">Type</th><th scope="col">FX</th>
             <th scope="col">Status</th><th scope="col"><span class="sr-only">Action</span></th></tr>
         </thead>
         <tbody>
@@ -31,6 +31,7 @@
               <td><span class="account-code"><%= account.code %></span></td>
               <td><strong><%= account.name %></strong></td>
               <td><span class="status-badge"><%= account.account_type.humanize %></span></td>
+              <td><%= account.monetary? ? "Monetary" : "—" %></td>
               <td><span class="<%= account.active? ? "status-badge status-badge--success" : "status-badge" %>">
                 <%= account.active? ? "Active" : "Inactive" %></span></td>
               <td><% if permitted?("accounts.manage") %>

@@ -1,0 +1,2 @@
+# Intentionally empty. Declaring the fixture ensures Rails clears callback-provisioned keys before
+# replacing user fixtures, preserving the user_signing_keys → users foreign-key invariant.

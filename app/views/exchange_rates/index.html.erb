@@ -1,0 +1,60 @@
+<% content_for :title, "Exchange rates · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div><p class="eyebrow">Multi-currency</p><h1>Exchange rates</h1><p>Govern transaction-date translations and closing revaluations without rewriting historical postings.</p></div>
+  </header>
+
+  <% if permitted?("currency.manage") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Immutable rate evidence</p><h2>Record a rate</h2></div></div>
+      <%= form_with scope: :exchange_rate, url: exchange_rates_path(tenant_route_options), class: "stacked-form" do |form| %>
+        <div class="form-grid">
+          <div class="field"><%= form.label :from_currency %><%= form.select :from_currency, CurrencyProfile::MINOR_UNIT_EXPONENTS.keys, required: true %></div>
+          <div class="field"><%= form.label :to_currency %><%= form.select :to_currency, CurrencyProfile::MINOR_UNIT_EXPONENTS.keys, selected: Current.tenant.functional_currency, required: true %></div>
+          <div class="field"><%= form.label :effective_on %><%= form.date_field :effective_on, value: business_date, required: true %></div>
+          <div class="field"><%= form.label :rate, "Target currency per source unit" %><%= form.number_field :rate, min: "0.000000000001", step: "0.000000000001", required: true %></div>
+          <div class="field"><%= form.label :rate_type %><%= form.select :rate_type, [["Spot", "spot"], ["Closing", "closing"], ["Period average", "average"]], required: true %></div>
+          <div class="field"><%= form.label :source %><%= form.text_field :source, required: true, placeholder: "Bank / RBI / approved provider" %></div>
+        </div>
+        <%= form.submit "Record immutable rate", class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Rate history</p><h2>Governed rates</h2></div></div>
+    <% if @exchange_rates.empty? %><div class="empty-state"><p>No exchange rates recorded.</p></div><% else %>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Pair</th><th>Type</th><th>Rate</th><th>Source</th></tr></thead><tbody>
+        <% @exchange_rates.each do |rate| %><tr><td><%= rate.effective_on.to_fs(:long) %></td><td><%= rate.from_currency %>/<%= rate.to_currency %></td><td><%= rate.rate_type.humanize %></td><td><%= rate.rate.to_s("F") %></td><td><%= rate.source %></td></tr><% end %>
+      </tbody></table></div>
+    <% end %>
+  </section>
+
+  <% if permitted?("currency.post") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">IAS 21 / IND AS 21</p><h2>Revalue monetary balances</h2></div></div>
+      <p>Uses the latest closing rate on or before the selected date. Simulation records the exact position and difference without posting.</p>
+      <div class="split-actions">
+        <% %w[simulate post].each do |mode| %>
+          <%= form_with url: run_revaluation_exchange_rates_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+            <%= hidden_field_tag :mode, mode %><%= hidden_field_tag :idempotency_key, SecureRandom.uuid %>
+            <%= form.label :revaluation_date, mode == "simulate" ? "Through date" : "Posting date" %>
+            <%= form.date_field :revaluation_date, value: business_date, required: true %>
+            <%= form.submit mode == "simulate" ? "Simulate revaluation" : "Post revaluation",
+              class: mode == "simulate" ? "button button--quiet" : "button button--primary",
+              data: (mode == "post" ? { turbo_confirm: "Post closing-rate differences for all foreign monetary balances?" } : {}) %>
+          <% end %>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
+
+  <% if @revaluation_runs.any? %>
+    <section class="panel panel--table"><div class="panel__header"><div><p class="eyebrow">Run evidence</p><h2>Revaluation history</h2></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Created</th><th>Date</th><th>Mode</th><th>Status</th><th>Positions</th><th>Net difference</th></tr></thead><tbody>
+        <% @revaluation_runs.each do |run| %><tr><td><%= run.created_at.to_fs(:long) %></td><td><%= run.revaluation_date.to_fs(:long) %></td><td><%= run.mode.humanize %></td><td><span class="<%= status_class(run.status) %>"><%= run.status.humanize %></span></td><td><%= run.result.fetch("positionCount", 0) %></td><td><%= money_amount(run.result.fetch("netDifferenceMinor", 0)) %></td></tr><% end %>
+      </tbody></table></div>
+    </section>
+  <% end %>
+</main>

@@ -66,7 +66,7 @@ class Documents::DocumentFlowTest < ActiveSupport::TestCase
     doc.document_lines.update_all(currency: "USD", minor_unit_exponent: 0)
 
     error = assert_raises(Documents::InvalidDocument) { Documents::Post.call(doc, actor: "u") }
-    assert_match(/must use INR with minor-unit exponent 2/, error.message)
+    assert_match(/must use USD minor-unit exponent 2/, error.message)
     assert_nil NumberRange.find_by(tenant_id: TENANT, doc_type: "JV")
   end
 

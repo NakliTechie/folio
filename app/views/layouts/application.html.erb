@@ -88,13 +88,14 @@
             </div>
           </details>
 
-          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("journal_vouchers", "opening_balances", "settlements", "accounts") %>">
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("journal_vouchers", "opening_balances", "settlements", "accounts", "exchange_rates") %>">
             <summary>Accounting</summary>
             <div class="nav-group__menu">
               <%= link_to "Transactions", journal_vouchers_path(tenant_route_options), class: navigation_class("journal_vouchers") %>
               <%= link_to "Cash", settlements_path(tenant_route_options), class: navigation_class("settlements") %>
               <%= link_to "Opening balances", opening_balances_path(tenant_route_options), class: navigation_class("opening_balances") if permitted?("accounts.manage") %>
               <%= link_to "Chart of accounts", accounts_path(tenant_route_options), class: navigation_class("accounts") if permitted?("accounts.read") %>
+              <%= link_to "Exchange rates", exchange_rates_path(tenant_route_options), class: navigation_class("exchange_rates") if permitted?("currency.read") %>
             </div>
           </details>
 

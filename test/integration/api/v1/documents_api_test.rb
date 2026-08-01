@@ -119,7 +119,7 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
       )
     end
     assert_response :unprocessable_entity
-    assert_match(/must use USD with minor-unit exponent 2/, JSON.parse(response.body)["error"])
+    assert_match(/must use INR with minor-unit exponent 2/, JSON.parse(response.body)["error"])
   end
 
   test "a closed period is a JSON 409 and leaves the document draft" do

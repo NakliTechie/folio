@@ -81,7 +81,7 @@ class BrowserProductFlowTest < ActionDispatch::IntegrationTest
   test "account creation and team invitations stay permission scoped" do
     assert_difference "Account.count", 1 do
       post accounts_path, params: {
-        account: { code: "5200", name: "Professional fees", account_type: "expense" }
+        account: { code: "5300", name: "Professional fees", account_type: "expense" }
       }
     end
     assert_redirected_to accounts_path(tenant_id: @org.tenant.id)

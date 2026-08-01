@@ -54,9 +54,16 @@
               value: params.dig(:journal_voucher, :posting_date).presence || values[:posting_date]&.iso8601 || business_date.iso8601 %>
           </div>
           <div class="form-group">
+            <%= form.label :currency, "Transaction currency" %>
+            <%= form.select :currency, CurrencyProfile::MINOR_UNIT_EXPONENTS.keys,
+              { selected: params.dig(:journal_voucher, :currency).presence || values[:currency] || Current.tenant.functional_currency }, required: true %>
+            <small>Foreign currencies require a governed spot rate for the posting date.</small>
+          </div>
+          <div class="form-group">
             <%= form.label :amount, "Amount (#{Current.tenant.functional_currency})" %>
-            <%= form.number_field :amount, required: true, min: "0.01", step: "0.01",
+            <%= form.number_field :amount, required: true, min: "0.0001", step: "0.0001",
               inputmode: "decimal", value: params.dig(:journal_voucher, :amount).presence || values[:amount] %>
+            <small>The amount follows the transaction currency selected above; <%= Current.tenant.functional_currency %> is the default.</small>
           </div>
         </div>
 

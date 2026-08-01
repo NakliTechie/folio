@@ -6,7 +6,9 @@ module EventSigning
   module_function
 
   def sign(user_id:, hash_hex:)
-    key_record = UserSigningKey.active.find_by!(user_id: user_id)
+    key_record = UserSigningKey.active.find_by(user_id: user_id)
+    return unless key_record
+
     private_key = OpenSSL::PKey.read(Cipher.decrypt(key_record.encrypted_private_key))
     digest = [ valid_hash!(hash_hex) ].pack("H*")
     Result.new(private_key.sign_raw(nil, digest), key_record)

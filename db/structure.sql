@@ -143,7 +143,8 @@ CREATE TABLE public.accounts (
     account_type character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    active boolean DEFAULT true NOT NULL
+    active boolean DEFAULT true NOT NULL,
+    monetary boolean DEFAULT false NOT NULL
 );
 
 
@@ -1217,6 +1218,131 @@ CREATE SEQUENCE public.entry_lines_id_seq
 --
 
 ALTER SEQUENCE public.entry_lines_id_seq OWNED BY public.entry_lines.id;
+
+
+--
+-- Name: exchange_rates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.exchange_rates (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    from_currency character varying(3) NOT NULL,
+    to_currency character varying(3) NOT NULL,
+    effective_on date NOT NULL,
+    rate numeric(24,12) NOT NULL,
+    rate_type character varying DEFAULT 'spot'::character varying NOT NULL,
+    source character varying NOT NULL,
+    created_by_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT exchange_rates_distinct_currencies CHECK (((from_currency)::text <> (to_currency)::text)),
+    CONSTRAINT exchange_rates_positive CHECK ((rate > (0)::numeric)),
+    CONSTRAINT exchange_rates_type_valid CHECK (((rate_type)::text = ANY ((ARRAY['spot'::character varying, 'closing'::character varying, 'average'::character varying])::text[])))
+);
+
+
+--
+-- Name: exchange_rates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.exchange_rates_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: exchange_rates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.exchange_rates_id_seq OWNED BY public.exchange_rates.id;
+
+
+--
+-- Name: exchange_revaluation_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.exchange_revaluation_items (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    exchange_revaluation_run_id bigint NOT NULL,
+    account_code character varying NOT NULL,
+    foreign_currency character varying(3) NOT NULL,
+    foreign_balance_minor bigint NOT NULL,
+    carrying_functional_minor bigint NOT NULL,
+    target_functional_minor bigint NOT NULL,
+    difference_minor bigint NOT NULL,
+    applied_rate numeric(24,12) NOT NULL,
+    exchange_rate_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: exchange_revaluation_items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.exchange_revaluation_items_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: exchange_revaluation_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.exchange_revaluation_items_id_seq OWNED BY public.exchange_revaluation_items.id;
+
+
+--
+-- Name: exchange_revaluation_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.exchange_revaluation_runs (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    idempotency_key character varying NOT NULL,
+    revaluation_date date NOT NULL,
+    mode character varying NOT NULL,
+    status character varying DEFAULT 'pending'::character varying NOT NULL,
+    ledger_event_id bigint,
+    result jsonb DEFAULT '{}'::jsonb NOT NULL,
+    finished_at timestamp(6) without time zone,
+    error_message character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT exchange_revaluation_runs_mode_valid CHECK (((mode)::text = ANY ((ARRAY['simulate'::character varying, 'post'::character varying])::text[]))),
+    CONSTRAINT exchange_revaluation_runs_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'simulated'::character varying, 'posted'::character varying, 'failed'::character varying])::text[])))
+);
+
+
+--
+-- Name: exchange_revaluation_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.exchange_revaluation_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: exchange_revaluation_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.exchange_revaluation_runs_id_seq OWNED BY public.exchange_revaluation_runs.id;
 
 
 --
@@ -2414,6 +2540,27 @@ ALTER TABLE ONLY public.entry_lines ALTER COLUMN id SET DEFAULT nextval('public.
 
 
 --
+-- Name: exchange_rates id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_rates ALTER COLUMN id SET DEFAULT nextval('public.exchange_rates_id_seq'::regclass);
+
+
+--
+-- Name: exchange_revaluation_items id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_items ALTER COLUMN id SET DEFAULT nextval('public.exchange_revaluation_items_id_seq'::regclass);
+
+
+--
+-- Name: exchange_revaluation_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_runs ALTER COLUMN id SET DEFAULT nextval('public.exchange_revaluation_runs_id_seq'::regclass);
+
+
+--
 -- Name: financial_statement_assignments id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2784,6 +2931,30 @@ ALTER TABLE ONLY public.entries
 
 ALTER TABLE ONLY public.entry_lines
     ADD CONSTRAINT entry_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: exchange_rates exchange_rates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_rates
+    ADD CONSTRAINT exchange_rates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: exchange_revaluation_items exchange_revaluation_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_items
+    ADD CONSTRAINT exchange_revaluation_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: exchange_revaluation_runs exchange_revaluation_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_runs
+    ADD CONSTRAINT exchange_revaluation_runs_pkey PRIMARY KEY (id);
 
 
 --
@@ -3212,6 +3383,13 @@ CREATE INDEX index_accounts_on_tenant_id_and_active ON public.accounts USING btr
 --
 
 CREATE UNIQUE INDEX index_accounts_on_tenant_id_and_code ON public.accounts USING btree (tenant_id, code);
+
+
+--
+-- Name: index_accounts_on_tenant_id_and_monetary; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_accounts_on_tenant_id_and_monetary ON public.accounts USING btree (tenant_id, monetary) WHERE (monetary = true);
 
 
 --
@@ -3831,6 +4009,76 @@ CREATE INDEX index_entry_lines_on_tenant_id_and_account_code ON public.entry_lin
 
 
 --
+-- Name: index_exchange_rates_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_exchange_rates_on_created_by_id ON public.exchange_rates USING btree (created_by_id);
+
+
+--
+-- Name: index_exchange_rates_on_governed_series; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_exchange_rates_on_governed_series ON public.exchange_rates USING btree (tenant_id, from_currency, to_currency, rate_type, effective_on);
+
+
+--
+-- Name: index_exchange_revaluation_items_on_exchange_rate_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_exchange_revaluation_items_on_exchange_rate_id ON public.exchange_revaluation_items USING btree (exchange_rate_id);
+
+
+--
+-- Name: index_exchange_revaluation_items_on_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_exchange_revaluation_items_on_position ON public.exchange_revaluation_items USING btree (exchange_revaluation_run_id, account_code, foreign_currency);
+
+
+--
+-- Name: index_exchange_revaluation_items_on_run; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_exchange_revaluation_items_on_run ON public.exchange_revaluation_items USING btree (exchange_revaluation_run_id);
+
+
+--
+-- Name: index_exchange_revaluation_runs_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_exchange_revaluation_runs_on_created_by_id ON public.exchange_revaluation_runs USING btree (created_by_id);
+
+
+--
+-- Name: index_exchange_revaluation_runs_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_exchange_revaluation_runs_on_entity_id ON public.exchange_revaluation_runs USING btree (entity_id);
+
+
+--
+-- Name: index_exchange_revaluation_runs_on_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_exchange_revaluation_runs_on_idempotency ON public.exchange_revaluation_runs USING btree (tenant_id, idempotency_key);
+
+
+--
+-- Name: index_exchange_revaluation_runs_on_ledger_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_exchange_revaluation_runs_on_ledger_event_id ON public.exchange_revaluation_runs USING btree (ledger_event_id);
+
+
+--
+-- Name: index_exchange_revaluation_runs_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_exchange_revaluation_runs_on_office_id ON public.exchange_revaluation_runs USING btree (office_id);
+
+
+--
 -- Name: index_financial_statement_assignments_on_account_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4333,6 +4581,14 @@ ALTER TABLE ONLY public.office_tax_registrations
 
 
 --
+-- Name: exchange_rates fk_rails_3908165cb0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_rates
+    ADD CONSTRAINT fk_rails_3908165cb0 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: einvoice_cancellations fk_rails_3d5576b900; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4365,6 +4621,22 @@ ALTER TABLE ONLY public.einvoice_submissions
 
 
 --
+-- Name: exchange_revaluation_runs fk_rails_423a47e852; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_runs
+    ADD CONSTRAINT fk_rails_423a47e852 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: exchange_revaluation_runs fk_rails_43ce24d3c7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_runs
+    ADD CONSTRAINT fk_rails_43ce24d3c7 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
+
+
+--
 -- Name: contract_posting_runs fk_rails_490d24d00d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4378,6 +4650,14 @@ ALTER TABLE ONLY public.contract_posting_runs
 
 ALTER TABLE ONLY public.document_allocations
     ADD CONSTRAINT fk_rails_524991528c FOREIGN KEY (document_id) REFERENCES public.documents(id);
+
+
+--
+-- Name: exchange_revaluation_items fk_rails_53a08ec822; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_items
+    ADD CONSTRAINT fk_rails_53a08ec822 FOREIGN KEY (exchange_rate_id) REFERENCES public.exchange_rates(id);
 
 
 --
@@ -4533,6 +4813,14 @@ ALTER TABLE ONLY public.financial_statement_sections
 
 
 --
+-- Name: exchange_revaluation_items fk_rails_c95c0c0030; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_items
+    ADD CONSTRAINT fk_rails_c95c0c0030 FOREIGN KEY (exchange_revaluation_run_id) REFERENCES public.exchange_revaluation_runs(id);
+
+
+--
 -- Name: contract_posting_runs fk_rails_cef285fc3e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4546,6 +4834,14 @@ ALTER TABLE ONLY public.contract_posting_runs
 
 ALTER TABLE ONLY public.documents
     ADD CONSTRAINT fk_rails_dd14d0c95c FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: exchange_revaluation_runs fk_rails_de5b7fed5a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exchange_revaluation_runs
+    ADD CONSTRAINT fk_rails_de5b7fed5a FOREIGN KEY (office_id) REFERENCES public.offices(id);
 
 
 --
@@ -4603,6 +4899,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801171000'),
 ('20260801170000'),
 ('20260801165000'),
 ('20260801164000'),
