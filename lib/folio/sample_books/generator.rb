@@ -96,7 +96,7 @@ module Folio
           @items[svc.code] = Items::Manage.create!(
             tenant: @tenant,
             attributes: {
-              code: svc.code, name: svc.name, item_type: "service",
+              code: svc.code, name: svc.name, item_type: svc.item_type,
               hsn_sac_code: svc.hsn_sac_code, unit_of_measure: "OTH",
               tax_rate_basis_points: svc.rate_basis_points, cess_rate_basis_points: 0,
               income_account_code: "4000", expense_account_code: "5000"

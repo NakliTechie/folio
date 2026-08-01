@@ -7,17 +7,37 @@ require "test_helper"
 # run, and the TDS preview matches the shipped kernel. This is the "seeded book is a live
 # cross-check" property in test form.
 class Folio::SampleBooksTest < ActiveSupport::TestCase
-  test "the consulting scenario seeds a fully-posted, tied-out book" do
-    result = Folio::SampleBooks.seed!(scenario: "consulting", email: "sample-books-test@folio.invalid")
+  test "every scenario seeds a fully-posted, tied-out book" do
+    Folio::SampleBooks::SCENARIOS.each_key do |code|
+      result = Folio::SampleBooks.seed!(scenario: code, email: "sample-books-#{code}@folio.invalid")
+      assert result.balanced?, "#{code}: trial balance must tie"
+      assert_equal result.trial_balance_debit_minor, result.trial_balance_credit_minor, "#{code}"
+      assert result.trial_balance_debit_minor.positive?, "#{code}: a non-empty book should post"
 
-    # Masters + documents all created and posted.
+      scenario = Folio::SampleBooks::SCENARIOS.fetch(code)
+      assert_equal scenario.sales.size, result.counts[:sales], "#{code}: sales count"
+      assert_equal scenario.purchases.size, result.counts[:purchases], "#{code}: purchases count"
+    end
+  end
+
+  test "the consulting scenario has the expected shape" do
+    result = Folio::SampleBooks.seed!(scenario: "consulting", email: "sample-books-shape@folio.invalid")
     assert_equal({ customers: 3, vendors: 2, services: 3, sales: 5, purchases: 2,
                    receipts: 3, payments: 1 }, result.counts)
+  end
 
-    # Double entry holds across the whole book.
-    assert result.balanced?, "trial balance must tie"
-    assert_equal result.trial_balance_debit_minor, result.trial_balance_credit_minor
-    assert result.trial_balance_debit_minor.positive?, "a non-empty book should have postings"
+  test "the goods scenarios exercise the 194Q and 194H TDS sections end to end" do
+    manufacturing = Folio::SampleBooks.seed!(scenario: "manufacturing", email: "sb-mfg@folio.invalid")
+    q = manufacturing.tds_previews.find { |p| p[:section] == "194Q" }
+    assert q, "manufacturing should preview a 194Q goods purchase"
+    assert q[:applied], "a ₹60L purchase exceeds the ₹50L threshold"
+    assert_equal 100_000, q[:tds_minor], "0.1% of the ₹10L excess = ₹1,000"
+
+    pharma = Folio::SampleBooks.seed!(scenario: "pharma", email: "sb-pharma@folio.invalid")
+    h = pharma.tds_previews.find { |p| p[:section] == "194H" }
+    assert h, "pharma should preview a 194H commission payment"
+    assert_equal 200, h[:rate_basis_points], "post-2024 194H rate is 2%"
+    assert_equal 80_000, h[:tds_minor], "2% of the ₹40,000 commission = ₹800"
   end
 
   test "the seeded book's ledger event chain verifies" do
