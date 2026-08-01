@@ -8,6 +8,9 @@ module Consolidation
       group = transaction.consolidation_group
       authorize!(group, actor)
       date = parse_date(attributes[:posting_date] || attributes["posting_date"])
+      if date < transaction.posting_date
+        raise InvalidConsolidation, "elimination date cannot precede the source transaction"
+      end
       key = (attributes[:idempotency_key] || attributes["idempotency_key"]).to_s.strip
       raise InvalidConsolidation, "idempotency key is required" if key.blank?
       request_sha256 = Digest::SHA256.hexdigest(Folio::KhataHash.canonical_payload(

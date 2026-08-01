@@ -144,14 +144,31 @@ class ProcurementTest < ActiveSupport::TestCase
 
     exception_order = create_order(lines: [ good_line(quantity: "5", price: "100") ])
     Procurement::ApproveOrder.call(order: exception_order, actor: @checker)
+    error = assert_raises(PurchaseBills::InvalidBill) do
+      build_bill(
+        order: exception_order, quantity: "5", price: "110", reference: "BEFORE-RECEIPT"
+      )
+    end
+    assert_match(/exceeds accepted goods receipts/, error.message)
+    receive(exception_order, quantity: "5", key: "exception-receipt")
     exception_bill = build_bill(
-      order: exception_order, quantity: "6", price: "110", reference: "MATCH-EXCEPTION"
+      order: exception_order, quantity: "5", price: "110", reference: "MATCH-EXCEPTION"
     )
     evidence = exception_bill.procurement_matches.sole
     assert_equal "exception", evidence.status
-    assert_equal %w[quantity_over_order price_variance receipt_shortfall],
-      evidence.exceptions.pluck("code")
+    assert_equal [ "price_variance" ], evidence.exceptions.pluck("code")
     assert Documents::Simulate.call(exception_bill).fetch(:balanced)
+  end
+
+  test "inventory goods cannot bypass purchase-order and receipt accounting" do
+    approve_profile!
+
+    error = assert_raises(PurchaseBills::InvalidBill) do
+      build_bill(order: nil, quantity: "1", price: "100", reference: "UNPLANNED-GOOD")
+    end
+
+    assert_match(/require a released purchase order/, error.message)
+    assert_nil Document.find_by(tenant_id: @org.tenant.id, external_reference: "UNPLANNED-GOOD")
   end
 
   test "posting hold blocks new bills and suspension blocks new orders" do

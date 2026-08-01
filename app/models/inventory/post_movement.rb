@@ -35,6 +35,10 @@ module Inventory
           )
         end
         balances.values.sort_by(&:id).each(&:lock!)
+        assert_chronological!(
+          tenant: tenant, item: item, warehouses: balances.keys,
+          posting_date: input.fetch(:posting_date)
+        )
 
         value = movement_value(input, source && balances.fetch(source), tenant.functional_currency)
         entry = post_entry!(
@@ -121,6 +125,17 @@ module Inventory
             raise InvalidMovement, "moving-average value rounds to zero" unless value.positive?
           end
       end
+    end
+
+    def assert_chronological!(tenant:, item:, warehouses:, posting_date:)
+      latest = InventoryTransaction.joins(:inventory_movements).where(
+        inventory_transactions: { tenant_id: tenant.id, item_id: item.id },
+        inventory_movements: { warehouse_id: warehouses.map(&:id) }
+      ).maximum(:posting_date)
+      return unless latest && latest > posting_date
+
+      raise InvalidMovement,
+        "inventory movements must be posted chronologically; latest affected movement is #{latest}"
     end
 
     def post_entry!(tenant:, entity:, office:, ledger:, actor:, item:, source:, destination:, offset:, input:, value:)

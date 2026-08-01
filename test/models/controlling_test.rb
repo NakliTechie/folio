@@ -88,6 +88,17 @@ class ControllingTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::StatementInvalid) do
       AllocationRun.transaction(requires_new: true) { posted.update_column(:allocated_amount_minor, 1) }
     end
+
+    error = assert_raises(Controlling::InvalidControl) do
+      Controlling::RunAllocation.call(
+        cycle: @cycle, actor: @org.user,
+        attributes: {
+          through_date: "2026-08-31", posting_date: "2026-09-01",
+          mode: "post", idempotency_key: "wrong-posting-period"
+        }
+      )
+    end
+    assert_match(/must equal/, error.message)
   end
 
   test "plan lines share the actual account and cost-center coordinates" do

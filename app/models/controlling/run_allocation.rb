@@ -57,6 +57,9 @@ module Controlling
       }
       raise InvalidControl, "mode must be simulate or post" unless %w[simulate post].include?(input[:mode])
       raise InvalidControl, "idempotency key is required" if input[:idempotency_key].blank?
+      unless input[:posting_date] == input[:through_date]
+        raise InvalidControl, "posting date must equal the allocation through date"
+      end
       input[:request_sha256] = Digest::SHA256.hexdigest(
         Folio::KhataHash.canonical_payload(input.except(:request_sha256).transform_values(&:to_s))
       )
@@ -65,14 +68,19 @@ module Controlling
 
     def sender_balance(cycle, start_date, through_date)
       JournalEntryLineAmount.joins(entry_line: :entry)
+        .joins("JOIN ledgers allocation_ledgers ON allocation_ledgers.id = entry_lines.ledger_id " \
+          "AND allocation_ledgers.tenant_id = entry_lines.tenant_id")
         .where(
           entry_lines: {
             tenant_id: cycle.tenant_id, cost_object_type: "cost_center",
-            cost_object_id: cycle.sender_cost_center_id, account_code: cycle.source_account_code
+            entity_id: cycle.entity_id, office_id: cycle.office_id,
+            cost_object_id: cycle.sender_cost_center_id, account_code: cycle.source_account_code,
+            line_class: "real", posting_layer: "00"
           },
           entries: { posting_date: start_date..through_date },
           slot_role: "transaction", currency: cycle.entity.functional_currency
-        ).sum(:amount_minor).then { |amount| [ Integer(amount), 0 ].max }
+        ).where("allocation_ledgers.posts_to_gl = TRUE")
+        .sum(:amount_minor).then { |amount| [ Integer(amount), 0 ].max }
     end
 
     def allocate_exactly(total, receivers)

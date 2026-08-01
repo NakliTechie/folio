@@ -112,6 +112,29 @@ class InventoryTest < ActiveSupport::TestCase
     assert_includes @item.errors.full_messages.to_sentence, "locked after movement"
   end
 
+  test "a movement cannot be inserted before later valuation activity" do
+    post_movement(
+      type: "receipt", quantity: "10", unit_cost: "100", destination: @main,
+      offset: "3000", key: "early-receipt", date: "2026-08-01"
+    )
+    post_movement(
+      type: "receipt", quantity: "10", unit_cost: "200", destination: @main,
+      offset: "3000", key: "later-receipt", date: "2026-08-31"
+    )
+    before_events = LedgerEvent.for_tenant(@org.tenant.id).count
+
+    error = assert_raises(Inventory::InvalidMovement) do
+      post_movement(
+        type: "issue", quantity: "4", source: @main, offset: "5000",
+        key: "backdated-issue", date: "2026-08-15"
+      )
+    end
+
+    assert_match(/chronologically/, error.message)
+    assert_equal before_events, LedgerEvent.for_tenant(@org.tenant.id).count
+    assert_nil InventoryTransaction.find_by(tenant_id: @org.tenant.id, idempotency_key: "backdated-issue")
+  end
+
   private
 
   def create_item(code)
@@ -127,11 +150,12 @@ class InventoryTest < ActiveSupport::TestCase
     )
   end
 
-  def post_movement(type:, quantity:, key:, source: nil, destination: nil, unit_cost: nil, offset: nil)
+  def post_movement(type:, quantity:, key:, source: nil, destination: nil, unit_cost: nil, offset: nil,
+                    date: "2026-08-01")
     Inventory::PostMovement.call(
       tenant: @org.tenant, actor: @org.user,
       attributes: {
-        transaction_type: type, posting_date: "2026-08-01", item_id: @item.id,
+        transaction_type: type, posting_date: date, item_id: @item.id,
         quantity: quantity, unit_cost: unit_cost, source_warehouse_id: source&.id,
         destination_warehouse_id: destination&.id, offset_account_code: offset,
         reason: "Stock #{type.humanize.downcase}", idempotency_key: key

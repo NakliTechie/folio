@@ -87,6 +87,16 @@ class ForeignExchangeTest < ActiveSupport::TestCase
     assert_equal [ "1010", "5200" ], second_entry.entry_lines.order(:line_no).pluck(:account_code)
     assert_equal [ -2_000, 2_000 ], transaction_amounts(second_entry)
 
+    events_before_backdate = LedgerEvent.for_tenant(@org.tenant.id).count
+    error = assert_raises(ArgumentError) do
+      ForeignExchange::Revalue.call(
+        tenant: @org.tenant, actor: @org.user, revaluation_date: Date.new(2026, 8, 15),
+        mode: "post", idempotency_key: "fx-backdated"
+      )
+    end
+    assert_match(/chronologically/, error.message)
+    assert_equal events_before_backdate, LedgerEvent.for_tenant(@org.tenant.id).count
+
     original = Entry.find(document.reload.posted_entry_id).entry_lines.find_by!(account_code: "1010")
     assert_equal 55_000, original.amounts.find_by!(slot_role: "functional").amount_minor
     assert LedgerEvent.verify_chain(@org.tenant.id)[:ok]

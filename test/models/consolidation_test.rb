@@ -128,6 +128,22 @@ class ConsolidationTest < ActiveSupport::TestCase
     )
   end
 
+  test "an elimination cannot precede its source transaction" do
+    transaction = post_intercompany
+
+    error = assert_raises(Consolidation::InvalidConsolidation) do
+      Consolidation::Eliminate.call(
+        transaction: transaction, actor: @org.user,
+        attributes: { posting_date: "2026-08-14", idempotency_key: "early-elimination" }
+      )
+    end
+
+    assert_match(/cannot precede/, error.message)
+    assert_nil ConsolidationEliminationRun.find_by(
+      tenant_id: @org.tenant.id, idempotency_key: "early-elimination"
+    )
+  end
+
   private
 
   def post_intercompany

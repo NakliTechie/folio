@@ -50,10 +50,8 @@ module Procurement
         order_line.unit_price_minor, bill_line.unit_price_minor
       ) if bill_line.unit_price_minor != order_line.unit_price_minor
       if order_line.item_type == "good" && after_bill > order_line.received_quantity
-        exceptions << evidence(
-          "receipt_shortfall", "Billed quantity exceeds accepted goods receipts",
-          order_line.received_quantity, after_bill
-        )
+        raise InvalidProcurement,
+          "bill quantity for #{bill_line.item_snapshot.fetch('code')} exceeds accepted goods receipts"
       end
       exceptions
     end

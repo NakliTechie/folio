@@ -91,6 +91,23 @@ class FixedAssetsTest < ActiveSupport::TestCase
         .pluck(:gross_block_minor, :accumulated_depreciation_minor)
   end
 
+  test "depreciation cannot book a cumulative target into another accounting date" do
+    acquire
+
+    error = assert_raises(FixedAssets::InvalidAsset) do
+      FixedAssets::RunDepreciation.call(
+        tenant: @org.tenant, actor: @org.user,
+        attributes: {
+          through_date: "2027-03-31", posting_date: "2026-08-31",
+          mode: "post", idempotency_key: "inverted-dates"
+        }
+      )
+    end
+
+    assert_match(/must equal/, error.message)
+    assert_nil DepreciationRun.find_by(tenant_id: @org.tenant.id, idempotency_key: "inverted-dates")
+  end
+
   test "component identity and tenant-scoped account determination are enforced" do
     duplicate = @asset.dup
     duplicate.created_domain_event = @asset.created_domain_event

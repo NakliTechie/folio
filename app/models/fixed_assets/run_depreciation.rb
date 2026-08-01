@@ -41,6 +41,9 @@ module FixedAssets
       }
       raise InvalidAsset, "mode must be simulate or post" unless %w[simulate post].include?(input[:mode])
       raise InvalidAsset, "idempotency key is required" if input[:idempotency_key].blank?
+      unless input[:posting_date] == input[:through_date]
+        raise InvalidAsset, "posting date must equal the depreciation through date"
+      end
       input[:request_sha256] = Digest::SHA256.hexdigest(
         Folio::KhataHash.canonical_payload(input.except(:request_sha256).transform_values(&:to_s))
       )

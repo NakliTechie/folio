@@ -46,11 +46,11 @@
             required: true %>
         </div>
         <div class="form-group">
-          <%= form.label :purchase_order_id, "Purchase order (optional)" %>
+          <%= form.label :purchase_order_id, "Purchase order" %>
           <%= form.select :purchase_order_id,
             @purchase_orders.map { |order| ["#{order.order_number} · #{order.vendor.name} · #{money_amount(order.subtotal_minor)}", order.id] },
             { include_blank: "No purchase order", selected: params.dig(:purchase_bill, :purchase_order_id) } %>
-          <small>Choose a released order to preserve two-way price and three-way receipt evidence. Exceptions remain visible for review.</small>
+          <small>Required for inventory goods, which must be received before billing. Optional for services.</small>
         </div>
         <div class="form-group">
           <%= form.label :tax_registration_id, "Buyer GSTIN" %>

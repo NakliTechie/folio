@@ -78,6 +78,9 @@ module PurchaseBills
         tenant: tenant, entity: entity, vendor_registration: vendor_registration,
         place_state: place_state, raw_lines: lines
       )
+      if purchase_order.nil? && normalized_lines.any? { |line| line.dig(:item_snapshot, "itemType") == "good" }
+        raise InvalidBill, "inventory goods require a released purchase order and accepted goods receipt"
+      end
       subtotal = normalized_lines.sum { |line| line.fetch(:taxable_minor) }
       breakdown = normalized_lines.each_with_object(Hash.new(0)) do |line, result|
         line.fetch(:tax_components).each { |component, value| result[component] += value }

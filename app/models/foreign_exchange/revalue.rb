@@ -47,6 +47,18 @@ module ForeignExchange
     def process!(run, tenant, entity, office, actor, date, mode)
       ExchangeRevaluationRun.transaction do
         run.lock!
+        return run if %w[simulated posted].include?(run.status)
+
+        if mode == "post"
+          LedgerEvent.acquire_tenant_lock!(tenant.id)
+          later = ExchangeRevaluationRun.where(
+            tenant_id: tenant.id, entity_id: entity.id, status: "posted"
+          ).where("revaluation_date > ?", date).minimum(:revaluation_date)
+          if later
+            raise ArgumentError,
+              "revaluations must be posted chronologically; a later run already exists on #{later}"
+          end
+        end
         run.exchange_revaluation_items.delete_all
         position_rows(tenant, entity, date).each do |position|
           build_item!(run, tenant, date, position)
