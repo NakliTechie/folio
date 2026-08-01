@@ -117,6 +117,7 @@ class PurchaseBillFlowsTest < ActionDispatch::IntegrationTest
 
     get purchase_bills_path
     assert_response :success
+    assert_select "a", text: "Payments", count: 0
     get purchase_bill_path(bill)
     assert_response :success
     get new_purchase_bill_path

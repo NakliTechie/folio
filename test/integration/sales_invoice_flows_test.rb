@@ -122,6 +122,7 @@ class SalesInvoiceFlowsTest < ActionDispatch::IntegrationTest
 
     get sales_invoices_path
     assert_response :success
+    assert_select "a", text: "Receipts", count: 0
     get sales_invoice_path(invoice)
     assert_response :success
     get new_sales_invoice_path
