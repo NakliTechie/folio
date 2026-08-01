@@ -922,6 +922,7 @@ CREATE TABLE public.domain_events (
     ref character varying,
     origin character varying NOT NULL,
     payload text NOT NULL,
+    signing_key_id bigint,
     CONSTRAINT domain_events_seq_positive CHECK ((seq > 0))
 );
 
@@ -1474,6 +1475,7 @@ CREATE TABLE public.ledger_events (
     origin character varying NOT NULL,
     payload text NOT NULL,
     schema_version integer DEFAULT 1 NOT NULL,
+    signing_key_id bigint,
     CONSTRAINT ledger_events_seq_positive CHECK ((seq > 0))
 );
 
@@ -2183,6 +2185,46 @@ ALTER SEQUENCE public.user_office_roles_id_seq OWNED BY public.user_office_roles
 
 
 --
+-- Name: user_signing_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_signing_keys (
+    id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    key_version integer DEFAULT 1 NOT NULL,
+    algorithm character varying DEFAULT 'ecdsa-p256-sha256'::character varying NOT NULL,
+    public_key_pem text NOT NULL,
+    encrypted_private_key text NOT NULL,
+    fingerprint character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    retired_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT user_signing_keys_algorithm_valid CHECK (((algorithm)::text = 'ecdsa-p256-sha256'::text)),
+    CONSTRAINT user_signing_keys_version_positive CHECK ((key_version > 0))
+);
+
+
+--
+-- Name: user_signing_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.user_signing_keys_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: user_signing_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.user_signing_keys_id_seq OWNED BY public.user_signing_keys.id;
+
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2544,6 +2586,13 @@ ALTER TABLE ONLY public.tenants ALTER COLUMN id SET DEFAULT nextval('public.tena
 --
 
 ALTER TABLE ONLY public.user_office_roles ALTER COLUMN id SET DEFAULT nextval('public.user_office_roles_id_seq'::regclass);
+
+
+--
+-- Name: user_signing_keys id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_signing_keys ALTER COLUMN id SET DEFAULT nextval('public.user_signing_keys_id_seq'::regclass);
 
 
 --
@@ -2951,6 +3000,14 @@ ALTER TABLE ONLY public.tenants
 
 ALTER TABLE ONLY public.user_office_roles
     ADD CONSTRAINT user_office_roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_signing_keys user_signing_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_signing_keys
+    ADD CONSTRAINT user_signing_keys_pkey PRIMARY KEY (id);
 
 
 --
@@ -3564,6 +3621,13 @@ CREATE INDEX index_documents_on_tenant_id_and_state ON public.documents USING bt
 
 
 --
+-- Name: index_domain_events_on_signing_key_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_domain_events_on_signing_key_id ON public.domain_events USING btree (signing_key_id);
+
+
+--
 -- Name: index_domain_events_on_tenant_id_and_action; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3806,6 +3870,13 @@ CREATE UNIQUE INDEX index_jela_on_line_and_slot ON public.journal_entry_line_amo
 --
 
 CREATE INDEX index_journal_entry_line_amounts_on_entry_line_id ON public.journal_entry_line_amounts USING btree (entry_line_id);
+
+
+--
+-- Name: index_ledger_events_on_signing_key_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_ledger_events_on_signing_key_id ON public.ledger_events USING btree (signing_key_id);
 
 
 --
@@ -4068,6 +4139,34 @@ CREATE UNIQUE INDEX index_user_office_roles_on_user_tenant_office ON public.user
 
 
 --
+-- Name: index_user_signing_keys_on_active_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_user_signing_keys_on_active_user ON public.user_signing_keys USING btree (user_id) WHERE (active = true);
+
+
+--
+-- Name: index_user_signing_keys_on_fingerprint; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_user_signing_keys_on_fingerprint ON public.user_signing_keys USING btree (fingerprint);
+
+
+--
+-- Name: index_user_signing_keys_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_user_signing_keys_on_user_id ON public.user_signing_keys USING btree (user_id);
+
+
+--
+-- Name: index_user_signing_keys_on_user_id_and_key_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_user_signing_keys_on_user_id_and_key_version ON public.user_signing_keys USING btree (user_id, key_version);
+
+
+--
 -- Name: index_users_on_email_address; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4314,6 +4413,14 @@ ALTER TABLE ONLY public.contracts
 
 
 --
+-- Name: user_signing_keys fk_rails_7e11dda020; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_signing_keys
+    ADD CONSTRAINT fk_rails_7e11dda020 FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: contracts fk_rails_7f020f7c9b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4496,6 +4603,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801170000'),
 ('20260801165000'),
 ('20260801164000'),
 ('20260801163000'),

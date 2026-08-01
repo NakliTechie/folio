@@ -12,6 +12,9 @@ class User < ApplicationRecord
   has_many :memberships, dependent: :destroy
   has_many :tenants, through: :memberships
   has_many :user_office_roles, dependent: :destroy
+  has_many :user_signing_keys, dependent: :restrict_with_exception
+
+  after_create -> { EventSigning::KeyProvisioner.ensure!(self) }
 
   normalizes :email_address, with: ->(e) { e.strip.downcase }
   validates :email_address, presence: true, uniqueness: true, email_address: true

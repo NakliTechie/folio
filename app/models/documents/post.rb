@@ -40,6 +40,7 @@ module Documents
         entry = Posting::PostEntry.post!(
           tenant_id: document.tenant_id, entity_id: document.entity_id, office_id: document.office_id,
           actor: actor, origin: "folio",
+          actor_user_id: authorize&.dig(:user)&.id,
           document_date: document.document_date || posting, posting_date: posting,
           entered_at: Time.now.utc, fiscal_year: document.fiscal_year, period_no: Documents.period_no_for(document),
           capabilities: effective_capabilities, authority: authority, document: { id: document.id }, lines: sim[:lines]

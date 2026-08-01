@@ -98,7 +98,8 @@ module Posting
           origin: draft.fetch(:origin, "folio"),
           ts: draft.fetch(:posting_date).to_s,
           payload_str: payload_str,
-          office_id: draft[:office_id]
+          office_id: draft[:office_id],
+          actor_user_id: draft[:actor_user_id]
         )
         replay!(event)
       end

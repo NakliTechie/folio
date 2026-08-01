@@ -182,6 +182,7 @@ module Contracts
       entry = Posting::PostEntry.post!(
         tenant_id: contract.tenant_id, entity_id: contract.entity_id, office_id: contract.office_id,
         actor: "u:#{actor.id}", origin: "folio", document_date: posting_date,
+        actor_user_id: actor.id,
         posting_date: posting_date, entered_at: Time.current,
         fiscal_year: Documents.fiscal_year(posting_date, variant: entity.fiscal_year_variant),
         period_no: Documents.period_no(posting_date, variant: entity.fiscal_year_variant),

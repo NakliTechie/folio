@@ -26,7 +26,7 @@ class LedgerEvent < ApplicationRecord
   # Appends one event, computing its chain link from the current head.
   # Callers pass an already-canonical payload string; see Folio::KhataHash.
   def self.append!(tenant_id:, actor:, action:, origin:, ts:, payload_str:, ref: nil,
-                   office_id: nil, actor_user_id: nil, signature: nil)
+                   office_id: nil, actor_user_id: nil, signature: nil, signing_key_id: nil)
     transaction do
       acquire_tenant_lock!(tenant_id)
 
@@ -38,10 +38,15 @@ class LedgerEvent < ApplicationRecord
         prev_hash: prev, ts: ts, actor: actor, action: action,
         ref: ref, origin: origin, payload_str: payload_str
       )
+      if actor_user_id && signature.nil?
+        signed = EventSigning.sign(user_id: actor_user_id, hash_hex: hash_hex)
+        signature = signed.signature
+        signing_key_id = signed.key.id
+      end
 
       create!(
         tenant_id: tenant_id, office_id: office_id, seq: next_seq,
-        actor_user_id: actor_user_id, signature: signature,
+        actor_user_id: actor_user_id, signature: signature, signing_key_id: signing_key_id,
         prev_hash: prev, hash_hex: hash_hex, hash_version: Folio::KhataHash::HASH_VERSION,
         ts: ts, actor: actor, action: action, ref: ref, origin: origin, payload: payload_str
       )
