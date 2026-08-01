@@ -24,6 +24,22 @@ COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiS
 
 
 --
+-- Name: folio_domain_events_append_only(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_domain_events_append_only() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION
+    'domain_events is append-only: % on row id=% rejected',
+    TG_OP, COALESCE(OLD.id, NEW.id)
+    USING ERRCODE = 'restrict_violation';
+END;
+$$;
+
+
+--
 -- Name: folio_ledger_events_append_only(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -385,6 +401,50 @@ CREATE SEQUENCE public.documents_id_seq
 --
 
 ALTER SEQUENCE public.documents_id_seq OWNED BY public.documents.id;
+
+
+--
+-- Name: domain_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.domain_events (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    office_id bigint,
+    seq bigint NOT NULL,
+    actor_user_id bigint,
+    signature bytea,
+    recorded_at timestamp(6) without time zone DEFAULT clock_timestamp() NOT NULL,
+    prev_hash character varying(64) NOT NULL,
+    hash_hex character varying(64) NOT NULL,
+    hash_version integer DEFAULT 2 NOT NULL,
+    ts character varying NOT NULL,
+    actor character varying NOT NULL,
+    action character varying NOT NULL,
+    ref character varying,
+    origin character varying NOT NULL,
+    payload text NOT NULL,
+    CONSTRAINT domain_events_seq_positive CHECK ((seq > 0))
+);
+
+
+--
+-- Name: domain_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.domain_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: domain_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.domain_events_id_seq OWNED BY public.domain_events.id;
 
 
 --
@@ -1538,6 +1598,13 @@ ALTER TABLE ONLY public.documents ALTER COLUMN id SET DEFAULT nextval('public.do
 
 
 --
+-- Name: domain_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.domain_events ALTER COLUMN id SET DEFAULT nextval('public.domain_events_id_seq'::regclass);
+
+
+--
 -- Name: entities id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1787,6 +1854,14 @@ ALTER TABLE ONLY public.document_types
 
 ALTER TABLE ONLY public.documents
     ADD CONSTRAINT documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: domain_events domain_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.domain_events
+    ADD CONSTRAINT domain_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -2324,6 +2399,34 @@ CREATE INDEX index_documents_on_tenant_id_and_state ON public.documents USING bt
 
 
 --
+-- Name: index_domain_events_on_tenant_id_and_action; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_domain_events_on_tenant_id_and_action ON public.domain_events USING btree (tenant_id, action);
+
+
+--
+-- Name: index_domain_events_on_tenant_id_and_hash_hex; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_domain_events_on_tenant_id_and_hash_hex ON public.domain_events USING btree (tenant_id, hash_hex);
+
+
+--
+-- Name: index_domain_events_on_tenant_id_and_office_id_and_seq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_domain_events_on_tenant_id_and_office_id_and_seq ON public.domain_events USING btree (tenant_id, office_id, seq);
+
+
+--
+-- Name: index_domain_events_on_tenant_id_and_seq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_domain_events_on_tenant_id_and_seq ON public.domain_events USING btree (tenant_id, seq);
+
+
+--
 -- Name: index_entities_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2695,6 +2798,27 @@ CREATE UNIQUE INDEX index_users_on_email_address ON public.users USING btree (em
 
 
 --
+-- Name: domain_events domain_events_no_delete; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER domain_events_no_delete BEFORE DELETE ON public.domain_events FOR EACH ROW EXECUTE FUNCTION public.folio_domain_events_append_only();
+
+
+--
+-- Name: domain_events domain_events_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER domain_events_no_truncate BEFORE TRUNCATE ON public.domain_events FOR EACH STATEMENT EXECUTE FUNCTION public.folio_domain_events_append_only();
+
+
+--
+-- Name: domain_events domain_events_no_update; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER domain_events_no_update BEFORE UPDATE ON public.domain_events FOR EACH ROW EXECUTE FUNCTION public.folio_domain_events_append_only();
+
+
+--
 -- Name: ledger_events ledger_events_no_delete; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2881,6 +3005,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801100000'),
 ('20260801008000'),
 ('20260801007000'),
 ('20260801006000'),
@@ -2928,3 +3053,4 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260729100000'),
 ('20260728020000'),
 ('20260727214500');
+
