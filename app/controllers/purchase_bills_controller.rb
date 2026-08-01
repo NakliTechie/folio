@@ -29,6 +29,7 @@ class PurchaseBillsController < BrowserController
       place_of_supply_state_code: bill_params[:place_of_supply_state_code],
       external_reference: bill_params[:external_reference],
       narration: bill_params[:narration],
+      tds_section: bill_params[:tds_section],
       lines: bill_params[:lines]
     )
     redirect_to purchase_bill_path(@document, tenant_route_options),
@@ -97,6 +98,7 @@ class PurchaseBillsController < BrowserController
         office_tax_registrations: { office_id: primary_office.id, tenant_id: Current.tenant.id }
       ).distinct.order(:identifier)
     @items = Item.active.where(tenant_id: Current.tenant.id).order(:name)
+    @tds_sections = Taxes::India::Tds::Schedule.sections
     @company_profile_complete = primary_office.statutory_address_complete?
     @registered_vendor_ready = Party.active.joins(:party_roles, :party_tax_registrations)
       .where(
@@ -122,6 +124,7 @@ class PurchaseBillsController < BrowserController
       :place_of_supply_state_code,
       :external_reference,
       :narration,
+      :tds_section,
       lines: %i[item_id quantity unit_price]
     )
   end

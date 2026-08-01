@@ -9,9 +9,24 @@ class TaxesIndiaTdsTest < ActiveSupport::TestCase
   Pan       = Taxes::India::Pan
   Schedule  = Taxes::India::Tds::Schedule
   Deduction = Taxes::India::Tds::Deduction
+  Base      = Taxes::India::Tds::Base
 
   # ₹ → minor units (paise), so the test reads in rupees.
   def rs(rupees) = rupees * 100
+
+  test "invoice credit excludes separately stated GST while a pre-invoice advance uses gross" do
+    invoice = Base.for_invoice(
+      gross_minor: rs(1_18_000), gst_minor: rs(18_000), gst_separately_stated: true
+    )
+    advance = Base.for_advance_payment(gross_minor: rs(1_18_000))
+
+    assert_equal rs(1_00_000), invoice.taxable_minor
+    assert_equal "invoice_excluding_separately_stated_gst", invoice.basis
+    assert_equal "credit", invoice.trigger_event
+    assert_equal rs(1_18_000), advance.taxable_minor
+    assert_equal "advance_payment_gross_before_invoice", advance.basis
+    assert_equal "advance_payment", advance.trigger_event
+  end
 
   # --- PAN structure and holder-type routing ---
 
@@ -71,16 +86,36 @@ class TaxesIndiaTdsTest < ActiveSupport::TestCase
     assert_equal 200, oth.rate_basis_points
   end
 
+  test "Finance Act 2025 thresholds and the monthly rent period resolve by date" do
+    old_j = Schedule.resolve(section: "194J", deductee_category: :any, on: Date.new(2025, 3, 31))
+    new_j = Schedule.resolve(section: "194J", deductee_category: :any, on: Date.new(2025, 4, 1))
+    new_h = Schedule.resolve(section: "194H", deductee_category: :any, on: Date.new(2025, 4, 1))
+    rent = Schedule.resolve(section: "194I-b", deductee_category: :any, on: Date.new(2025, 4, 1))
+
+    assert_equal rs(30_000), old_j.threshold_annual_minor
+    assert_equal rs(50_000), new_j.threshold_annual_minor
+    assert_equal rs(20_000), new_h.threshold_annual_minor
+    assert_equal rs(50_000), rent.threshold_annual_minor
+    assert_equal :month, rent.threshold_period
+  end
+
+  test "statutory references switch to section 393 on 1 April 2026" do
+    assert_equal "Income-tax Act 1961 §194C",
+      Schedule.statutory_reference(section: "194C", on: Date.new(2026, 3, 31))
+    assert_equal "Income-tax Act 2025 §393(1), Table Sl. 6(i)",
+      Schedule.statutory_reference(section: "194C", on: Date.new(2026, 4, 1))
+  end
+
   # --- deduction: thresholds ---
 
   test "194J withholds 10% once the annual threshold is crossed" do
     r = Deduction.compute(section: "194J", on: Date.new(2025, 6, 1),
-                          amount_minor: rs(50_000), pan: "ABCCD1234E")
+                          amount_minor: rs(60_000), pan: "ABCCD1234E")
     assert r.applied
     assert_equal :annual_threshold, r.reason
     assert_equal 1_000, r.rate_basis_points
-    assert_equal rs(5_000), r.tds_minor      # 10% of 50,000
-    assert_equal rs(45_000), r.net_minor
+    assert_equal rs(6_000), r.tds_minor
+    assert_equal rs(54_000), r.net_minor
   end
 
   test "a payment below the annual threshold withholds nothing" do
@@ -94,11 +129,24 @@ class TaxesIndiaTdsTest < ActiveSupport::TestCase
 
   test "the annual aggregate rule fires on a sub-threshold payment once prior payments cross it" do
     r = Deduction.compute(section: "194J", on: Date.new(2025, 6, 1),
-                          amount_minor: rs(20_000), pan: "ABCCD1234E",
-                          fy_paid_to_date_minor: rs(15_000))
-    assert r.applied, "prior 15k + this 20k = 35k crosses the 30k annual threshold"
+                          amount_minor: rs(40_000), pan: "ABCCD1234E",
+                          period_taxable_to_date_minor: rs(15_000),
+                          prior_deducted_base_minor: 0)
+    assert r.applied, "prior 15k + this 40k = 55k crosses the current 50k annual threshold"
     assert r.annual_threshold_crossed
-    assert_equal rs(2_000), r.tds_minor      # 10% of THIS 20,000; prior catch-up is lifecycle
+    assert_equal rs(55_000), r.deductible_base_minor
+    assert_equal rs(5_500), r.tds_minor
+  end
+
+  test "aggregate catch-up subtracts the base already deducted" do
+    r = Deduction.compute(
+      section: "194C", on: Date.new(2026, 6, 1), amount_minor: rs(20_000),
+      pan: "ABCCD1234E", period_taxable_to_date_minor: rs(90_000),
+      prior_deducted_base_minor: rs(40_000)
+    )
+
+    assert_equal rs(70_000), r.deductible_base_minor
+    assert_equal rs(1_400), r.tds_minor
   end
 
   test "an amount exactly equal to the threshold does not withhold (the Act says 'exceeds')" do
@@ -113,9 +161,9 @@ class TaxesIndiaTdsTest < ActiveSupport::TestCase
   end
 
   test "an aggregate exactly equal to the annual threshold does not withhold" do
-    # 194J annual ₹30,000. prior ₹10,000 + this ₹20,000 = exactly ₹30,000 → no TDS yet.
+    # Current 194J annual ₹50,000. prior ₹10,000 + this ₹40,000 = exactly ₹50,000.
     at = Deduction.compute(section: "194J", on: Date.new(2025, 6, 1),
-                           amount_minor: rs(20_000), pan: "ABCCD1234E",
+                           amount_minor: rs(40_000), pan: "ABCCD1234E",
                            fy_paid_to_date_minor: rs(10_000))
     refute at.applied
     assert_equal 0, at.tds_minor
@@ -206,7 +254,8 @@ class TaxesIndiaTdsTest < ActiveSupport::TestCase
   test "194Q withholds on the whole payment once the aggregate is already over the threshold" do
     r = Deduction.compute(section: "194Q", on: Date.new(2025, 6, 1),
                           amount_minor: rs(5_00_000), pan: "ABCCD1234E",
-                          fy_paid_to_date_minor: rs(60_00_000))
+                          period_taxable_to_date_minor: rs(60_00_000),
+                          prior_deducted_base_minor: rs(10_00_000))
     assert_equal rs(5_00_000), r.deductible_base_minor    # whole payment is excess
     assert_equal rs(500), r.tds_minor                     # 0.1% of ₹5L
   end

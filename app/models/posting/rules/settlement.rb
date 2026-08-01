@@ -22,20 +22,14 @@ module Posting
 
           lines = document.document_lines.to_a
           allocations = document.document_allocations.to_a
-          tds_line = lines.find { |line| line.account_code == Settlements::BuildDraft::TDS_PAYABLE_ACCOUNT_CODE }
-          bank_lines = lines - [ tds_line ].compact
-          raise Documents::InvalidDocument, "settlement needs one cash or bank line" unless bank_lines.one?
-          if tds_line && document.doc_type != "PY"
-            raise Documents::InvalidDocument, "TDS withholding applies only to vendor payments"
-          end
+          raise Documents::InvalidDocument, "settlement needs one cash or bank line" unless lines.one?
           raise Documents::InvalidDocument, "settlement needs at least one allocation" if allocations.empty?
           unless document.party_id && document.party_snapshot.present? &&
                  document.party_snapshot["id"].to_i == document.party_id
             raise Documents::InvalidDocument, "settlement party snapshot does not match its identity"
           end
 
-          validate_bank_line!(document, bank_lines.first, tds_line)
-          validate_tds_line!(document, tds_line) if tds_line
+          validate_bank_line!(document, lines.first)
           validate_allocations!(document, allocations, config)
         end
 
@@ -43,9 +37,7 @@ module Posting
           validate_document!(document)
           config = TYPES.fetch(document.doc_type)
           ledger = Ledger.find_by!(tenant_id: document.tenant_id, code: "PRIMARY")
-          all_lines = document.document_lines.to_a
-          tds_line = all_lines.find { |line| line.account_code == Settlements::BuildDraft::TDS_PAYABLE_ACCOUNT_CODE }
-          bank_line = (all_lines - [ tds_line ].compact).first
+          bank_line = document.document_lines.first
           amount = ->(value) { transaction_amount(document, value) }
 
           cash = {
@@ -79,20 +71,7 @@ module Posting
               amounts: [ amount.call(party_direction * allocation.amount_minor) ]
             }
           end
-          entry_lines = [ cash, *party_lines ]
-          if tds_line
-            # A plain GL credit to TDS Payable — no open_item/party (it is not a clearable
-            # sub-ledger item). Placed after every party line so its line_no can't collide.
-            entry_lines << {
-              line_no: document.document_allocations.size + 2,
-              account_code: tds_line.account_code,
-              ledger_id: ledger.id,
-              entity_id: document.entity_id,
-              office_id: document.office_id,
-              amounts: [ amount.call(tds_line.amount_minor) ]
-            }
-          end
-          entry_lines
+          [ cash, *party_lines ]
         end
 
         def after_post!(document:, entry:, actor:)
@@ -127,53 +106,17 @@ module Posting
               updated_at: Time.current
             )
           end
-          record_tds_deduction!(document: document, entry: entry)
-        end
-
-        # Persist the frozen TDS record from the TDS line's snapshot, inside the posting
-        # transaction so the deduction and its ledger entry commit together. No-op when the
-        # payment carried no withholding.
-        def record_tds_deduction!(document:, entry:)
-          tds_line = document.document_lines.find do |line|
-            line.account_code == Settlements::BuildDraft::TDS_PAYABLE_ACCOUNT_CODE
-          end
-          return unless tds_line
-
-          snapshot = tds_line.extra.to_h.fetch("tds")
-          TdsDeduction.create!(
-            tenant_id: document.tenant_id, party_id: snapshot.fetch("party_id"),
-            section: snapshot.fetch("section"), rate_basis_points: snapshot.fetch("rate_basis_points"),
-            taxable_minor: snapshot.fetch("taxable_minor"), tds_minor: snapshot.fetch("tds_minor"),
-            deduction_date: document.document_date,
-            deductee_pan: snapshot["deductee_pan"],
-            deductee_name_snapshot: snapshot.fetch("deductee_name_snapshot"),
-            source_document_id: document.id, entry_id: entry.id,
-            fiscal_year: snapshot.fetch("fiscal_year"), quarter: snapshot.fetch("quarter")
-          )
         end
 
         private
 
-        def validate_bank_line!(document, line, tds_line = nil)
+        def validate_bank_line!(document, line)
           direction = document.doc_type == "RC" ? 1 : -1
-          tds_minor = tds_line ? direction * tds_line.amount_minor : 0
           unless Settlements::BuildDraft::CASH_ACCOUNT_CODES.include?(line.account_code) &&
-                 line.amount_minor == direction * (document.total_minor - tds_minor) &&
+                 line.amount_minor == direction * document.total_minor &&
                  line.currency == document.currency &&
                  line.minor_unit_exponent == document.minor_unit_exponent && line.item_id.nil?
             raise Documents::InvalidDocument, "settlement cash or bank line was altered"
-          end
-        end
-
-        # The TDS Payable line is a credit (−tds) whose amount must match its own frozen
-        # snapshot. PY-only (validate_document! guards that).
-        def validate_tds_line!(document, line)
-          snapshot = line.extra.to_h["tds"]
-          unless snapshot && snapshot["tds_minor"].to_i.positive? &&
-                 line.amount_minor == -snapshot["tds_minor"].to_i &&
-                 line.currency == document.currency &&
-                 line.minor_unit_exponent == document.minor_unit_exponent && line.item_id.nil?
-            raise Documents::InvalidDocument, "settlement TDS line was altered"
           end
         end
 

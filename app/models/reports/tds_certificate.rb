@@ -26,11 +26,20 @@ module Reports
             "name" => rows.first&.deductee_name_snapshot,
             "pan" => rows.first&.deductee_pan
           },
-          "total_taxable_minor" => rows.sum(&:taxable_minor),
-          "total_tds_minor" => rows.sum(&:tds_minor),
+          "total_taxable_minor" => rows.sum(&:signed_taxable_minor),
+          "total_tds_minor" => rows.sum(&:signed_tds_minor),
           "deductions" => rows.map do |deduction|
-            { "section" => deduction.section, "rate_basis_points" => deduction.rate_basis_points,
-              "taxable_minor" => deduction.taxable_minor, "tds_minor" => deduction.tds_minor,
+            { "section" => deduction.section,
+              "statutory_reference" => deduction.statutory_reference,
+              "kind" => deduction.kind,
+              "rate_basis_points" => deduction.rate_basis_points,
+              "gross_minor" => deduction.gross_minor,
+              "gst_minor" => deduction.gst_minor,
+              "base_basis" => deduction.base_basis,
+              "trigger_event" => deduction.trigger_event,
+              "taxable_minor" => deduction.signed_taxable_minor,
+              "deductible_base_minor" => deduction.signed_deductible_base_minor,
+              "tds_minor" => deduction.signed_tds_minor,
               "deduction_date" => deduction.deduction_date.iso8601,
               "source_document_id" => deduction.source_document_id }
           end

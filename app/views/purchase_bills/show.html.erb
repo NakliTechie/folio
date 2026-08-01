@@ -49,12 +49,35 @@
     </div>
   </section>
 
+  <% if @document.tds_section.present? %>
+    <section class="panel">
+      <div class="panel__header">
+        <div><p class="eyebrow">Withholding at credit</p><h2>TDS assessment</h2></div>
+        <span class="status-badge <%= @document.tds_minor.positive? ? "status-badge--pending" : "status-badge--success" %>">
+          <%= @document.tds_minor.positive? ? "Deduct" : "Below threshold" %>
+        </span>
+      </div>
+      <dl class="metadata-grid">
+        <div><dt>Nature</dt><dd><%= @document.tds_section %></dd></div>
+        <div><dt>Statutory reference</dt><dd><%= @document.tds_statutory_reference %></dd></div>
+        <div><dt>Trigger</dt><dd>Credit on supplier invoice date</dd></div>
+        <div><dt>Rate</dt><dd><%= basis_points_percentage(@document.tds_rate_basis_points) %></dd></div>
+        <div><dt>GST-exclusive invoice base</dt><dd><%= money_amount(@document.tds_taxable_minor, currency: @document.currency) %></dd></div>
+        <div><dt>Prior period base</dt><dd><%= money_amount(@document.tds_prior_taxable_minor, currency: @document.currency) %></dd></div>
+        <div><dt>Deductible base now</dt><dd><%= money_amount(@document.tds_deductible_base_minor, currency: @document.currency) %></dd></div>
+        <div><dt>TDS payable</dt><dd><strong><%= money_amount(@document.tds_minor, currency: @document.currency) %></strong></dd></div>
+        <div><dt>Net vendor payable</dt><dd><strong><%= money_amount(@document.total_minor - @document.tds_minor, currency: @document.currency) %></strong></dd></div>
+      </dl>
+      <p><small>Separately stated GST of <%= money_amount(@document.tax_minor, currency: @document.currency) %> is excluded. Advance payments made before an invoice require the governed advance workflow and use their gross amount.</small></p>
+    </section>
+  <% end %>
+
   <% if @document.postable? %>
     <section class="panel posting-panel">
       <div>
         <p class="eyebrow">Accounting preview</p>
         <h2><%= @simulation[:balanced] ? "Input GST calculated and ready to post" : "This bill does not balance" %></h2>
-        <p>Posting debits the expense and input-GST accounts and credits an open vendor payable. The frozen bill becomes immutable afterward.</p>
+        <p>Posting debits expense and input GST, credits the vendor net of TDS, and credits TDS payable when withholding applies. The frozen bill becomes immutable afterward.</p>
       </div>
       <% if @simulation[:balanced] && permitted?("bills.create") %>
         <%= button_to "Post bill", post_purchase_bill_path(@document, tenant_route_options),

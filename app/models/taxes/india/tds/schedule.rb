@@ -15,21 +15,15 @@ module Taxes
       #
       # A rate change is a NEW ROW with a new window, never an edit — see §194H below, which
       # carries two windows (5% up to 2024-09-30, 2% from 2024-10-01, per the 2024 change).
-      # That is what makes "which rate applied on the payment date" a pure lookup.
-      #
-      # KNOWN PENDING UPDATE (do before production filing): the Finance Act 2025 revised
-      # several THRESHOLDS effective 2025-04-01 (reportedly 194J annual ₹30,000→₹50,000,
-      # 194H ₹15,000→₹20,000, 194I ₹2,40,000→₹6,00,000, among others). The engine already
-      # supports these as new effective-dated rows (add a row with effective_from 2025-04-01
-      # and close the prior row at 2025-03-31, exactly as 194H's rate change is modelled).
-      # They are deliberately NOT seeded here because they were not verifiable against a
-      # primary CBDT source in this build — seed them only from the actual notification.
+      # That is what makes "which rate applied on the credit-or-payment date" a pure lookup.
       module Schedule
         # One statutory rate for one (section, deductee category, date window).
         #   deductee_category: :individual_huf | :other | :any  (:any = constitution-independent)
         #   effective_to:      nil = still open
         #   threshold_single_minor: per-transaction threshold below which no TDS (nil = none)
-        #   threshold_annual_minor: FY-aggregate threshold below which no TDS (nil = none)
+        #   threshold_annual_minor: aggregate threshold below which no TDS (nil = none).
+        #              The historical name is retained for compatibility; threshold_period
+        #              says whether its accumulation window is a fiscal year or a month.
         #   base_rule: :on_full  → withhold on the whole payment once a threshold is crossed
         #              :on_excess → withhold only on the amount EXCEEDING the annual threshold
         #                           (§194Q — TDS is on purchase value above ₹50L, not the whole).
@@ -40,10 +34,16 @@ module Taxes
           :section, :description, :deductee_category,
           :effective_from, :effective_to,
           :rate_basis_points, :threshold_single_minor, :threshold_annual_minor,
-          :base_rule, :no_pan_rate_basis_points
+          :base_rule, :no_pan_rate_basis_points, :threshold_period
         ) do
-          def initialize(base_rule: :on_full, no_pan_rate_basis_points: nil, **rest)
-            super(base_rule: base_rule, no_pan_rate_basis_points: no_pan_rate_basis_points, **rest)
+          def initialize(base_rule: :on_full, no_pan_rate_basis_points: nil,
+                         threshold_period: :fiscal_year, **rest)
+            super(
+              base_rule: base_rule,
+              no_pan_rate_basis_points: no_pan_rate_basis_points,
+              threshold_period: threshold_period,
+              **rest
+            )
           end
 
           def covers?(date)
@@ -55,7 +55,7 @@ module Taxes
         end
 
         SECTIONS = {
-          "194A"  => "Interest other than interest on securities",
+          "194A"  => "Ordinary interest paid by a non-bank business",
           "194C"  => "Payments to contractors and sub-contractors",
           "194J"  => "Fees for professional or technical services",
           "194H"  => "Commission or brokerage",
@@ -64,19 +64,34 @@ module Taxes
           "194Q"  => "Purchase of goods above the annual threshold"
         }.freeze
 
+        ACT_2025_EFFECTIVE_FROM = Date.new(2026, 4, 1)
+        ACT_2025_REFERENCES = {
+          "194A" => "Income-tax Act 2025 §393(1), Table Sl. 5(ii)/(iii)",
+          "194H" => "Income-tax Act 2025 §393(1), Table Sl. 1(ii)",
+          "194I-a" => "Income-tax Act 2025 §393(1), Table Sl. 2(ii)",
+          "194I-b" => "Income-tax Act 2025 §393(1), Table Sl. 2(ii)",
+          "194C" => "Income-tax Act 2025 §393(1), Table Sl. 6(i)",
+          "194J" => "Income-tax Act 2025 §393(1), Table Sl. 6(iii)",
+          "194Q" => "Income-tax Act 2025 §393(1), Table Sl. 8(ii)"
+        }.freeze
+
         # ₹ helper → minor units (paise). Keeps the table readable in rupees.
         RUPEES = ->(r) { r * 100 }
 
-        # Rates cross-checked against Bahi's TDS_SECTIONS table (the correctness oracle). Where
-        # Folio and Bahi agree (194C/J/I, and 194A/194Q added here) the numbers are identical;
-        # the one deliberate divergence is 194H, where Bahi carries a flat 5% and Folio carries
-        # the effective-dated 5%→2% (Oct-2024) cut — Folio is the more current of the two.
+        # Effective windows are sourced from the governing Acts and Finance Act changes. Bahi
+        # remains a reconciliation oracle, but stale Bahi thresholds never override statute.
         RATES = [
-          # --- 194A interest other than securities: 10%, ₹40,000 annual (matches Bahi) ---
+          # --- 194A ordinary non-bank-business interest: 10%, ₹5k→₹10k FY aggregate ---
+          # Bank/co-operative/post-office and senior-citizen categories have different limits;
+          # Folio deliberately does not infer those categories from a generic vendor master.
           Rate.new(section: "194A", description: SECTIONS["194A"], deductee_category: :any,
-                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   effective_from: Date.new(2016, 6, 1), effective_to: Date.new(2025, 3, 31),
                    rate_basis_points: 1_000, threshold_single_minor: nil,
-                   threshold_annual_minor: RUPEES.call(40_000)),
+                   threshold_annual_minor: RUPEES.call(5_000)),
+          Rate.new(section: "194A", description: SECTIONS["194A"], deductee_category: :any,
+                   effective_from: Date.new(2025, 4, 1), effective_to: nil,
+                   rate_basis_points: 1_000, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(10_000)),
 
           # --- 194C contractors: splits on deductee constitution (1% ind/HUF, 2% others) ---
           Rate.new(section: "194C", description: SECTIONS["194C"], deductee_category: :individual_huf,
@@ -92,9 +107,13 @@ module Taxes
           # (The 2% technical-services sub-rate, TDS code 94J-A, is a distinct payment nature
           #  and is deferred; this row is the professional-services case, 94J-B.)
           Rate.new(section: "194J", description: SECTIONS["194J"], deductee_category: :any,
-                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   effective_from: Date.new(2016, 6, 1), effective_to: Date.new(2025, 3, 31),
                    rate_basis_points: 1_000, threshold_single_minor: nil,
                    threshold_annual_minor: RUPEES.call(30_000)),
+          Rate.new(section: "194J", description: SECTIONS["194J"], deductee_category: :any,
+                   effective_from: Date.new(2025, 4, 1), effective_to: nil,
+                   rate_basis_points: 1_000, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(50_000)),
 
           # --- 194H commission/brokerage: the effective-dated showcase ---
           # 5% through 2024-09-30, reduced to 2% from 2024-10-01 (Finance (No. 2) Act 2024).
@@ -103,19 +122,31 @@ module Taxes
                    rate_basis_points: 500, threshold_single_minor: nil,
                    threshold_annual_minor: RUPEES.call(15_000)),
           Rate.new(section: "194H", description: SECTIONS["194H"], deductee_category: :any,
-                   effective_from: Date.new(2024, 10, 1), effective_to: nil,
+                   effective_from: Date.new(2024, 10, 1), effective_to: Date.new(2025, 3, 31),
                    rate_basis_points: 200, threshold_single_minor: nil,
                    threshold_annual_minor: RUPEES.call(15_000)),
+          Rate.new(section: "194H", description: SECTIONS["194H"], deductee_category: :any,
+                   effective_from: Date.new(2025, 4, 1), effective_to: nil,
+                   rate_basis_points: 200, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(20_000)),
 
           # --- 194I rent: 2% plant/machinery, 10% land/building/furniture ---
           Rate.new(section: "194I-a", description: SECTIONS["194I-a"], deductee_category: :any,
-                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   effective_from: Date.new(2016, 6, 1), effective_to: Date.new(2025, 3, 31),
                    rate_basis_points: 200, threshold_single_minor: nil,
                    threshold_annual_minor: RUPEES.call(2_40_000)),
+          Rate.new(section: "194I-a", description: SECTIONS["194I-a"], deductee_category: :any,
+                   effective_from: Date.new(2025, 4, 1), effective_to: nil,
+                   rate_basis_points: 200, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(50_000), threshold_period: :month),
           Rate.new(section: "194I-b", description: SECTIONS["194I-b"], deductee_category: :any,
-                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   effective_from: Date.new(2016, 6, 1), effective_to: Date.new(2025, 3, 31),
                    rate_basis_points: 1_000, threshold_single_minor: nil,
                    threshold_annual_minor: RUPEES.call(2_40_000)),
+          Rate.new(section: "194I-b", description: SECTIONS["194I-b"], deductee_category: :any,
+                   effective_from: Date.new(2025, 4, 1), effective_to: nil,
+                   rate_basis_points: 1_000, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(50_000), threshold_period: :month),
 
           # --- 194Q purchase of goods: 0.1% on value EXCEEDING ₹50L aggregate per seller/FY ---
           # Introduced 2021-07-01. Unlike the others, TDS is on the EXCESS over the threshold
@@ -132,6 +163,17 @@ module Taxes
         def sections = SECTIONS
 
         def known_section?(section) = SECTIONS.key?(section)
+
+        def statutory_reference(section:, on:)
+          raise UnknownSection, "TDS section #{section.inspect} is not in the schedule" unless known_section?(section)
+          raise InvalidInput, "on must be a Date" unless on.is_a?(Date)
+
+          if on >= ACT_2025_EFFECTIVE_FROM
+            ACT_2025_REFERENCES.fetch(section)
+          else
+            "Income-tax Act 1961 §#{section}"
+          end
+        end
 
         # Resolve the single applicable Rate for a section, deductee category, and date.
         # Prefers an exact category match over an :any row. Raises UnknownSection when no

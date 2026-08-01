@@ -15,8 +15,8 @@ module Reports
           "fiscal_year" => fiscal_year,
           "quarter" => quarter,
           "deduction_count" => rows.size,
-          "total_taxable_minor" => rows.sum(&:taxable_minor),
-          "total_tds_minor" => rows.sum(&:tds_minor),
+          "total_taxable_minor" => rows.sum(&:signed_taxable_minor),
+          "total_tds_minor" => rows.sum(&:signed_tds_minor),
           "by_section" => by_section(rows),
           "deductees" => deductees(rows)
         }
@@ -25,25 +25,37 @@ module Reports
       private
 
       def by_section(rows)
-        rows.group_by(&:section).map do |section, group|
-          { "section" => section, "count" => group.size,
-            "taxable_minor" => group.sum(&:taxable_minor), "tds_minor" => group.sum(&:tds_minor) }
-        end.sort_by { |summary| summary["section"] }
+        rows.group_by { |row| [ row.section, row.statutory_reference ] }.map do |key, group|
+          section, statutory_reference = key
+          { "section" => section, "statutory_reference" => statutory_reference,
+            "count" => group.size,
+            "taxable_minor" => group.sum(&:signed_taxable_minor),
+            "tds_minor" => group.sum(&:signed_tds_minor) }
+        end.sort_by { |summary| [ summary["section"], summary["statutory_reference"] ] }
       end
 
       def deductees(rows)
         rows.group_by(&:party_id).map do |party_id, group|
           first = group.first
           { "party_id" => party_id, "name" => first.deductee_name_snapshot, "pan" => first.deductee_pan,
-            "count" => group.size, "taxable_minor" => group.sum(&:taxable_minor),
-            "tds_minor" => group.sum(&:tds_minor),
+            "count" => group.size, "taxable_minor" => group.sum(&:signed_taxable_minor),
+            "tds_minor" => group.sum(&:signed_tds_minor),
             "deductions" => group.map { |deduction| deduction_row(deduction) } }
         end.sort_by { |deductee| deductee["name"].to_s }
       end
 
       def deduction_row(deduction)
-        { "section" => deduction.section, "rate_basis_points" => deduction.rate_basis_points,
-          "taxable_minor" => deduction.taxable_minor, "tds_minor" => deduction.tds_minor,
+        { "section" => deduction.section,
+          "statutory_reference" => deduction.statutory_reference,
+          "kind" => deduction.kind,
+          "rate_basis_points" => deduction.rate_basis_points,
+          "gross_minor" => deduction.gross_minor,
+          "gst_minor" => deduction.gst_minor,
+          "base_basis" => deduction.base_basis,
+          "trigger_event" => deduction.trigger_event,
+          "taxable_minor" => deduction.signed_taxable_minor,
+          "deductible_base_minor" => deduction.sign * deduction.deductible_base_minor,
+          "tds_minor" => deduction.signed_tds_minor,
           "deduction_date" => deduction.deduction_date.iso8601,
           "source_document_id" => deduction.source_document_id }
       end

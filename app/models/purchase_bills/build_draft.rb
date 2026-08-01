@@ -7,7 +7,8 @@ module PurchaseBills
     module_function
 
     def call(tenant:, party_id:, tax_registration_id:, document_date:, due_date:,
-             place_of_supply_state_code:, external_reference:, lines:, narration: nil)
+             place_of_supply_state_code:, external_reference:, lines:, narration: nil,
+             tds_section: nil)
       bill_date = parse_date!(document_date, "supplier invoice date")
       payment_due = parse_date!(due_date, "due date")
       raise InvalidBill, "due date cannot be before the supplier invoice date" if payment_due < bill_date
@@ -72,6 +73,20 @@ module PurchaseBills
       tax_total = breakdown.values.sum
       currency = tenant.functional_currency
       exponent = CurrencyProfile.exponent_for!(currency)
+      resolved_tds_section = if tds_section.to_s == "none"
+        nil
+      else
+        tds_section.presence || vendor.default_tds_section
+      end
+      tds_assessment = TdsAssessment.build(
+        tenant: tenant,
+        entity: entity,
+        party: vendor,
+        on: bill_date,
+        gross_minor: subtotal + tax_total,
+        gst_minor: tax_total,
+        section: resolved_tds_section
+      )
 
       Document.transaction do
         document = Document.create!(
@@ -86,7 +101,8 @@ module PurchaseBills
           subtotal_minor: subtotal, tax_minor: tax_total, total_minor: subtotal + tax_total,
           party_snapshot: party_snapshot(vendor, vendor_registration),
           tax_registration_snapshot: registration_snapshot(buyer_registration, entity, office),
-          tax_breakdown: breakdown
+          tax_breakdown: breakdown,
+          **tds_assessment
         )
         normalized_lines.each_with_index do |line, index|
           document.document_lines.create!(

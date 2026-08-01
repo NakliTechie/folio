@@ -24,8 +24,13 @@ class ReportsTdsTest < ActiveSupport::TestCase
   def deduct(party:, section:, taxable:, tds:, date:, pan:, name:)
     TdsDeduction.create!(
       tenant_id: @tenant_id, party_id: party, section: section, rate_basis_points: 200,
-      taxable_minor: taxable, tds_minor: tds, deduction_date: date, deductee_pan: pan,
-      deductee_name_snapshot: name, source_document_id: 1, entry_id: 1,
+      statutory_reference: Taxes::India::Tds::Schedule.statutory_reference(section: section, on: date),
+      gross_minor: taxable, gst_minor: 0, taxable_minor: taxable,
+      deductible_base_minor: taxable, tds_minor: tds,
+      base_basis: "legacy_payment_gross", trigger_event: "payment", kind: "deduction",
+      deduction_date: date, deductee_pan: pan,
+      deductee_name_snapshot: name, source_document_id: TdsDeduction.count + 1,
+      entry_id: 1,
       fiscal_year: 2026, quarter: TdsDeduction.india_quarter(date)
     )
   end

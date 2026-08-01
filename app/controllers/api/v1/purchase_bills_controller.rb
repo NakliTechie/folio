@@ -27,6 +27,7 @@ module Api
           place_of_supply_state_code: params[:place_of_supply_state_code],
           external_reference: params[:external_reference],
           narration: params[:narration],
+          tds_section: params[:tds_section],
           lines: lines_params
         )
         render json: { purchase_bill: document_json(document) }, status: :created
@@ -96,6 +97,21 @@ module Api
           tax_minor: document.tax_minor,
           total_minor: document.total_minor,
           tax_breakdown: document.tax_breakdown,
+          tds: document.tds_section && {
+            section: document.tds_section,
+            statutory_reference: document.tds_statutory_reference,
+            trigger_event: document.tds_trigger_event,
+            base_basis: document.tds_base_basis,
+            rate_basis_points: document.tds_rate_basis_points,
+            gross_minor: document.total_minor,
+            gst_minor: document.tax_minor,
+            taxable_minor: document.tds_taxable_minor,
+            prior_taxable_minor: document.tds_prior_taxable_minor,
+            prior_deducted_base_minor: document.tds_prior_deducted_base_minor,
+            deductible_base_minor: document.tds_deductible_base_minor,
+            tds_minor: document.tds_minor,
+            vendor_payable_minor: document.total_minor - document.tds_minor
+          },
           vendor: document.party_snapshot,
           buyer_registration: document.tax_registration_snapshot,
           lines: document.document_lines.map do |line|

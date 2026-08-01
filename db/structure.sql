@@ -377,10 +377,22 @@ CREATE TABLE public.documents (
     credit_note_for_document_id bigint,
     reason_code character varying,
     debit_note_for_document_id bigint,
+    tds_section character varying,
+    tds_statutory_reference character varying,
+    tds_base_basis character varying,
+    tds_trigger_event character varying,
+    tds_rate_basis_points integer DEFAULT 0 NOT NULL,
+    tds_taxable_minor bigint DEFAULT 0 NOT NULL,
+    tds_prior_taxable_minor bigint DEFAULT 0 NOT NULL,
+    tds_prior_deducted_base_minor bigint DEFAULT 0 NOT NULL,
+    tds_deductible_base_minor bigint DEFAULT 0 NOT NULL,
+    tds_minor bigint DEFAULT 0 NOT NULL,
     CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying, 'quantity_underbilling'::character varying])::text[])))),
     CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
     CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
-    CONSTRAINT chk_documents_supply_type CHECK (((supply_type IS NULL) OR ((supply_type)::text = ANY ((ARRAY['B2B'::character varying, 'B2C'::character varying])::text[]))))
+    CONSTRAINT chk_documents_supply_type CHECK (((supply_type IS NULL) OR ((supply_type)::text = ANY ((ARRAY['B2B'::character varying, 'B2C'::character varying])::text[])))),
+    CONSTRAINT chk_documents_tds_amounts_nonneg CHECK (((tds_rate_basis_points >= 0) AND (tds_taxable_minor >= 0) AND (tds_prior_taxable_minor >= 0) AND (tds_prior_deducted_base_minor >= 0) AND (tds_deductible_base_minor >= 0) AND (tds_minor >= 0))),
+    CONSTRAINT chk_documents_tds_snapshot_complete CHECK ((((tds_section IS NULL) AND (tds_statutory_reference IS NULL) AND (tds_base_basis IS NULL) AND (tds_trigger_event IS NULL) AND (tds_rate_basis_points = 0) AND (tds_taxable_minor = 0) AND (tds_prior_taxable_minor = 0) AND (tds_prior_deducted_base_minor = 0) AND (tds_deductible_base_minor = 0) AND (tds_minor = 0)) OR ((tds_section IS NOT NULL) AND (tds_statutory_reference IS NOT NULL) AND (tds_base_basis IS NOT NULL) AND (tds_trigger_event IS NOT NULL) AND (tds_taxable_minor > 0) AND (tds_minor <= tds_deductible_base_minor))))
 );
 
 
@@ -1473,8 +1485,19 @@ CREATE TABLE public.tds_deductions (
     quarter integer NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    gross_minor bigint NOT NULL,
+    gst_minor bigint NOT NULL,
+    deductible_base_minor bigint NOT NULL,
+    base_basis character varying NOT NULL,
+    trigger_event character varying NOT NULL,
+    statutory_reference character varying NOT NULL,
+    kind character varying DEFAULT 'deduction'::character varying NOT NULL,
+    reverses_tds_deduction_id bigint,
     CONSTRAINT tds_deductions_amounts_nonneg CHECK (((taxable_minor >= 0) AND (tds_minor >= 0))),
-    CONSTRAINT tds_deductions_quarter_valid CHECK (((quarter >= 1) AND (quarter <= 4)))
+    CONSTRAINT tds_deductions_evidence_amounts_valid CHECK (((gross_minor >= 0) AND (gst_minor >= 0) AND (deductible_base_minor >= 0))),
+    CONSTRAINT tds_deductions_kind_valid CHECK (((kind)::text = ANY ((ARRAY['deduction'::character varying, 'reversal'::character varying])::text[]))),
+    CONSTRAINT tds_deductions_quarter_valid CHECK (((quarter >= 1) AND (quarter <= 4))),
+    CONSTRAINT tds_deductions_reversal_link_valid CHECK (((((kind)::text = 'deduction'::text) AND (reverses_tds_deduction_id IS NULL)) OR (((kind)::text = 'reversal'::text) AND (reverses_tds_deduction_id IS NOT NULL))))
 );
 
 
@@ -2453,6 +2476,13 @@ CREATE UNIQUE INDEX index_documents_on_series_and_number ON public.documents USI
 
 
 --
+-- Name: index_documents_on_tds_assessment_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_documents_on_tds_assessment_scope ON public.documents USING btree (tenant_id, party_id, fiscal_year, tds_section) WHERE (tds_section IS NOT NULL);
+
+
+--
 -- Name: index_documents_on_tenant_id_and_state; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2817,6 +2847,13 @@ CREATE INDEX index_tax_registrations_on_tenant_id_and_active ON public.tax_regis
 
 
 --
+-- Name: index_tds_deductions_on_reverses_tds_deduction_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_tds_deductions_on_reverses_tds_deduction_id ON public.tds_deductions USING btree (reverses_tds_deduction_id);
+
+
+--
 -- Name: index_tds_deductions_on_source_document_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2842,6 +2879,13 @@ CREATE INDEX index_tds_deductions_on_tenant_id_and_party_id ON public.tds_deduct
 --
 
 CREATE INDEX index_tds_deductions_on_tenant_id_and_section ON public.tds_deductions USING btree (tenant_id, section);
+
+
+--
+-- Name: index_tds_deductions_on_tenant_id_and_source_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_tds_deductions_on_tenant_id_and_source_document_id ON public.tds_deductions USING btree (tenant_id, source_document_id);
 
 
 --
@@ -3094,6 +3138,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801120000'),
 ('20260801110000'),
 ('20260801100000'),
 ('20260801008000'),

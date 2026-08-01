@@ -37,7 +37,17 @@ module Documents
           subtotal_minor: document.subtotal_minor, tax_minor: document.tax_minor,
           total_minor: document.total_minor, party_snapshot: document.party_snapshot,
           tax_registration_snapshot: document.tax_registration_snapshot,
-          tax_breakdown: document.tax_breakdown
+          tax_breakdown: document.tax_breakdown,
+          tds_section: document.tds_section,
+          tds_statutory_reference: document.tds_statutory_reference,
+          tds_base_basis: document.tds_base_basis,
+          tds_trigger_event: document.tds_trigger_event,
+          tds_rate_basis_points: document.tds_rate_basis_points,
+          tds_taxable_minor: document.tds_taxable_minor,
+          tds_prior_taxable_minor: document.tds_prior_taxable_minor,
+          tds_prior_deducted_base_minor: document.tds_prior_deducted_base_minor,
+          tds_deductible_base_minor: document.tds_deductible_base_minor,
+          tds_minor: document.tds_minor
         )
         document.document_lines.each do |dl|
           rev.document_lines.create!(

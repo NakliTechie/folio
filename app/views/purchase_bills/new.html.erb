@@ -76,6 +76,14 @@
             required: true %>
           <small>This determines whether the supplier charged IGST or CGST plus SGST/UTGST.</small>
         </div>
+        <div class="form-group">
+          <%= form.label :tds_section, "TDS nature" %>
+          <%= form.select :tds_section,
+            [["Use the vendor default", ""], ["No TDS for this bill", "none"]] +
+              @tds_sections.map { |code, description| ["#{code} · #{description}", code] },
+            { selected: params.dig(:purchase_bill, :tds_section) } %>
+          <small>Folio assesses TDS now—the credit event—and excludes separately stated GST from its base.</small>
+        </div>
       </div>
       <div class="form-group">
         <%= form.label :narration, "Bill note (optional)" %>

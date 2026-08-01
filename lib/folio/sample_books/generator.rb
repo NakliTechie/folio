@@ -112,8 +112,8 @@ module Folio
           country_code: "IN", address_line1: "1 #{party.name} Marg",
           city: party.city, postal_code: party.postal_code
         }
-        # A vendor's default TDS section = the section tagged on the purchases from it, so its
-        # payments withhold automatically (exercises the default_tds_section resolution path).
+        # A vendor's default TDS section = the section tagged on purchases from it, so invoice
+        # credit assessment exercises the default_tds_section resolution path.
         if role == "vendor"
           section = s.purchases.find { |p| p.vendor_ref == party.ref && p.tds_section }&.tds_section
           attributes[:default_tds_section] = section if section
@@ -151,6 +151,7 @@ module Folio
             tenant: @tenant, party_id: vendor.id, tax_registration_id: @registration.id,
             document_date: purchase.date, due_date: purchase.due_date,
             place_of_supply_state_code: s.home_state, external_reference: purchase.supplier_ref,
+            tds_section: purchase.tds_section,
             lines: [ { item_id: @items.fetch(purchase.service_code).id,
                        quantity: purchase.quantity, unit_price: purchase.unit_price } ],
             narration: "#{@items.fetch(purchase.service_code).name} — #{vendor.name}"
@@ -184,27 +185,19 @@ module Folio
         EntryLine.joins(:entry).find_by!(entries: { document_id: document.id }, account_code: account_code)
       end
 
-      # Preview what a TDS lifecycle WOULD withhold on each tagged purchase, using the
-      # shipped kernel against real seeded amounts. Informational — the deduction leg is
-      # not posted yet (TDS lifecycle is a later slice).
+      # Return the frozen assessment from each real posted bill. The result field retains its
+      # historical name for callers, but this is no longer a hypothetical payment preview.
       def tds_previews
         s.purchases.filter_map do |purchase|
           next unless purchase.tds_section
 
-          # The scenario struct carries the PAN (the persisted Party record does not).
           vendor = s.vendors.find { |v| v.ref == purchase.vendor_ref }
-          service = s.services.find { |item| item.code == purchase.service_code }
-          taxable = (BigDecimal(purchase.unit_price) * 100).to_i * Integer(purchase.quantity)
-          # Preview on the GROSS bill (taxable + GST) so it equals what a full payment actually
-          # withholds — the posting uses the gross settlement amount as the base (matching Bahi).
-          gross = taxable + Taxes::India::Tds::Deduction.round_half_up(taxable, service.rate_basis_points)
-          d = Taxes::India::Tds::Deduction.compute(
-            section: purchase.tds_section, on: purchase.date,
-            amount_minor: gross, pan: vendor.pan
-          )
+          document = @purchases.fetch(purchase.ref)
           { purchase: purchase.ref, vendor: vendor.name, section: purchase.tds_section,
-            taxable_minor: gross, applied: d.applied,
-            rate_basis_points: d.rate_basis_points, tds_minor: d.tds_minor }
+            gross_minor: document.total_minor, gst_minor: document.tax_minor,
+            taxable_minor: document.tds_taxable_minor, base_basis: document.tds_base_basis,
+            applied: document.tds_minor.positive?,
+            rate_basis_points: document.tds_rate_basis_points, tds_minor: document.tds_minor }
         end
       end
 

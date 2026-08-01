@@ -9,29 +9,29 @@ module Taxes
       # niceties like String#present?), so the standard can be tested against it directly,
       # mirroring the GST Adapter's shape (Taxes::India::Adapter).
       #
-      # Given a payment under a section on a date, decides whether tax must be withheld and
+      # Given a credit/payment amount under a section on a date, decides whether tax must be withheld and
       # how much, applying three statutory rules:
       #   1. Effective-dated rate — resolved from Schedule as of the payment date.
       #   2. Threshold — a single-payment threshold and/or an FY-aggregate threshold; the
-      #      caller passes how much has already been paid to this deductee under this section
-      #      this financial year (fy_paid_to_date_minor) so the aggregate rule can fire.
+      #      caller passes prior taxable and already-deducted bases for the rate's accumulation
+      #      period (FY for most sections, calendar month for rent from 2025-04-01).
       #   3. §206AA — a deductee without a valid PAN is deducted at the higher of the section
       #      rate and 20%, unless the section sets its own no-PAN rate (§194Q → 5%).
       #
       # Rounding matches the GST adapter exactly: round-half-up on non-negative minor units,
       # denominator 10_000 (basis points). One rounding rule across the whole tax surface.
       #
-      # DEFERRED (lifecycle, not here): once the FY-aggregate threshold is crossed, statute
-      # expects catch-up withholding on earlier sub-threshold payments too. This calculator
-      # withholds on the CURRENT payment and reports `annual_threshold_crossed` so the
-      # lifecycle layer can compute catch-up; it does not reach back into prior payments.
-      # Statutory rupee-rounding of the challan (§288B) is also a return-time concern.
+      # When an aggregate threshold is first crossed, deductible_base_minor includes the
+      # previously assessed but not-yet-deducted base. This makes catch-up deterministic and
+      # idempotent: the caller supplies prior_deducted_base_minor, not merely prior TDS tax.
+      # Statutory rupee-rounding of the challan remains a return-time concern.
       module Deduction
         Result = Data.define(
           :section, :applied, :reason, :rate_basis_points,
           :taxable_minor, :deductible_base_minor, :tds_minor, :net_minor,
           :pan_available, :deductee_category,
-          :single_threshold_crossed, :annual_threshold_crossed
+          :single_threshold_crossed, :annual_threshold_crossed,
+          :threshold_period, :statutory_reference
         )
 
         module_function
@@ -41,9 +41,18 @@ module Taxes
         # higher-rate leg) when it cannot be — a conservative default that §206AA makes
         # moot for the amount anyway.
         def compute(section:, on:, amount_minor:, pan: nil, deductee_category: nil,
-                    fy_paid_to_date_minor: 0)
+                    period_taxable_to_date_minor: nil, prior_deducted_base_minor: 0,
+                    fy_paid_to_date_minor: nil)
           amount = non_negative_integer!(amount_minor, "amount_minor")
-          prior  = non_negative_integer!(fy_paid_to_date_minor, "fy_paid_to_date_minor")
+          if period_taxable_to_date_minor && fy_paid_to_date_minor
+            raise InvalidInput,
+              "pass period_taxable_to_date_minor or fy_paid_to_date_minor, not both"
+          end
+          prior_value = period_taxable_to_date_minor || fy_paid_to_date_minor || 0
+          prior = non_negative_integer!(prior_value, "period_taxable_to_date_minor")
+          prior_deducted = non_negative_integer!(
+            prior_deducted_base_minor, "prior_deducted_base_minor"
+          )
           raise InvalidInput, "on must be a Date" unless on.is_a?(Date)
 
           pan_available = pan.present? && Taxes::India::Pan.valid?(pan)
@@ -56,15 +65,16 @@ module Taxes
           # EXACTLY equal to the threshold attracts NO TDS; only crossing it does. `>=` here
           # would over-withhold by one rupee at the boundary.
           single_crossed = rate.threshold_single_minor && amount > rate.threshold_single_minor
-          annual_crossed = rate.threshold_annual_minor &&
+          aggregate_crossed = rate.threshold_annual_minor &&
                            (prior + amount) > rate.threshold_annual_minor
           no_threshold = rate.threshold_single_minor.nil? && rate.threshold_annual_minor.nil?
 
-          applied = single_crossed || annual_crossed || no_threshold
+          applied = single_crossed || aggregate_crossed || no_threshold
           reason =
             if !applied then :below_threshold
             elsif no_threshold then :no_threshold
             elsif single_crossed then :single_threshold
+            elsif rate.threshold_period == :month then :monthly_threshold
             else :annual_threshold
             end
 
@@ -78,14 +88,20 @@ module Taxes
             [ rate.rate_basis_points, NO_PAN_FLOOR_BASIS_POINTS ].max
           end
 
-          # The base the rate applies to. Normally the whole payment; for an :on_excess
-          # section (§194Q) only the aggregate value ABOVE the annual threshold, capped at
-          # this payment (prior payments' excess is the lifecycle layer's catch-up concern).
+          # For an aggregate threshold, target the total statutory base reached to date and
+          # subtract the base already deducted. That captures catch-up exactly once. A
+          # single-transaction threshold that fires before the aggregate threshold applies
+          # only to the current amount.
           deductible_base =
             if !applied
               0
-            elsif rate.on_excess?
-              [ [ (prior + amount) - rate.threshold_annual_minor, amount ].min, 0 ].max
+            elsif aggregate_crossed
+              target_base = if rate.on_excess?
+                (prior + amount) - rate.threshold_annual_minor
+              else
+                prior + amount
+              end
+              [ target_base - prior_deducted, 0 ].max
             else
               amount
             end
@@ -96,7 +112,7 @@ module Taxes
             section: section,
             applied: applied,
             reason: reason,
-            rate_basis_points: applied ? effective_rate : 0,
+            rate_basis_points: effective_rate,
             taxable_minor: amount,
             deductible_base_minor: deductible_base,
             tds_minor: tds,
@@ -104,7 +120,9 @@ module Taxes
             pan_available: pan_available,
             deductee_category: category,
             single_threshold_crossed: !!single_crossed,
-            annual_threshold_crossed: !!annual_crossed
+            annual_threshold_crossed: !!aggregate_crossed,
+            threshold_period: rate.threshold_period,
+            statutory_reference: Schedule.statutory_reference(section: section, on: on)
           )
         end
 

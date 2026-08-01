@@ -23,8 +23,7 @@ module Folio
     # A sales invoice to build+post. qty/unit_price are decimal STRINGS (rupees).
     Sale = Data.define(:ref, :customer_ref, :service_code, :date, :due_date, :quantity, :unit_price)
     # A purchase bill. supplier_ref is the vendor's own invoice no (required, unique per vendor).
-    # tds_section (optional) tags a payment that a TDS lifecycle would withhold on — the
-    # generator computes a TDS preview with the shipped kernel but does not post the leg yet.
+    # tds_section (optional) tags a bill whose credit event is assessed and posted for TDS.
     Purchase = Data.define(:ref, :vendor_ref, :service_code, :date, :due_date,
                            :quantity, :unit_price, :supplier_ref, :tds_section)
     # A receipt/payment against a posted sale/purchase. amount a decimal STRING; mode is
@@ -83,7 +82,8 @@ module Folio
         Receipt.new("INV3", Date.new(2026, 6, 25), "20000.00", "residual")
       ],
       payments: [
-        Payment.new("BILL1", Date.new(2026, 6, 4), "47200.00", "partial")
+        # Gross ₹47,200 less ₹800 TDS on the GST-exclusive ₹40,000 base.
+        Payment.new("BILL1", Date.new(2026, 6, 4), "46400.00", "partial")
       ]
     )
 
@@ -128,7 +128,7 @@ module Folio
         Receipt.new("MINV2", Date.new(2026, 6, 20), "300000.00", "residual")
       ],
       payments: [
-        Payment.new("MBILL2", Date.new(2026, 6, 17), "59000.00", "partial")
+        Payment.new("MBILL2", Date.new(2026, 6, 17), "58000.00", "partial")
       ]
     )
 
@@ -172,7 +172,7 @@ module Folio
         Receipt.new("PINV2", Date.new(2026, 6, 15), "100800.00", "partial")
       ],
       payments: [
-        Payment.new("PBILL2", Date.new(2026, 6, 24), "47200.00", "partial")
+        Payment.new("PBILL2", Date.new(2026, 6, 24), "46400.00", "partial")
       ]
     )
 

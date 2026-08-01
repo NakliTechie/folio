@@ -3,10 +3,13 @@
 module Posting
   module Rules
     # Debits governed expense and input-GST accounts and credits a vendor open payable.
+    # When TDS applies, the vendor is credited net and TDS Payable is credited at invoice
+    # posting — the statutory credit event, ordinarily earlier than settlement.
     # Reversals reuse the frozen bill snapshots and negate the same accounts.
     class PurchaseBill
       INPUT_TAX_ACCOUNT_CODE = "1210"
       PAYABLE_ACCOUNT_CODE = "2000"
+      TDS_PAYABLE_ACCOUNT_CODE = "2110"
 
       class << self
         def validate_document!(document)
@@ -34,6 +37,7 @@ module Posting
           end
 
           validate_lines!(document, lines)
+          validate_tds_snapshot!(document)
         end
 
         def entry_lines(document)
@@ -62,7 +66,7 @@ module Posting
               "partySnapshot" => document.party_snapshot,
               "supplierInvoiceNumber" => document.external_reference
             }.compact,
-            amounts: [ amount.call(-document.total_minor) ]
+            amounts: [ amount.call(-(document.total_minor - document.tds_minor)) ]
           }.merge(negative)
 
           expense_lines = document.document_lines.map do |bill_line|
@@ -105,10 +109,82 @@ module Posting
             end
           end
 
-          [ vendor_line, *expense_lines, *tax_lines ]
+          tds_line = if document.tds_minor.positive?
+            {
+              line_no: line_no += 1,
+              account_code: TDS_PAYABLE_ACCOUNT_CODE,
+              ledger_id: ledger.id,
+              entity_id: document.entity_id,
+              office_id: document.office_id,
+              amounts: [ amount.call(-document.tds_minor) ],
+              extra: {
+                "tdsSection" => document.tds_section,
+                "statutoryReference" => document.tds_statutory_reference,
+                "baseBasis" => document.tds_base_basis,
+                "triggerEvent" => document.tds_trigger_event
+              }
+            }.merge(negative)
+          end
+
+          [ vendor_line, *expense_lines, *tax_lines, *[ tds_line ].compact ]
+        end
+
+        def after_post!(document:, entry:, actor:)
+          return unless document.tds_minor.positive?
+
+          original = if document.reverses_document_id
+            TdsDeduction.find_by!(
+              tenant_id: document.tenant_id,
+              source_document_id: document.reverses_document_id,
+              kind: "deduction"
+            )
+          end
+          TdsDeduction.create!(
+            tenant_id: document.tenant_id,
+            party_id: document.party_id,
+            section: document.tds_section,
+            statutory_reference: document.tds_statutory_reference,
+            rate_basis_points: document.tds_rate_basis_points,
+            gross_minor: document.total_minor,
+            gst_minor: document.tax_minor,
+            taxable_minor: document.tds_taxable_minor,
+            deductible_base_minor: document.tds_deductible_base_minor,
+            tds_minor: document.tds_minor,
+            base_basis: document.tds_base_basis,
+            trigger_event: document.tds_trigger_event,
+            kind: original ? "reversal" : "deduction",
+            reverses_tds_deduction_id: original&.id,
+            deduction_date: document.document_date,
+            deductee_pan: PurchaseBills::TdsAssessment.pan_from_gstin(
+              document.party_snapshot.fetch("gstin")
+            ),
+            deductee_name_snapshot: document.party_snapshot.fetch("name"),
+            source_document_id: document.id,
+            entry_id: entry.id,
+            fiscal_year: document.fiscal_year,
+            quarter: TdsDeduction.india_quarter(document.document_date)
+          )
         end
 
         private
+
+        def validate_tds_snapshot!(document)
+          if document.reverses_document_id
+            original = Document.find_by!(tenant_id: document.tenant_id, id: document.reverses_document_id)
+            altered = PurchaseBills::TdsAssessment::SNAPSHOT_ATTRIBUTES.any? do |attribute|
+              document.public_send(attribute) != original.public_send(attribute)
+            end
+            raise Documents::InvalidDocument, "purchase bill TDS reversal snapshot was altered" if altered
+            return
+          end
+
+          unless PurchaseBills::TdsAssessment.matches_frozen?(document)
+            raise Documents::InvalidDocument,
+              "purchase bill TDS assessment is stale or was altered; discard and rebuild the draft"
+          end
+        rescue PurchaseBills::InvalidBill => e
+          raise Documents::InvalidDocument, e.message
+        end
 
         def validate_lines!(document, lines)
           subtotal = 0

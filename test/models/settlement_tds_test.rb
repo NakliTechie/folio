@@ -2,11 +2,11 @@
 
 require "test_helper"
 
-# The TDS lifecycle at the posting layer (7L.3): a vendor payment withholds tax and posts the
-# 3-way split (Dr AP gross / Cr Bank net / Cr TDS Payable), recording a frozen TdsDeduction.
+# TDS is assessed at the supplier-invoice credit event. The later payment clears the already
+# net vendor payable and must never deduct the same tax a second time.
 class SettlementTdsTest < ActiveSupport::TestCase
   PAY_DATE = Date.new(2026, 8, 20)
-  VENDOR_PAN = "AABFN3456J" # 4th char F = firm → 194C "other" leg (2%)
+  VENDOR_PAN = "AABFN3456J" # 4th char F = firm → contractor "other" leg (2%)
 
   setup do
     @org = Onboarding::SignUp.call(
@@ -30,7 +30,8 @@ class SettlementTdsTest < ActiveSupport::TestCase
                     country_code: "IN", address_line1: "1 Vendor Rd", city: "Mysuru",
                     postal_code: "570001", default_tds_section: "194C" },
       roles: [ "vendor" ],
-      tax_registration_attributes: { kind: "GSTIN", identifier: vendor_gstin, valid_from: Date.new(2026, 4, 1) },
+      tax_registration_attributes: { kind: "GSTIN", identifier: vendor_gstin,
+                                     valid_from: Date.new(2026, 4, 1) },
       actor: @org.user
     )
     @service = Items::Manage.create!(
@@ -40,89 +41,110 @@ class SettlementTdsTest < ActiveSupport::TestCase
                     cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000" },
       actor: @org.user
     )
-    @bill = PurchaseBills::BuildDraft.call(
-      tenant: @org.tenant, party_id: @vendor.id, tax_registration_id: @registration.id,
-      document_date: Date.new(2026, 8, 1), due_date: Date.new(2026, 8, 31),
-      place_of_supply_state_code: "27", external_reference: "NS-114",
-      lines: [ { item_id: @service.id, quantity: "8", unit_price: "5000.00" } ]
-    )
-    Documents::Post.call(@bill, actor: "u:#{@org.user.id}")
-    @payable = EntryLine.joins(:entry).find_by!(entries: { document_id: @bill.id }, account_code: "2000")
-    @gross = Posting::Clearing.open_amount(@payable)
+    @bill = build_bill(reference: "NS-114", date: Date.new(2026, 8, 1), amount: "5000.00", quantity: "8")
+    @bill_entry = Documents::Post.call(@bill, actor: "u:#{@org.user.id}")
+    @payable = @bill_entry.entry_lines.find_by!(account_code: "2000")
+    @net_payable = Posting::Clearing.open_amount(@payable)
   end
 
-  def pay!(amount_minor, tds_section: nil)
+  def pay!(amount_minor = @net_payable, tds_section: nil)
     draft = Settlements::BuildDraft.call(
       tenant: @org.tenant, doc_type: "PY", document_date: PAY_DATE, bank_account_code: "1010",
       tds_section: tds_section,
-      allocations: [ { target_entry_line_id: @payable.id, amount: format("%.2f", amount_minor / 100.0),
-                       clearing_mode: "partial" } ]
+      allocations: [ { target_entry_line_id: @payable.id,
+                       amount: format("%.2f", amount_minor / 100.0), clearing_mode: "partial" } ]
     )
     Documents::Post.call(draft, actor: "u:#{@org.user.id}")
   end
 
-  test "a vendor payment with a default TDS section posts the 3-way split" do
-    expected = Taxes::India::Tds::Deduction.compute(
-      section: "194C", on: PAY_DATE, amount_minor: @gross, pan: VENDOR_PAN
-    )
-    assert expected.applied
-    assert_equal 200, expected.rate_basis_points # firm → 2%
+  test "the purchase bill credits net AP and TDS payable on its GST-exclusive base" do
+    assert_equal 4_000_000, @bill.subtotal_minor
+    assert_equal 720_000, @bill.tax_minor
+    assert_equal 80_000, @bill.tds_minor
+    assert_equal 4_000_000, @bill.tds_taxable_minor
+    assert_equal "credit", @bill.tds_trigger_event
+    assert_equal "invoice_excluding_separately_stated_gst", @bill.tds_base_basis
+    assert_equal "Income-tax Act 2025 §393(1), Table Sl. 6(i)", @bill.tds_statutory_reference
 
-    entry = pay!(@gross)
+    amounts = @bill_entry.entry_lines.order(:line_no).to_h do |line|
+      [ line.account_code, line.amounts.find_by!(slot_role: "transaction").amount_minor ]
+    end
+    assert_equal(-4_640_000, amounts.fetch("2000"))
+    assert_equal 4_000_000, amounts.fetch("5000")
+    input_gst = @bill_entry.entry_lines.where(account_code: "1210").to_a.sum do |line|
+      line.amounts.find_by!(slot_role: "transaction").amount_minor
+    end
+    assert_equal 720_000, input_gst
+    assert_equal(-80_000, amounts.fetch("2110"))
+    assert Documents::Simulate.call(@bill).fetch(:balanced)
+  end
+
+  test "posting the bill records complete frozen TDS evidence" do
+    deduction = TdsDeduction.for_tenant(@org.tenant.id).sole
+    assert_equal "deduction", deduction.kind
+    assert_equal "194C", deduction.section
+    assert_equal 200, deduction.rate_basis_points
+    assert_equal 4_720_000, deduction.gross_minor
+    assert_equal 720_000, deduction.gst_minor
+    assert_equal 4_000_000, deduction.taxable_minor
+    assert_equal 4_000_000, deduction.deductible_base_minor
+    assert_equal 80_000, deduction.tds_minor
+    assert_equal @bill.id, deduction.source_document_id
+    assert_equal @bill_entry.id, deduction.entry_id
+    assert_equal VENDOR_PAN, deduction.deductee_pan
+    assert_equal 2026, deduction.fiscal_year
+    assert_equal 2, deduction.quarter
+  end
+
+  test "payment clears the net AP in a plain two-way entry without deducting twice" do
+    entry = pay!
     lines = entry.entry_lines.order(:line_no).map do |line|
       [ line.account_code, line.amounts.find_by!(slot_role: "transaction").amount_minor ]
     end
-    # Dr AP (gross, +) · Cr Bank (net, −) · Cr TDS Payable (tds, −)
-    assert_equal [ "1010", -(@gross - expected.tds_minor) ], lines.find { |c, _| c == "1010" }
-    assert_equal [ "2000", @gross ], lines.find { |c, _| c == "2000" }
-    assert_equal [ "2110", -expected.tds_minor ], lines.find { |c, _| c == "2110" }
-
-    tb = Reports.trial_balance(@org.tenant.id)
-    assert_equal tb.sum { |r| r.fetch("debit") }, tb.sum { |r| r.fetch("credit") }
+    assert_equal [ [ "1010", -@net_payable ], [ "2000", @net_payable ] ], lines
+    assert_equal 0, Posting::Clearing.open_amount(@payable.reload)
+    assert_equal 1, TdsDeduction.for_tenant(@org.tenant.id).count
   end
 
-  test "the payment records a frozen TdsDeduction" do
-    expected = Taxes::India::Tds::Deduction.compute(section: "194C", on: PAY_DATE, amount_minor: @gross, pan: VENDOR_PAN)
-    entry = pay!(@gross)
+  test "a below-threshold bill freezes a zero assessment for later aggregate calculations" do
+    bill = build_bill(reference: "NS-115", date: Date.new(2026, 8, 2), amount: "5000.00")
+    assert_equal "194C", bill.tds_section
+    assert_equal 4_000_000, bill.tds_prior_taxable_minor
+    assert_equal 0, bill.tds_minor
 
-    d = TdsDeduction.for_tenant(@org.tenant.id).sole
-    assert_equal "194C", d.section
-    assert_equal 200, d.rate_basis_points
-    assert_equal @gross, d.taxable_minor
-    assert_equal expected.tds_minor, d.tds_minor
-    assert_equal @vendor.id, d.party_id
-    assert_equal "Nilgiri Subcontractors", d.deductee_name_snapshot
-    assert_equal VENDOR_PAN, d.deductee_pan
-    assert_equal entry.document_id, d.source_document_id
-    assert_equal entry.id, d.entry_id
-    assert_equal 2026, d.fiscal_year
-    assert_equal 2, d.quarter # August → Q2
+    entry = Documents::Post.call(bill, actor: "u:#{@org.user.id}")
+    refute entry.entry_lines.exists?(account_code: "2110")
+    assert_equal 1, TdsDeduction.for_tenant(@org.tenant.id).count,
+      "zero assessments affect thresholds but do not create a deduction event"
   end
 
-  test "the AP open item still clears the full gross despite the net cash outflow" do
-    pay!(@gross)
-    assert_equal 0, Posting::Clearing.open_amount(EntryLine.find(@payable.id))
+  test "payment-time TDS input is rejected so tax cannot be deducted twice" do
+    error = assert_raises(Settlements::InvalidSettlement) { pay!(tds_section: "194C") }
+    assert_match(/assessed when the purchase bill is credited/, error.message)
   end
 
-  test "a payment below the threshold withholds nothing and posts the plain 2-way split" do
-    # A tiny second bill under ₹30,000 gross, paid on its own (the setup's large bill is left open).
-    bill = PurchaseBills::BuildDraft.call(
+  test "reversal posts an explicit offset deduction and nets the return evidence" do
+    Documents::Reverse.call(@bill, actor: "u:#{@org.user.id}", on: Date.new(2026, 8, 3))
+
+    rows = TdsDeduction.for_tenant(@org.tenant.id).order(:id).to_a
+    assert_equal %w[deduction reversal], rows.map(&:kind)
+    assert_equal rows.first.id, rows.last.reverses_tds_deduction_id
+    assert_equal(-80_000, rows.last.signed_tds_minor)
+
+    report = Reports.tds_return_26q(@org.tenant.id, fiscal_year: 2026, quarter: 2)
+    assert_equal 0, report.fetch("total_taxable_minor")
+    assert_equal 0, report.fetch("total_tds_minor")
+  end
+
+  private
+
+  def build_bill(reference:, date:, amount:, quantity: "1", tds_section: nil)
+    PurchaseBills::BuildDraft.call(
       tenant: @org.tenant, party_id: @vendor.id, tax_registration_id: @registration.id,
-      document_date: Date.new(2026, 8, 2), due_date: Date.new(2026, 8, 31),
-      place_of_supply_state_code: "27", external_reference: "NS-115",
-      lines: [ { item_id: @service.id, quantity: "1", unit_price: "5000.00" } ]
+      document_date: date, due_date: date + 30,
+      place_of_supply_state_code: "27", external_reference: reference,
+      tds_section: tds_section,
+      lines: [ { item_id: @service.id, quantity: quantity, unit_price: amount } ]
     )
-    Documents::Post.call(bill, actor: "u:#{@org.user.id}")
-    payable = EntryLine.joins(:entry).find_by!(entries: { document_id: bill.id }, account_code: "2000")
-    gross = Posting::Clearing.open_amount(payable)
-
-    draft = Settlements::BuildDraft.call(
-      tenant: @org.tenant, doc_type: "PY", document_date: PAY_DATE, bank_account_code: "1010",
-      allocations: [ { target_entry_line_id: payable.id, amount: format("%.2f", gross / 100.0),
-                       clearing_mode: "partial" } ]
-    )
-    entry = Documents::Post.call(draft, actor: "u:#{@org.user.id}")
-    assert_equal 2, entry.entry_lines.count, "below-threshold payment stays 2-line"
-    assert_equal 0, TdsDeduction.for_tenant(@org.tenant.id).count, "nothing withheld below threshold"
   end
 end

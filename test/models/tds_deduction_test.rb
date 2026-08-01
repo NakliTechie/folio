@@ -7,7 +7,11 @@ class TdsDeductionTest < ActiveSupport::TestCase
   def valid_attrs(overrides = {})
     {
       tenant_id: 1, party_id: 1, section: "194C", rate_basis_points: 200,
-      taxable_minor: 4_000_000, tds_minor: 80_000, deduction_date: Date.new(2026, 6, 17),
+      statutory_reference: "Income-tax Act 2025 §393(1), Table Sl. 6(i)",
+      gross_minor: 4_720_000, gst_minor: 720_000,
+      taxable_minor: 4_000_000, deductible_base_minor: 4_000_000, tds_minor: 80_000,
+      base_basis: "invoice_excluding_separately_stated_gst", trigger_event: "credit",
+      kind: "deduction", deduction_date: Date.new(2026, 6, 17),
       deductee_name_snapshot: "Precision Job Works", source_document_id: 1,
       fiscal_year: 2026, quarter: 1
     }.merge(overrides)
@@ -45,10 +49,15 @@ class TdsDeductionTest < ActiveSupport::TestCase
     err = assert_raises(ActiveRecord::StatementInvalid) do
       TdsDeduction.connection.execute(<<~SQL)
         INSERT INTO tds_deductions
-          (tenant_id, party_id, section, rate_basis_points, taxable_minor, tds_minor,
+          (tenant_id, party_id, section, statutory_reference, rate_basis_points,
+           gross_minor, gst_minor, taxable_minor, deductible_base_minor, tds_minor,
+           base_basis, trigger_event, kind,
            deduction_date, deductee_name_snapshot, source_document_id, fiscal_year, quarter,
            created_at, updated_at)
-        VALUES (1, 1, '194C', 200, 100, 2, '2026-06-17', 'X', 1, 2026, 9, now(), now())
+        VALUES (1, 1, '194C', 'Income-tax Act 2025 §393(1), Table Sl. 6(i)', 200,
+                118, 18, 100, 100, 2,
+                'invoice_excluding_separately_stated_gst', 'credit', 'deduction',
+                '2026-06-17', 'X', 1, 2026, 9, now(), now())
       SQL
     end
     assert_match(/tds_deductions_quarter_valid/, err.message)
