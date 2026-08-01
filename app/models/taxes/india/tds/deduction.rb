@@ -16,7 +16,7 @@ module Taxes
       #      caller passes how much has already been paid to this deductee under this section
       #      this financial year (fy_paid_to_date_minor) so the aggregate rule can fire.
       #   3. §206AA — a deductee without a valid PAN is deducted at the higher of the section
-      #      rate and 20%.
+      #      rate and 20%, unless the section sets its own no-PAN rate (§194Q → 5%).
       #
       # Rounding matches the GST adapter exactly: round-half-up on non-negative minor units,
       # denominator 10_000 (basis points). One rounding rule across the whole tax surface.
@@ -29,7 +29,7 @@ module Taxes
       module Deduction
         Result = Data.define(
           :section, :applied, :reason, :rate_basis_points,
-          :taxable_minor, :tds_minor, :net_minor,
+          :taxable_minor, :deductible_base_minor, :tds_minor, :net_minor,
           :pan_available, :deductee_category,
           :single_threshold_crossed, :annual_threshold_crossed
         )
@@ -68,13 +68,29 @@ module Taxes
             else :annual_threshold
             end
 
+          # §206AA: without a valid PAN, withhold at the section's own no-PAN rate if it has
+          # one (§194Q → 5%), else the general "higher of 20% and the section rate" floor.
           effective_rate = if pan_available
             rate.rate_basis_points
+          elsif rate.no_pan_rate_basis_points
+            rate.no_pan_rate_basis_points
           else
             [ rate.rate_basis_points, NO_PAN_FLOOR_BASIS_POINTS ].max
           end
 
-          tds = applied ? round_half_up(amount, effective_rate) : 0
+          # The base the rate applies to. Normally the whole payment; for an :on_excess
+          # section (§194Q) only the aggregate value ABOVE the annual threshold, capped at
+          # this payment (prior payments' excess is the lifecycle layer's catch-up concern).
+          deductible_base =
+            if !applied
+              0
+            elsif rate.on_excess?
+              [ [ (prior + amount) - rate.threshold_annual_minor, amount ].min, 0 ].max
+            else
+              amount
+            end
+
+          tds = round_half_up(deductible_base, effective_rate)
 
           Result.new(
             section: section,
@@ -82,6 +98,7 @@ module Taxes
             reason: reason,
             rate_basis_points: applied ? effective_rate : 0,
             taxable_minor: amount,
+            deductible_base_minor: deductible_base,
             tds_minor: tds,
             net_minor: amount - tds,
             pan_available: pan_available,

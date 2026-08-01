@@ -30,55 +30,101 @@ module Taxes
         #   effective_to:      nil = still open
         #   threshold_single_minor: per-transaction threshold below which no TDS (nil = none)
         #   threshold_annual_minor: FY-aggregate threshold below which no TDS (nil = none)
+        #   base_rule: :on_full  → withhold on the whole payment once a threshold is crossed
+        #              :on_excess → withhold only on the amount EXCEEDING the annual threshold
+        #                           (§194Q — TDS is on purchase value above ₹50L, not the whole).
+        #   no_pan_rate_basis_points: a §206AA rate SPECIFIC to this section (nil = the general
+        #              "higher of 20% and the section rate" floor). §194Q's no-PAN rate is 5%.
         # Amounts are minor units (paise). Rates are basis points (1% = 100).
         Rate = Data.define(
           :section, :description, :deductee_category,
           :effective_from, :effective_to,
-          :rate_basis_points, :threshold_single_minor, :threshold_annual_minor
+          :rate_basis_points, :threshold_single_minor, :threshold_annual_minor,
+          :base_rule, :no_pan_rate_basis_points
         ) do
+          def initialize(base_rule: :on_full, no_pan_rate_basis_points: nil, **rest)
+            super(base_rule: base_rule, no_pan_rate_basis_points: no_pan_rate_basis_points, **rest)
+          end
+
           def covers?(date)
             date >= effective_from && (effective_to.nil? || date <= effective_to)
           end
 
           def open_ended? = effective_to.nil?
+          def on_excess? = base_rule == :on_excess
         end
 
         SECTIONS = {
+          "194A"  => "Interest other than interest on securities",
           "194C"  => "Payments to contractors and sub-contractors",
           "194J"  => "Fees for professional or technical services",
           "194H"  => "Commission or brokerage",
           "194I-a" => "Rent of plant, machinery or equipment",
-          "194I-b" => "Rent of land, building or furniture"
+          "194I-b" => "Rent of land, building or furniture",
+          "194Q"  => "Purchase of goods above the annual threshold"
         }.freeze
 
         # ₹ helper → minor units (paise). Keeps the table readable in rupees.
         RUPEES = ->(r) { r * 100 }
 
+        # Rates cross-checked against Bahi's TDS_SECTIONS table (the correctness oracle). Where
+        # Folio and Bahi agree (194C/J/I, and 194A/194Q added here) the numbers are identical;
+        # the one deliberate divergence is 194H, where Bahi carries a flat 5% and Folio carries
+        # the effective-dated 5%→2% (Oct-2024) cut — Folio is the more current of the two.
         RATES = [
+          # --- 194A interest other than securities: 10%, ₹40,000 annual (matches Bahi) ---
+          Rate.new(section: "194A", description: SECTIONS["194A"], deductee_category: :any,
+                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   rate_basis_points: 1_000, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(40_000)),
+
           # --- 194C contractors: splits on deductee constitution (1% ind/HUF, 2% others) ---
-          Rate.new("194C", SECTIONS["194C"], :individual_huf,
-                   Date.new(2016, 6, 1), nil, 100, RUPEES.call(30_000), RUPEES.call(1_00_000)),
-          Rate.new("194C", SECTIONS["194C"], :other,
-                   Date.new(2016, 6, 1), nil, 200, RUPEES.call(30_000), RUPEES.call(1_00_000)),
+          Rate.new(section: "194C", description: SECTIONS["194C"], deductee_category: :individual_huf,
+                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   rate_basis_points: 100, threshold_single_minor: RUPEES.call(30_000),
+                   threshold_annual_minor: RUPEES.call(1_00_000)),
+          Rate.new(section: "194C", description: SECTIONS["194C"], deductee_category: :other,
+                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   rate_basis_points: 200, threshold_single_minor: RUPEES.call(30_000),
+                   threshold_annual_minor: RUPEES.call(1_00_000)),
 
           # --- 194J professional services: 10%, constitution-independent ---
           # (The 2% technical-services sub-rate, TDS code 94J-A, is a distinct payment nature
           #  and is deferred; this row is the professional-services case, 94J-B.)
-          Rate.new("194J", SECTIONS["194J"], :any,
-                   Date.new(2016, 6, 1), nil, 1_000, nil, RUPEES.call(30_000)),
+          Rate.new(section: "194J", description: SECTIONS["194J"], deductee_category: :any,
+                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   rate_basis_points: 1_000, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(30_000)),
 
           # --- 194H commission/brokerage: the effective-dated showcase ---
           # 5% through 2024-09-30, reduced to 2% from 2024-10-01 (Finance (No. 2) Act 2024).
-          Rate.new("194H", SECTIONS["194H"], :any,
-                   Date.new(2016, 6, 1), Date.new(2024, 9, 30), 500, nil, RUPEES.call(15_000)),
-          Rate.new("194H", SECTIONS["194H"], :any,
-                   Date.new(2024, 10, 1), nil, 200, nil, RUPEES.call(15_000)),
+          Rate.new(section: "194H", description: SECTIONS["194H"], deductee_category: :any,
+                   effective_from: Date.new(2016, 6, 1), effective_to: Date.new(2024, 9, 30),
+                   rate_basis_points: 500, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(15_000)),
+          Rate.new(section: "194H", description: SECTIONS["194H"], deductee_category: :any,
+                   effective_from: Date.new(2024, 10, 1), effective_to: nil,
+                   rate_basis_points: 200, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(15_000)),
 
           # --- 194I rent: 2% plant/machinery, 10% land/building/furniture ---
-          Rate.new("194I-a", SECTIONS["194I-a"], :any,
-                   Date.new(2016, 6, 1), nil, 200, nil, RUPEES.call(2_40_000)),
-          Rate.new("194I-b", SECTIONS["194I-b"], :any,
-                   Date.new(2016, 6, 1), nil, 1_000, nil, RUPEES.call(2_40_000))
+          Rate.new(section: "194I-a", description: SECTIONS["194I-a"], deductee_category: :any,
+                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   rate_basis_points: 200, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(2_40_000)),
+          Rate.new(section: "194I-b", description: SECTIONS["194I-b"], deductee_category: :any,
+                   effective_from: Date.new(2016, 6, 1), effective_to: nil,
+                   rate_basis_points: 1_000, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(2_40_000)),
+
+          # --- 194Q purchase of goods: 0.1% on value EXCEEDING ₹50L aggregate per seller/FY ---
+          # Introduced 2021-07-01. Unlike the others, TDS is on the EXCESS over the threshold
+          # (base_rule :on_excess), and the §206AA no-PAN rate is 5% (not the general 20%).
+          Rate.new(section: "194Q", description: SECTIONS["194Q"], deductee_category: :any,
+                   effective_from: Date.new(2021, 7, 1), effective_to: nil,
+                   rate_basis_points: 10, threshold_single_minor: nil,
+                   threshold_annual_minor: RUPEES.call(50_00_000),
+                   base_rule: :on_excess, no_pan_rate_basis_points: 500)
         ].freeze
 
         module_function
