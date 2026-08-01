@@ -7,7 +7,7 @@
     <span class="<%= status_class(@statement.status) %>"><%= @statement.status.humanize %></span>
   </header>
 
-  <section class="summary-grid" aria-label="Reconciliation summary">
+  <section class="summary-strip" aria-label="Reconciliation summary">
     <div><span>Opening</span><strong><%= money_amount(@statement.opening_balance_minor, currency: @statement.currency) %></strong></div>
     <div><span>Statement movement</span><strong><%= money_amount(@statement.bank_statement_lines.sum(:amount_minor), currency: @statement.currency) %></strong></div>
     <div><span>Closing</span><strong><%= money_amount(@statement.closing_balance_minor, currency: @statement.currency) %></strong></div>
