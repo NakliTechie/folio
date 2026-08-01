@@ -75,6 +75,16 @@ module Reports
     )
   end
 
+  # Form 26Q — quarterly TDS return (deductor summary + deductee-wise breakup).
+  def tds_return_26q(tenant_id, fiscal_year:, quarter:)
+    TdsReturn.call(tenant_id: tenant_id, fiscal_year: fiscal_year, quarter: quarter)
+  end
+
+  # Form 16A — per-deductee TDS certificate for a quarter.
+  def tds_certificate_16a(tenant_id, party_id:, fiscal_year:, quarter:)
+    TdsCertificate.call(tenant_id: tenant_id, party_id: party_id, fiscal_year: fiscal_year, quarter: quarter)
+  end
+
   def base(tenant_id)
     EntryLine.where(tenant_id: tenant_id, line_class: "real")
       .joins(ACCOUNT_JOIN).joins(LEDGER_JOIN).joins(AMOUNT_JOIN)
