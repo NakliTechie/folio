@@ -4,7 +4,7 @@
 # journal_entry_line_amounts + accounts), not the .khata adapter. Output shapes match the
 # Tier R golden fixtures byte-for-byte once canonicalised.
 #
-# debit/credit are reconstructed from the signed transaction-slot amount (Folio keeps signed
+# debit/credit are reconstructed from the signed functional amount (Folio keeps signed
 # minor units, not a debit/credit pair — spec §4): a positive amount is a debit, a negative
 # a credit. Exact because every source line is debit-XOR-credit (verified across the corpus).
 #
@@ -18,12 +18,10 @@ module Reports
   module_function
 
   ACCOUNT_JOIN = "JOIN accounts a ON a.tenant_id = entry_lines.tenant_id AND a.code = entry_lines.account_code"
-  LEDGER_JOIN = "JOIN ledgers report_ledgers ON report_ledgers.tenant_id = entry_lines.tenant_id " \
-                "AND report_ledgers.id = entry_lines.ledger_id"
-  AMOUNT_JOIN  = "JOIN journal_entry_line_amounts jla ON jla.entry_line_id = entry_lines.id " \
-                 "AND jla.slot_role = 'transaction'"
-  DEBIT  = "SUM(CASE WHEN jla.amount_minor > 0 THEN jla.amount_minor ELSE 0 END)"
-  CREDIT = "SUM(CASE WHEN jla.amount_minor < 0 THEN -jla.amount_minor ELSE 0 END)"
+  DEBIT  = "SUM(CASE WHEN legal_report_amounts.amount_minor > 0 " \
+           "THEN legal_report_amounts.amount_minor ELSE 0 END)"
+  CREDIT = "SUM(CASE WHEN legal_report_amounts.amount_minor < 0 " \
+           "THEN -legal_report_amounts.amount_minor ELSE 0 END)"
   ACCOUNT_CODE_ORDER = <<~SQL.squish.freeze
     CASE WHEN a.code ~ '^[0-9]+$' THEN 0 ELSE 1 END,
     CASE WHEN a.code ~ '^[0-9]+$' THEN a.code::numeric END,
@@ -31,8 +29,8 @@ module Reports
   SQL
   FROZEN_ACCOUNT_NAME = "COALESCE(entry_lines.account_name, a.name)".freeze
 
-  def trial_balance(tenant_id)
-    base(tenant_id).group("a.code, #{FROZEN_ACCOUNT_NAME}, a.account_type")
+  def trial_balance(tenant_id, entity_id: nil)
+    base(tenant_id, entity_id: entity_id).group("a.code, #{FROZEN_ACCOUNT_NAME}, a.account_type")
       .order(Arel.sql(ACCOUNT_CODE_ORDER))
       .pluck(Arel.sql("a.code"), Arel.sql(FROZEN_ACCOUNT_NAME), Arel.sql("a.account_type"),
         Arel.sql(DEBIT), Arel.sql(CREDIT))
@@ -43,32 +41,32 @@ module Reports
       end
   end
 
-  def account_type_totals(tenant_id)
-    base(tenant_id).group("a.account_type").order("a.account_type")
+  def account_type_totals(tenant_id, entity_id: nil)
+    base(tenant_id, entity_id: entity_id).group("a.account_type").order("a.account_type")
       .pluck(Arel.sql("a.account_type"), Arel.sql(DEBIT), Arel.sql(CREDIT))
       .map { |type, debit, credit| { "type" => type, "debit" => debit.to_i, "credit" => credit.to_i } }
   end
 
-  def profit_and_loss(tenant_id, from_date:, to_date:)
+  def profit_and_loss(tenant_id, from_date:, to_date:, entity_id: nil)
     FinancialStatements::Report.profit_and_loss(
-      tenant_id: tenant_id, from_date: from_date, to_date: to_date
+      tenant_id: tenant_id, from_date: from_date, to_date: to_date, entity_id: entity_id
     )
   end
 
-  def balance_sheet(tenant_id, as_of:)
-    FinancialStatements::Report.balance_sheet(tenant_id: tenant_id, as_of: as_of)
+  def balance_sheet(tenant_id, as_of:, entity_id: nil)
+    FinancialStatements::Report.balance_sheet(tenant_id: tenant_id, as_of: as_of, entity_id: entity_id)
   end
 
-  def aged_open_items(tenant_id, role:, aged_to:)
-    OpenItems.call(tenant_id: tenant_id, role: role, aged_to: aged_to)
+  def aged_open_items(tenant_id, role:, aged_to:, entity_id: nil)
+    OpenItems.call(tenant_id: tenant_id, role: role, aged_to: aged_to, entity_id: entity_id)
   end
 
-  def party_ledger(tenant_id, party_id:)
-    PartyLedger.call(tenant_id: tenant_id, party_id: party_id)
+  def party_ledger(tenant_id, party_id:, entity_id: nil)
+    PartyLedger.call(tenant_id: tenant_id, party_id: party_id, entity_id: entity_id)
   end
 
-  def day_book(tenant_id, from_date:, to_date:)
-    DayBook.call(tenant_id: tenant_id, from_date: from_date, to_date: to_date)
+  def day_book(tenant_id, from_date:, to_date:, entity_id: nil)
+    DayBook.call(tenant_id: tenant_id, from_date: from_date, to_date: to_date, entity_id: entity_id)
   end
 
   def gst_returns(tenant_id, tax_registration_id:, from_date:, to_date:)
@@ -107,9 +105,7 @@ module Reports
     TdsCertificate.call(tenant_id: tenant_id, party_id: party_id, fiscal_year: fiscal_year, quarter: quarter)
   end
 
-  def base(tenant_id)
-    EntryLine.where(tenant_id: tenant_id, line_class: "real")
-      .joins(ACCOUNT_JOIN).joins(LEDGER_JOIN).joins(AMOUNT_JOIN)
-      .where("report_ledgers.posts_to_gl = TRUE")
+  def base(tenant_id, entity_id: nil)
+    LegalBookScope.call(tenant_id: tenant_id, entity_id: entity_id).lines.joins(ACCOUNT_JOIN)
   end
 end

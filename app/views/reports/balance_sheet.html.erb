@@ -6,7 +6,7 @@
     <div>
       <p class="eyebrow">Financial statements</p>
       <h1>Balance sheet</h1>
-      <p>Assets, equity, and liabilities for <%= Current.tenant.name %> as at <%= @as_of.to_fs(:long) %>.</p>
+      <p>Assets, equity, and liabilities for <%= @report_entity.legal_name %> as at <%= @as_of.to_fs(:long) %>, in <%= @report_entity.functional_currency %>.</p>
     </div>
     <% if permitted?("accounts.manage") && permitted?("documents.post") %>
       <%= link_to "Opening balances", opening_balances_path(tenant_route_options), class: "button button--secondary" %>
@@ -16,6 +16,7 @@
   <section class="panel report-filter">
     <%= form_with url: balance_sheet_report_path, method: :get, class: "filter-form" do |form| %>
       <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+      <%= render "entity_field", form: form %>
       <div class="form-group"><%= form.label :as_of, "As at" %>
         <%= form.date_field :as_of, value: @as_of.iso8601, required: true %></div>
       <%= form.submit "Run report", class: "button button--secondary" %>

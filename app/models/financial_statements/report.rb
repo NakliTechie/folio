@@ -9,12 +9,6 @@ module FinancialStatements
         ON statement_accounts.tenant_id = entry_lines.tenant_id
        AND statement_accounts.code = entry_lines.account_code
     SQL
-    LEDGER_JOIN = <<~SQL.squish.freeze
-      JOIN ledgers statement_ledgers
-        ON statement_ledgers.id = entry_lines.ledger_id
-       AND statement_ledgers.tenant_id = entry_lines.tenant_id
-       AND statement_ledgers.posts_to_gl = TRUE
-    SQL
     ASSIGNMENT_JOIN = <<~SQL.squish.freeze
       JOIN financial_statement_assignments statement_assignments
         ON statement_assignments.account_id = statement_accounts.id
@@ -26,20 +20,22 @@ module FinancialStatements
        AND statement_sections.tenant_id = entry_lines.tenant_id
     SQL
 
-    def self.profit_and_loss(tenant_id:, from_date:, to_date:)
+    def self.profit_and_loss(tenant_id:, from_date:, to_date:, entity_id: nil)
       new(tenant_id: tenant_id, statement_type: "profit_and_loss",
-        from_date: from_date, to_date: to_date).call
+        from_date: from_date, to_date: to_date, entity_id: entity_id).call
     end
 
-    def self.balance_sheet(tenant_id:, as_of:)
-      new(tenant_id: tenant_id, statement_type: "balance_sheet", to_date: as_of).call
+    def self.balance_sheet(tenant_id:, as_of:, entity_id: nil)
+      new(tenant_id: tenant_id, statement_type: "balance_sheet", to_date: as_of,
+        entity_id: entity_id).call
     end
 
-    def initialize(tenant_id:, statement_type:, to_date:, from_date: nil)
+    def initialize(tenant_id:, statement_type:, to_date:, from_date: nil, entity_id: nil)
       @tenant_id = tenant_id
       @statement_type = statement_type
       @from_date = from_date
       @to_date = to_date
+      @legal_book = Reports::LegalBookScope.call(tenant_id: tenant_id, entity_id: entity_id)
     end
 
     def call
@@ -68,6 +64,11 @@ module FinancialStatements
         },
         from_date: @from_date,
         to_date: @to_date,
+        entity: {
+          id: @legal_book.entity.id, code: @legal_book.entity.code,
+          legal_name: @legal_book.entity.legal_name
+        },
+        currency: @legal_book.currency,
         rows: rows,
         unmapped_accounts: unmapped_accounts(version)
       }
@@ -78,9 +79,7 @@ module FinancialStatements
     private
 
     def base_scope(from_date:)
-      scope = EntryLine.where(tenant_id: @tenant_id, line_class: "real")
-        .joins(:entry, :amounts).joins(LEDGER_JOIN)
-        .where(journal_entry_line_amounts: { slot_role: "transaction" })
+      scope = @legal_book.lines.joins(:entry)
         .where("entries.posting_date <= ?", @to_date)
       scope = scope.where("entries.posting_date >= ?", from_date) if from_date
       scope
@@ -101,7 +100,7 @@ module FinancialStatements
         .pluck(
           Arel.sql("statement_sections.id"),
           Arel.sql("statement_sections.normal_balance"),
-          Arel.sql("SUM(journal_entry_line_amounts.amount_minor)")
+          Arel.sql("SUM(legal_report_amounts.amount_minor)")
         )
       rows.each_with_object(Hash.new(0)) do |(section_id, normal_balance, signed_amount), amounts|
         amounts[section_id] = normal_balance == "credit" ? -signed_amount.to_i : signed_amount.to_i

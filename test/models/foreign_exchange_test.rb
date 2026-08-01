@@ -35,6 +35,15 @@ class ForeignExchangeTest < ActiveSupport::TestCase
     assert_equal 55_000, functional.amount_minor
     assert_equal BigDecimal("0.55"), functional.rate
     assert_equal Date.new(2026, 8, 1), functional.rate_date
+    trial_balance = Reports.trial_balance(@org.tenant.id).index_by { |row| row.fetch("account_id") }
+    assert_equal 55_000, trial_balance.fetch(1010).fetch("debit")
+    assert_equal 55_000, trial_balance.fetch(3000).fetch("credit")
+    day_book = Reports.day_book(
+      @org.tenant.id, from_date: Date.new(2026, 8, 1), to_date: Date.new(2026, 8, 1)
+    )
+    assert_equal "INR", day_book.fetch(:currency)
+    assert_equal 55_000, day_book.fetch(:debit_minor)
+    assert_equal 55_000, day_book.fetch(:credit_minor)
     assert EventSigning.verify(LedgerEvent.find(entry.ledger_event_id))
   end
 

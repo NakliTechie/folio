@@ -11,11 +11,12 @@
   <section class="panel report-filter">
     <%= form_with url: request.path, method: :get, class: "filter-form" do |form| %>
       <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+      <%= render "entity_field", form: form %>
       <div class="form-group"><%= form.label :aged_to, "Age balances to" %>
         <%= form.date_field :aged_to, value: @aged_to.iso8601, required: true %></div>
       <%= form.submit "Run report", class: "button button--secondary" %>
     <% end %>
-    <small>This is a current-open-item view aged to the selected date, not a reconstructed historical snapshot.</small>
+    <small>Functional currency for <%= @report_entity.legal_name %>. This is a current-open-item view, not a reconstructed historical snapshot.</small>
   </section>
 
   <% if @aged_report[:rows].any? %>

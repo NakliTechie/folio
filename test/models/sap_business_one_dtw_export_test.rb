@@ -101,6 +101,25 @@ class SapBusinessOneDtwExportTest < ActiveSupport::TestCase
     assert_match(/has no INR amount/, error.message)
   end
 
+  test "group range export retains a member that exited before the range end" do
+    group = ConsolidationGroup.find_by!(tenant_id: @org.tenant.id, code: "GROUP")
+    buyer = Consolidation::Manage.create_entity!(
+      tenant: @org.tenant, group: group, actor: @org.user,
+      attributes: {
+        code: "EXITED", legal_name: "Exited Subsidiary", office_name: "Exited Office",
+        effective_from: "2026-08-01"
+      }
+    )
+    group.consolidation_group_members.find_by!(entity_id: buyer.id)
+      .update!(effective_to: Date.new(2026, 8, 20))
+    post_entity_journal(buyer, Date.new(2026, 8, 15))
+
+    result = export(scope: "group", group_id: group.id)
+
+    assert_equal 1, result.manifest.fetch("journalCount")
+    assert_equal 2, result.manifest.fetch("lineCount")
+  end
+
   private
 
   def post_journal
@@ -115,12 +134,25 @@ class SapBusinessOneDtwExportTest < ActiveSupport::TestCase
     )
   end
 
-  def line(number, account_code, amount_minor)
+  def post_entity_journal(entity, date)
+    office = Office.where(tenant_id: @org.tenant.id, entity_id: entity.id).first!
+    Posting::PostEntry.post!(
+      tenant_id: @org.tenant.id, actor: "u:#{@org.user.id}", actor_user_id: @org.user.id,
+      office_id: office.id, document_date: date, posting_date: date,
+      entered_at: date.to_time, fiscal_year: 2026, period_no: 5,
+      lines: [
+        line(1, "1000", 10_000, entity: entity, office: office),
+        line(2, "4000", -10_000, entity: entity, office: office)
+      ]
+    )
+  end
+
+  def line(number, account_code, amount_minor, entity: @entity, office: @office)
     {
       line_no: number, account_code: account_code, ledger_id: @ledger.id,
-      entity_id: @entity.id, office_id: @office.id,
+      entity_id: entity.id, office_id: office.id,
       amounts: [
-        { slot_role: "functional", currency: "INR", minor_unit_exponent: 2,
+        { slot_role: "functional", currency: entity.functional_currency, minor_unit_exponent: 2,
           amount_minor: amount_minor }
       ]
     }

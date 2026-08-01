@@ -6,14 +6,17 @@ module Consolidation
 
     def trial_balance(group:, as_of:)
       date = as_of.is_a?(Date) ? as_of : Date.iso8601(as_of.to_s)
-      member_ids = group.consolidation_group_members.select { |member| member.effective_on?(date) }
-        .map(&:entity_id)
+      members = group.consolidation_group_members.select { |member| member.effective_from <= date }
+      member_ids = members.map(&:entity_id)
+      members_by_entity = members.index_by(&:entity_id)
       accounts = Account.where(tenant_id: group.tenant_id).index_by(&:code)
       totals = Hash.new { |hash, code| hash[code] = { base: 0, eliminations: 0, entities: Hash.new(0) } }
       EntryLine.includes(:amounts).joins(:entry).where(
         tenant_id: group.tenant_id, entity_id: member_ids, line_class: "real",
         posting_layer: %w[00 EL], ledger_id: Ledger.where(tenant_id: group.tenant_id, posts_to_gl: true)
       ).where("entries.posting_date <= ?", date).find_each do |line|
+        next unless members_by_entity.fetch(line.entity_id).effective_on?(line.entry.posting_date)
+
         amount = reporting_amount(line, group.presentation_currency)
         next if amount.nil?
         bucket = totals[line.account_code]

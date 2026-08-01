@@ -2,10 +2,11 @@
 
 class ReportsController < BrowserController
   before_action -> { require_capability!("reports.read") }
+  before_action :load_report_entity
 
   def show
-    @trial_balance = Reports.trial_balance(Current.tenant.id)
-    @account_type_totals = Reports.account_type_totals(Current.tenant.id)
+    @trial_balance = Reports.trial_balance(Current.tenant.id, entity_id: @report_entity.id)
+    @account_type_totals = Reports.account_type_totals(Current.tenant.id, entity_id: @report_entity.id)
     @highlight_codes = highlighted_account_codes
     @posted_document = posted_document
     @plain_outcome = Documents::PlainLanguageOutcome.for(@posted_document)
@@ -17,7 +18,8 @@ class ReportsController < BrowserController
     raise ArgumentError, "From date must be on or before the to date" if @from_date > @to_date
 
     @statement = Reports.profit_and_loss(
-      Current.tenant.id, from_date: @from_date, to_date: @to_date
+      Current.tenant.id, from_date: @from_date, to_date: @to_date,
+      entity_id: @report_entity.id
     )
   rescue ArgumentError => e
     redirect_to profit_and_loss_report_path(tenant_route_options), alert: e.message unless params[:from].blank? && params[:to].blank?
@@ -25,7 +27,9 @@ class ReportsController < BrowserController
 
   def balance_sheet
     @as_of = report_date(:as_of, business_date)
-    @statement = Reports.balance_sheet(Current.tenant.id, as_of: @as_of)
+    @statement = Reports.balance_sheet(
+      Current.tenant.id, as_of: @as_of, entity_id: @report_entity.id
+    )
   rescue ArgumentError => e
     redirect_to balance_sheet_report_path(tenant_route_options), alert: e.message unless params[:as_of].blank?
   end
@@ -42,13 +46,20 @@ class ReportsController < BrowserController
     @parties = Party.joins(:party_roles).where(tenant_id: Current.tenant.id)
       .where(party_roles: { role: %w[customer vendor] }).distinct.order(:party_number)
     @selected_party = params[:party_id].present? ? @parties.find(params[:party_id]) : @parties.first
-    @ledger = Reports.party_ledger(Current.tenant.id, party_id: @selected_party.id) if @selected_party
+    if @selected_party
+      @ledger = Reports.party_ledger(
+        Current.tenant.id, party_id: @selected_party.id, entity_id: @report_entity.id
+      )
+    end
   end
 
   def day_book
     @to_date = report_date(:to, business_date)
     @from_date = report_date(:from, @to_date.beginning_of_month)
-    @day_book = Reports.day_book(Current.tenant.id, from_date: @from_date, to_date: @to_date)
+    @day_book = Reports.day_book(
+      Current.tenant.id, from_date: @from_date, to_date: @to_date,
+      entity_id: @report_entity.id
+    )
   rescue ArgumentError => e
     redirect_to day_book_report_path(tenant_route_options), alert: e.message unless params[:from].blank? && params[:to].blank?
   end
@@ -95,6 +106,15 @@ class ReportsController < BrowserController
 
   private
 
+  def load_report_entity
+    @report_entities = Entity.where(tenant_id: Current.tenant.id).order(:code)
+    @report_entity = if params[:entity_id].present?
+      @report_entities.find(params[:entity_id])
+    else
+      @report_entities.find_by!(code: "PRIMARY")
+    end
+  end
+
   def report_date(key, fallback)
     params[key].present? ? Date.iso8601(params[key]) : fallback
   rescue Date::Error
@@ -103,7 +123,9 @@ class ReportsController < BrowserController
 
   def load_aged_report(role)
     @aged_to = report_date(:aged_to, business_date)
-    @aged_report = Reports.aged_open_items(Current.tenant.id, role: role, aged_to: @aged_to)
+    @aged_report = Reports.aged_open_items(
+      Current.tenant.id, role: role, aged_to: @aged_to, entity_id: @report_entity.id
+    )
     @bank_accounts = Account.active.where(
       tenant_id: Current.tenant.id,
       code: OpenItemCredits::BuildRefund::BANK_ACCOUNT_CODES,
@@ -115,8 +137,7 @@ class ReportsController < BrowserController
   end
 
   def fiscal_year_start(date)
-    entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
-    return Date.new(date.year, 1, 1) unless entity.fiscal_year_variant == "IN_APR_MAR"
+    return Date.new(date.year, 1, 1) unless @report_entity.fiscal_year_variant == "IN_APR_MAR"
 
     Date.new(date.month >= 4 ? date.year : date.year - 1, 4, 1)
   end

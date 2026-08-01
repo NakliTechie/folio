@@ -6,12 +6,23 @@
     <div>
       <p class="eyebrow">Reports</p>
       <h1>Trial balance</h1>
-      <p>Posted ledger activity for <%= Current.tenant.name %>, shown in <%= Current.tenant.functional_currency %>.</p>
+      <p>Posted legal-book activity for <%= @report_entity.legal_name %>, shown in <%= @report_entity.functional_currency %>.</p>
     </div>
     <% if permitted?("documents.post") %>
       <%= link_to "Record business event", new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
     <% end %>
   </header>
+
+  <% if @report_entities.many? %>
+    <section class="panel report-filter">
+      <%= form_with url: report_path, method: :get, class: "filter-form" do |form| %>
+        <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+        <%= render "entity_field", form: form %>
+        <%= form.submit "Run report", class: "button button--secondary" %>
+      <% end %>
+      <small>Legal books exclude consolidation and elimination layers.</small>
+    </section>
+  <% end %>
 
   <% if @plain_outcome %>
     <section class="report-callout" role="status">
@@ -50,7 +61,7 @@
       <% end %>
       <div class="table-wrap">
         <table>
-          <caption class="sr-only">Trial balance for <%= Current.tenant.name %></caption>
+          <caption class="sr-only">Trial balance for <%= @report_entity.legal_name %></caption>
           <thead>
             <tr><th scope="col">Account</th><th scope="col">Type</th><th scope="col">Debit</th><th scope="col">Credit</th></tr>
           </thead>

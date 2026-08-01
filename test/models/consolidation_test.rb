@@ -70,6 +70,16 @@ class ConsolidationTest < ActiveSupport::TestCase
       tenant_id: @org.tenant.id, posting_layer: "EL",
       intercompany_transaction_id: transaction.transaction_code
     ).count
+    seller_book = Reports.trial_balance(
+      @org.tenant.id, entity_id: @seller.id
+    ).index_by { |row| row.fetch("account_id") }
+    buyer_book = Reports.trial_balance(
+      @org.tenant.id, entity_id: @buyer.id
+    ).index_by { |row| row.fetch("account_id") }
+    assert_equal 10_000, seller_book.fetch(1200).fetch("debit")
+    assert_equal 10_000, seller_book.fetch(4000).fetch("credit")
+    assert_equal 10_000, buyer_book.fetch(5100).fetch("debit")
+    assert_equal 10_000, buyer_book.fetch(2000).fetch("credit")
     assert_raises(ActiveRecord::StatementInvalid) do
       ConsolidationEliminationRun.transaction(requires_new: true) do
         run.update_column(:posting_date, Date.new(2026, 9, 1))
@@ -81,6 +91,17 @@ class ConsolidationTest < ActiveSupport::TestCase
       tenant_id: @org.tenant.id, posting_layer: "EL",
       intercompany_transaction_id: transaction.transaction_code
     ).count
+  end
+
+  test "group report includes only postings made while each entity was a member" do
+    post_entity_journal(@buyer, Date.new(2026, 3, 31), 7_000)
+    post_entity_journal(@buyer, Date.new(2026, 4, 1), 11_000)
+
+    report = Consolidation::Report.trial_balance(group: @group, as_of: "2026-08-31")
+    rows = report.fetch(:rows).index_by { |row| row.fetch(:account_code) }
+
+    assert_equal 11_000, rows.fetch("1000").fetch(:base_minor)
+    assert_equal(-11_000, rows.fetch("4000").fetch(:base_minor))
   end
 
   test "group policy fails closed for cross-currency entities and viewer posting" do
@@ -113,6 +134,32 @@ class ConsolidationTest < ActiveSupport::TestCase
     Consolidation::PostIntercompany.call(
       group: @group, actor: @org.user, attributes: intercompany_attributes
     )
+  end
+
+  def post_entity_journal(entity, date, amount_minor)
+    office = Office.where(tenant_id: @org.tenant.id, entity_id: entity.id).first!
+    ledger = Ledger.find_by!(tenant_id: @org.tenant.id, code: "PRIMARY")
+    Posting::PostEntry.post!(
+      tenant_id: @org.tenant.id, actor: "u:#{@org.user.id}", actor_user_id: @org.user.id,
+      document_date: date, posting_date: date, entered_at: date.to_time,
+      fiscal_year: Documents.fiscal_year(date, variant: entity.fiscal_year_variant),
+      period_no: Documents.period_no(date, variant: entity.fiscal_year_variant),
+      lines: [
+        entity_line(1, entity, office, ledger, "1000", amount_minor),
+        entity_line(2, entity, office, ledger, "4000", -amount_minor)
+      ]
+    )
+  end
+
+  def entity_line(number, entity, office, ledger, account_code, amount_minor)
+    {
+      line_no: number, account_code: account_code, ledger_id: ledger.id,
+      entity_id: entity.id, office_id: office.id,
+      amounts: [ {
+        slot_role: "transaction", currency: entity.functional_currency,
+        minor_unit_exponent: 2, amount_minor: amount_minor
+      } ]
+    }
   end
 
   def intercompany_attributes

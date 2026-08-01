@@ -8,12 +8,15 @@ module Reports
     }.freeze
     BUCKETS = %w[current days_1_30 days_31_60 days_61_90 days_91_plus].freeze
 
-    def self.call(tenant_id:, role:, aged_to:)
+    def self.call(tenant_id:, role:, aged_to:, entity_id: nil)
       config = CONFIG.fetch(role.to_s) { raise ArgumentError, "role must be customer or vendor" }
       date = aged_to.to_date
+      legal_book = LegalBookScope.call(
+        tenant_id: tenant_id, entity_id: entity_id, include_statistical: true
+      )
       lines = EntryLine.open_items.includes(:party, :amounts, entry: :document)
         .where(
-          tenant_id: tenant_id,
+          id: legal_book.lines.select(:id),
           account_code: config.fetch(:account_code),
           party_role: role
         )
@@ -23,7 +26,7 @@ module Reports
 
       rows = lines.filter_map do |line|
         transaction_amount = line.amounts.find { |amount| amount.slot_role == "transaction" }&.amount_minor.to_i
-        outstanding = Posting::Clearing.open_amount(line)
+        outstanding = LegalBookScope.functional_open_amount(line, legal_book.entity)
         next unless outstanding.positive?
 
         normal = transaction_amount * config.fetch(:direction) > 0
@@ -56,6 +59,11 @@ module Reports
         role: role.to_s,
         aged_to: date,
         basis: "current_open_items",
+        entity: {
+          id: legal_book.entity.id, code: legal_book.entity.code,
+          legal_name: legal_book.entity.legal_name
+        },
+        currency: legal_book.currency,
         rows: charges,
         credits: credits,
         totals: totals,

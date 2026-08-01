@@ -6,13 +6,14 @@
     <div>
       <p class="eyebrow">Subledger</p>
       <h1>Customer and vendor ledger</h1>
-      <p>Every posted counterparty line, its running signed balance, and its current open amount.</p>
+      <p>Every posted counterparty line for <%= @report_entity.legal_name %>, in <%= @report_entity.functional_currency %>.</p>
     </div>
   </header>
 
   <section class="panel report-filter">
     <%= form_with url: party_ledger_report_path, method: :get, class: "filter-form" do |form| %>
       <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+      <%= render "entity_field", form: form %>
       <div class="form-group"><%= form.label :party_id, "Customer or vendor" %>
         <%= form.select :party_id,
           @parties.map { |party| ["#{party.party_number} · #{party.name}", party.id] },

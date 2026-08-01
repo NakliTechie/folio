@@ -15,7 +15,8 @@ require "base64"
 # BY CONSTRUCTION — replay is provably a pure function of the payload, which is the whole
 # fat-events guarantee (§9): "the projection you rebuild is the ledger you posted."
 #
-# Balance is asserted per (ledger, slot_role, currency) — NEVER globally. A global Dr=Cr
+# Balance is asserted per (ledger, legal entity, posting layer, slot role, currency) — NEVER
+# globally. A global Dr=Cr
 # check is not a weaker version of this; it is a wrong one (spec §1): the technical-
 # clearing pattern needs an entry whose whole does not balance while each ledger slice does.
 #
@@ -29,15 +30,18 @@ module Posting
   class PostEntry
     ENGINE_VERSION = "b3.2"
 
-    # ---- pure: balance per (ledger, slot_role, currency) -----------------------------
-    # `lines` is an array of hashes each with :ledger_id and :amounts (each amount a hash
+    # ---- pure: balance per legal-book slice ------------------------------------------
+    # `lines` is an array of hashes each with ledger/entity/layer and :amounts (each amount a hash
     # with :slot_role, :currency, :amount_minor). Returns a Hash of offending
-    # [ledger_id, slot_role, currency] => non-zero signed sum (empty when balanced).
+    # [ledger_id, entity_id, posting_layer, slot_role, currency] => non-zero signed sum.
     def self.balance_offenders(lines)
       sums = Hash.new(0)
       lines.each do |line|
         line.fetch(:amounts).each do |amt|
-          key = [ line.fetch(:ledger_id), amt.fetch(:slot_role), amt.fetch(:currency) ]
+          key = [
+            line.fetch(:ledger_id), line.fetch(:entity_id), line[:posting_layer] || "00",
+            amt.fetch(:slot_role), amt.fetch(:currency)
+          ]
           sums[key] += Integer(amt.fetch(:amount_minor))
         end
       end

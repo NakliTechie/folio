@@ -6,13 +6,14 @@
     <div>
       <p class="eyebrow">Operating report</p>
       <h1>Day book</h1>
-      <p>Every accounting entry posted during the selected period, in posting order.</p>
+      <p>Every legal-book entry for <%= @report_entity.legal_name %>, in posting order and <%= @report_entity.functional_currency %>.</p>
     </div>
   </header>
 
   <section class="panel report-filter">
     <%= form_with url: day_book_report_path, method: :get, class: "filter-form" do |form| %>
       <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+      <%= render "entity_field", form: form %>
       <div class="form-group"><%= form.label :from, "From" %><%= form.date_field :from, value: @from_date, required: true %></div>
       <div class="form-group"><%= form.label :to, "To" %><%= form.date_field :to, value: @to_date, required: true %></div>
       <%= form.submit "Run report", class: "button button--secondary" %>
@@ -21,7 +22,7 @@
 
   <section class="summary-strip" aria-label="Day book totals">
     <div><span>Entries</span><strong><%= @day_book[:rows].size %></strong><small>Posted in period</small></div>
-    <div><span>Total debit</span><strong><%= money_amount(@day_book[:debit_minor]) %></strong><small>Transaction currency</small></div>
+    <div><span>Total debit</span><strong><%= money_amount(@day_book[:debit_minor]) %></strong><small>Functional currency</small></div>
     <div><span>Total credit</span><strong><%= money_amount(@day_book[:credit_minor]) %></strong><small>Must equal debit</small></div>
   </section>
 

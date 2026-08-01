@@ -6,11 +6,15 @@ module Api
       before_action -> { require_capability!("reports.read") }
 
       def trial_balance
-        render json: { trial_balance: Reports.trial_balance(Current.tenant.id) }
+        render json: { trial_balance: Reports.trial_balance(
+          Current.tenant.id, entity_id: report_entity.id
+        ) }
       end
 
       def account_type_totals
-        render json: { account_type_totals: Reports.account_type_totals(Current.tenant.id) }
+        render json: { account_type_totals: Reports.account_type_totals(
+          Current.tenant.id, entity_id: report_entity.id
+        ) }
       end
 
       def profit_and_loss
@@ -19,7 +23,8 @@ module Api
         raise ArgumentError, "from must be on or before to" if from_date > to_date
 
         render json: { profit_and_loss: Reports.profit_and_loss(
-          Current.tenant.id, from_date: from_date, to_date: to_date
+          Current.tenant.id, from_date: from_date, to_date: to_date,
+          entity_id: report_entity.id
         ) }
       rescue Date::Error, ArgumentError => e
         render_error(e.message, :unprocessable_entity)
@@ -27,7 +32,9 @@ module Api
 
       def balance_sheet
         as_of = params[:as_of].present? ? Date.iso8601(params[:as_of]) : business_date
-        render json: { balance_sheet: Reports.balance_sheet(Current.tenant.id, as_of: as_of) }
+        render json: { balance_sheet: Reports.balance_sheet(
+          Current.tenant.id, as_of: as_of, entity_id: report_entity.id
+        ) }
       rescue Date::Error => e
         render_error(e.message, :unprocessable_entity)
       end
@@ -44,7 +51,9 @@ module Api
         raise ActiveRecord::RecordNotFound, "party is required" if params[:party_id].blank?
 
         render json: {
-          party_ledger: Reports.party_ledger(Current.tenant.id, party_id: params[:party_id])
+          party_ledger: Reports.party_ledger(
+            Current.tenant.id, party_id: params[:party_id], entity_id: report_entity.id
+          )
         }
       end
 
@@ -52,7 +61,10 @@ module Api
         to_date = report_date(:to, business_date)
         from_date = report_date(:from, to_date.beginning_of_month)
         render json: {
-          day_book: Reports.day_book(Current.tenant.id, from_date: from_date, to_date: to_date)
+          day_book: Reports.day_book(
+            Current.tenant.id, from_date: from_date, to_date: to_date,
+            entity_id: report_entity.id
+          )
         }
       rescue Date::Error, ArgumentError => e
         render_error(e.message, :unprocessable_entity)
@@ -116,9 +128,15 @@ module Api
 
       private
 
+      def report_entity
+        @report_entity ||= begin
+          scope = Entity.where(tenant_id: Current.tenant.id)
+          params[:entity_id].present? ? scope.find(params[:entity_id]) : scope.find_by!(code: "PRIMARY")
+        end
+      end
+
       def fiscal_year_start(date)
-        entity = Entity.find_by!(tenant_id: Current.tenant.id, code: "PRIMARY")
-        return Date.new(date.year, 1, 1) unless entity.fiscal_year_variant == "IN_APR_MAR"
+        return Date.new(date.year, 1, 1) unless report_entity.fiscal_year_variant == "IN_APR_MAR"
 
         Date.new(date.month >= 4 ? date.year : date.year - 1, 4, 1)
       end
@@ -137,7 +155,9 @@ module Api
       def render_aged_open_items(role)
         aged_to = params[:aged_to].present? ? Date.iso8601(params[:aged_to]) : business_date
         render json: {
-          aged_open_items: Reports.aged_open_items(Current.tenant.id, role: role, aged_to: aged_to)
+          aged_open_items: Reports.aged_open_items(
+            Current.tenant.id, role: role, aged_to: aged_to, entity_id: report_entity.id
+          )
         }
       rescue Date::Error => e
         render_error(e.message, :unprocessable_entity)

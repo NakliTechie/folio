@@ -69,8 +69,10 @@ module SapBusinessOne
           entity_ids: [ office.entity_id ], office_id: office.id, layers: [ "00" ] }
       when "group"
         group = ConsolidationGroup.where(tenant_id: tenant.id).includes(:consolidation_group_members).find(group_id)
-        members = group.consolidation_group_members.select { |member| member.effective_on?(to_date) }
-        raise InvalidExport, "Consolidation group has no effective members on the export date" if members.empty?
+        members = group.consolidation_group_members.select do |member|
+          member.effective_from <= to_date && (member.effective_to.nil? || member.effective_to >= from_date)
+        end
+        raise InvalidExport, "Consolidation group has no members effective in the export range" if members.empty?
 
         entities = Entity.where(tenant_id: tenant.id, id: members.map(&:entity_id)).to_a
         unless entities.all? { |entity| entity.functional_currency == group.presentation_currency }

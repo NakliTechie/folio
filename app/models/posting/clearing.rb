@@ -245,6 +245,17 @@ module Posting
         tenant_id: item.tenant_id, entry_line_id: residual.id, slot_role: "transaction",
         currency: txn.currency, minor_unit_exponent: txn.minor_unit_exponent, amount_minor: sign * remaining
       )
+      item.amounts.where.not(slot_role: "transaction").find_each do |source|
+        residual_amount = (BigDecimal(source.amount_minor.abs.to_s) * remaining / txn.amount_minor.abs)
+          .round(0, BigDecimal::ROUND_HALF_EVEN).to_i
+        JournalEntryLineAmount.create!(
+          tenant_id: item.tenant_id, entry_line_id: residual.id, slot_role: source.slot_role,
+          currency: source.currency, minor_unit_exponent: source.minor_unit_exponent,
+          amount_minor: (source.amount_minor.negative? ? -residual_amount : residual_amount),
+          rate: source.rate, rate_date: source.rate_date,
+          rate_source: source.rate_source, rate_basis: source.rate_basis
+        )
+      end
       residual
     end
   end

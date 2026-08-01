@@ -1,0 +1,10 @@
+<% if @report_entities.many? %>
+  <div class="form-group">
+    <%= form.label :entity_id, "Legal entity" %>
+    <%= form.select :entity_id,
+      @report_entities.map { |entity| ["#{entity.code} · #{entity.legal_name}", entity.id] },
+      { selected: @report_entity.id }, required: true %>
+  </div>
+<% else %>
+  <%= form.hidden_field :entity_id, value: @report_entity.id %>
+<% end %>

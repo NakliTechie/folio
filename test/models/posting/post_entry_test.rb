@@ -3,7 +3,7 @@
 require "test_helper"
 require "securerandom"
 
-# B3.2 — Posting::PostEntry: balance per (ledger, slot, currency), fat events with
+# B3.2 — Posting::PostEntry: balance per legal-book slice, fat events with
 # provenance + authority, and a PURE replay path. Runs in CI.
 class Posting::PostEntryTest < ActiveSupport::TestCase
   PRIMARY = 1
@@ -30,30 +30,52 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
   end
 
   # ---- pure balance semantics (no DB) ----
-  test "a single-currency voucher balances per (ledger, slot, currency)" do
+  test "a single-currency voucher balances per legal-book slice" do
     assert Posting::PostEntry.balanced?(draft[:lines])
   end
 
   test "balance is per-ledger — a set that nets to zero GLOBALLY but not per ledger is rejected" do
     lines = [
-      { ledger_id: PRIMARY, amounts: [ { slot_role: "transaction", currency: "INR", amount_minor: 100_000 } ] },
-      { ledger_id: MGMT,    amounts: [ { slot_role: "transaction", currency: "INR", amount_minor: -100_000 } ] }
+      { ledger_id: PRIMARY, entity_id: 1,
+        amounts: [ { slot_role: "transaction", currency: "INR", amount_minor: 100_000 } ] },
+      { ledger_id: MGMT, entity_id: 1,
+        amounts: [ { slot_role: "transaction", currency: "INR", amount_minor: -100_000 } ] }
     ]
     # A global Dr=Cr check sums to zero and WRONGLY passes.
     assert_equal 0, lines.sum { |l| l[:amounts].sum { |a| a[:amount_minor] } }
     # The per-(ledger, slot, currency) check catches both unbalanced ledgers.
     offenders = Posting::PostEntry.balance_offenders(lines)
     assert_equal 2, offenders.size, "each ledger slice is individually unbalanced"
-    assert offenders.key?([ PRIMARY, "transaction", "INR" ])
-    assert offenders.key?([ MGMT, "transaction", "INR" ])
+    assert offenders.key?([ PRIMARY, 1, "00", "transaction", "INR" ])
+    assert offenders.key?([ MGMT, 1, "00", "transaction", "INR" ])
   end
 
   test "balance is per-currency within a slot — mixed currencies must each net to zero" do
     lines = [
-      { ledger_id: PRIMARY, amounts: [ { slot_role: "transaction", currency: "USD", amount_minor: 100 } ] },
-      { ledger_id: PRIMARY, amounts: [ { slot_role: "transaction", currency: "EUR", amount_minor: -100 } ] }
+      { ledger_id: PRIMARY, entity_id: 1,
+        amounts: [ { slot_role: "transaction", currency: "USD", amount_minor: 100 } ] },
+      { ledger_id: PRIMARY, entity_id: 1,
+        amounts: [ { slot_role: "transaction", currency: "EUR", amount_minor: -100 } ] }
     ]
     refute Posting::PostEntry.balanced?(lines), "USD and EUR do not offset each other"
+  end
+
+  test "globally balanced lines cannot cross legal entities or posting layers" do
+    entity_lines = [
+      { ledger_id: PRIMARY, entity_id: 1,
+        amounts: [ { slot_role: "transaction", currency: "INR", amount_minor: 100 } ] },
+      { ledger_id: PRIMARY, entity_id: 2,
+        amounts: [ { slot_role: "transaction", currency: "INR", amount_minor: -100 } ] }
+    ]
+    layer_lines = [
+      { ledger_id: PRIMARY, entity_id: 1, posting_layer: "00",
+        amounts: [ { slot_role: "transaction", currency: "INR", amount_minor: 100 } ] },
+      { ledger_id: PRIMARY, entity_id: 1, posting_layer: "EL",
+        amounts: [ { slot_role: "transaction", currency: "INR", amount_minor: -100 } ] }
+    ]
+
+    refute Posting::PostEntry.balanced?(entity_lines)
+    refute Posting::PostEntry.balanced?(layer_lines)
   end
 
   # ---- POST path ----
