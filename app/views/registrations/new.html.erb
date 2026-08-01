@@ -1,5 +1,5 @@
 <% content_for :title, "Create account · Folio" %>
-<% content_for :description, "Create company books in Folio with an explicit jurisdiction, currency, and fiscal year." %>
+<% content_for :description, "Create India company books in Folio with INR and an April–March fiscal year." %>
 
 <main id="main-content" class="public-form-shell">
   <section class="public-form-intro">
@@ -33,40 +33,15 @@
       </div>
 
       <fieldset class="profile-fieldset">
-        <legend>Accounting defaults</legend>
-        <p>Confirm these before Folio creates your books. You can configure offices and advanced settings later.</p>
-        <div class="form-group">
-          <%= f.label :jurisdiction_profile, "Country or jurisdiction" %>
-          <%= f.select :jurisdiction_profile,
-            Onboarding::AccountingProfile::JURISDICTIONS.map { |code, label| [label, code] },
-            { selected: params[:jurisdiction_profile].presence || Onboarding::AccountingProfile::DEFAULT_JURISDICTION } %>
-        </div>
-        <div class="form-grid form-grid--two">
-          <div class="form-group">
-            <%= f.label :functional_currency, "Functional currency" %>
-            <%= f.select :functional_currency,
-              Onboarding::AccountingProfile::CURRENCIES.map { |code, label| [label, code] },
-              { selected: params[:functional_currency].presence || Onboarding::AccountingProfile::DEFAULT_CURRENCY } %>
-          </div>
-          <div class="form-group">
-            <%= f.label :fiscal_year_variant, "Fiscal year" %>
-            <%= f.select :fiscal_year_variant,
-              Onboarding::AccountingProfile::FISCAL_YEARS.map { |code, label| [label, code] },
-              { selected: params[:fiscal_year_variant].presence || Onboarding::AccountingProfile::DEFAULT_FISCAL_YEAR } %>
-          </div>
-        </div>
-        <div class="form-group">
-          <%= f.label :time_zone, "Company time zone" %>
-          <%= f.select :time_zone,
-            Onboarding::AccountingProfile::TIME_ZONES.map { |code, label| [label, code] },
-            { selected: params[:time_zone].presence ||
-              Onboarding::AccountingProfile::JURISDICTION_TIME_ZONES.fetch(
-                params[:jurisdiction_profile].presence || Onboarding::AccountingProfile::DEFAULT_JURISDICTION,
-                "UTC"
-              ) },
-            aria: { describedby: "time-zone-hint" } %>
-          <small id="time-zone-hint">Dates, reports, and posting defaults use this company-local day.</small>
-        </div>
+        <legend>India launch profile</legend>
+        <p>Self-service signup currently creates India books only. Other country localizations will appear when their tax and statutory workflows are complete.</p>
+        <dl class="summary-list">
+          <div><dt>Country or jurisdiction</dt><dd>India</dd></div>
+          <div><dt>Functional currency</dt><dd>INR — Indian rupee</dd></div>
+          <div><dt>Fiscal year</dt><dd>April–March</dd></div>
+          <div><dt>Company time zone</dt><dd>Asia/Kolkata</dd></div>
+        </dl>
+        <small>Dates, reports, and posting defaults use the India-local day.</small>
       </fieldset>
 
       <%= f.submit "Create company books", class: "button button--primary button--full" %>

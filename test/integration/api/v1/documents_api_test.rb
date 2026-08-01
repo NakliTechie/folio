@@ -92,8 +92,11 @@ class Api::V1::DocumentsApiTest < ActionDispatch::IntegrationTest
 
   test "draft currency defaults to the tenant profile and rejects incompatible currency metadata" do
     usd = Onboarding::SignUp.call(
-      email: "usd-books@x.com", password: "correct-horse-battery", org_name: "USD Books",
-      jurisdiction_profile: "US", functional_currency: "USD", fiscal_year_variant: "CAL"
+      email: "usd-books@x.com", password: "correct-horse-battery", org_name: "USD Books"
+    )
+    usd.tenant.update!(functional_currency: "USD", time_zone: "America/New_York")
+    Entity.find_by!(tenant_id: usd.tenant.id, code: "PRIMARY").update!(
+      jurisdiction_profile: "US", fiscal_year_variant: "CAL"
     )
     sign_out
     sign_in_as(usd.user)

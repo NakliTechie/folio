@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 module Onboarding
-  # The small, explicit set of accounting identities Folio can provision honestly today.
-  # Signup asks for these values rather than silently guessing India/INR/April–March.
+  # Accounting identities understood by the data model. Public self-service signup is deliberately
+  # narrower: Folio only promises the India launch profile until other localizations are complete.
   module AccountingProfile
     InvalidChoice = Class.new(ArgumentError)
 
@@ -43,6 +43,12 @@ module Onboarding
     DEFAULT_JURISDICTION = "IN"
     DEFAULT_CURRENCY = "INR"
     DEFAULT_FISCAL_YEAR = "IN_APR_MAR"
+    PUBLIC_SIGNUP_PROFILE = {
+      jurisdiction_profile: DEFAULT_JURISDICTION,
+      functional_currency: DEFAULT_CURRENCY,
+      fiscal_year_variant: DEFAULT_FISCAL_YEAR,
+      time_zone: JURISDICTION_TIME_ZONES.fetch(DEFAULT_JURISDICTION)
+    }.freeze
 
     Profile = Data.define(:jurisdiction_profile, :functional_currency, :fiscal_year_variant, :time_zone)
 
@@ -61,6 +67,21 @@ module Onboarding
       validate_choice!(:fiscal_year_variant, values[:fiscal_year_variant], FISCAL_YEARS)
       validate_choice!(:time_zone, values[:time_zone], TIME_ZONES)
       Profile.new(**values)
+    end
+
+    def resolve_for_signup(jurisdiction_profile: nil, functional_currency: nil,
+                           fiscal_year_variant: nil, time_zone: nil)
+      profile = resolve(
+        jurisdiction_profile: jurisdiction_profile,
+        functional_currency: functional_currency,
+        fiscal_year_variant: fiscal_year_variant,
+        time_zone: time_zone
+      )
+      submitted = profile.to_h
+      return profile if submitted == PUBLIC_SIGNUP_PROFILE
+
+      raise InvalidChoice,
+        "Self-service signup currently supports India, INR, April–March, and Asia/Kolkata only"
     end
 
     def validate_choice!(field, value, choices)

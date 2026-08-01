@@ -43,25 +43,35 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_select ".mini-steps", text: /Eleven accounts, ready to use/
   end
 
-  test "signup provisions the accounting profile the user confirmed" do
-    post registration_path, params: {
-      org_name: "Pacific Co",
-      email_address: "founder@pacific.example",
-      password: "correct-horse-battery",
-      jurisdiction_profile: "US",
-      functional_currency: "USD",
-      fiscal_year_variant: "CAL",
-      time_zone: "America/Los_Angeles"
-    }
+  test "self-service signup presents only the supported India launch profile" do
+    get new_registration_path
 
-    assert_redirected_to root_path
-    tenant = Tenant.find_by!(slug: "pacific-co")
-    entity = Entity.find_by!(tenant_id: tenant.id, code: "PRIMARY")
-    assert_equal "USD", tenant.functional_currency
-    assert_equal "America/Los_Angeles", tenant.time_zone
-    assert_equal "US", entity.jurisdiction_profile
-    assert_equal "CAL", entity.fiscal_year_variant
-    assert Account.where(tenant_id: tenant.id).exists?(code: "2100", name: "Tax Payable")
+    assert_response :success
+    assert_select "legend", "India launch profile"
+    assert_select "select[name=jurisdiction_profile]", count: 0
+    assert_select "select[name=functional_currency]", count: 0
+    assert_select "select[name=fiscal_year_variant]", count: 0
+    assert_select "select[name=time_zone]", count: 0
+    assert_select ".summary-list", text: /India.*INR.*April–March.*Asia\/Kolkata/m
+    assert_select "body", text: /Other country localizations will appear when their tax and statutory workflows are complete/
+  end
+
+  test "self-service signup rejects a non-India profile without creating a company" do
+    assert_no_difference [ "Tenant.count", "User.count" ] do
+      post registration_path, params: {
+        org_name: "Pacific Co",
+        email_address: "founder@pacific.example",
+        password: "correct-horse-battery",
+        jurisdiction_profile: "US",
+        functional_currency: "USD",
+        fiscal_year_variant: "CAL",
+        time_zone: "America/Los_Angeles"
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_select "[role=alert]",
+      "Self-service signup currently supports India, INR, April–March, and Asia/Kolkata only"
   end
 
   test "signup rejects an unsupported company time zone" do

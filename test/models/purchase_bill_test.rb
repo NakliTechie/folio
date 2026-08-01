@@ -194,10 +194,11 @@ class PurchaseBillTest < ActiveSupport::TestCase
     other = Onboarding::SignUp.call(
       email: "purchase-bill-us@folio.invalid",
       password: "correct-horse-battery",
-      org_name: "Purchase Bill US",
-      jurisdiction_profile: "US",
-      functional_currency: "USD",
-      fiscal_year_variant: "CAL"
+      org_name: "Purchase Bill US"
+    )
+    other.tenant.update!(functional_currency: "USD", time_zone: "America/New_York")
+    Entity.find_by!(tenant_id: other.tenant.id, code: "PRIMARY").update!(
+      jurisdiction_profile: "US", fiscal_year_variant: "CAL"
     )
 
     error = assert_raises(PurchaseBills::InvalidBill) do

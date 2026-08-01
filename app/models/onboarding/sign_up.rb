@@ -10,7 +10,7 @@ module Onboarding
 
     def call(email:, password:, org_name:, jurisdiction_profile: nil, functional_currency: nil,
              fiscal_year_variant: nil, time_zone: nil)
-      profile = AccountingProfile.resolve(
+      profile = AccountingProfile.resolve_for_signup(
         jurisdiction_profile: jurisdiction_profile,
         functional_currency: functional_currency,
         fiscal_year_variant: fiscal_year_variant,
