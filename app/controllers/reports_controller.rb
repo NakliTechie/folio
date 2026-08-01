@@ -73,6 +73,26 @@ class ReportsController < BrowserController
     redirect_to gst_summary_report_path(tenant_route_options), alert: e.message unless params[:from].blank? && params[:to].blank?
   end
 
+  def gstr1_filing
+    from_date = report_date(:from, business_date.beginning_of_month)
+    to_date = report_date(:to, from_date.end_of_month)
+    result = Reports.gstr1_filing(
+      Current.tenant.id,
+      tax_registration_id: params.require(:tax_registration_id),
+      from_date: from_date,
+      to_date: to_date
+    )
+    send_data(
+      JSON.pretty_generate(result.payload),
+      filename: "gstr1-#{result.payload.fetch('fp')}-#{result.payload.fetch('gstin')}.json",
+      type: "application/json",
+      disposition: "attachment"
+    )
+  rescue Date::Error, ArgumentError, Taxes::India::Gst::Filing::NotReady,
+         Taxes::India::Gst::Filing::InvalidPayload => e
+    redirect_to gst_summary_report_path(tenant_route_options), alert: e.message
+  end
+
   private
 
   def report_date(key, fallback)

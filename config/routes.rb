@@ -80,6 +80,7 @@ Rails.application.routes.draw do
   get "reports/party-ledger", to: "reports#party_ledger", as: :party_ledger_report
   get "reports/day-book", to: "reports#day_book", as: :day_book_report
   get "reports/gst-summary", to: "reports#gst_summary", as: :gst_summary_report
+  get "reports/gst-summary/gstr1.json", to: "reports#gstr1_filing", as: :gstr1_filing_report
   resource :period_close, path: "period-close", only: %i[show update]
   resource :reports, only: :show, controller: :reports
   resource :team, only: :show, controller: :team
@@ -102,6 +103,7 @@ Rails.application.routes.draw do
       get "reports/party_ledger", to: "reports#party_ledger"
       get "reports/day_book", to: "reports#day_book"
       get "reports/gst_summary", to: "reports#gst_summary"
+      post "reports/gst_filing", to: "reports#gst_filing"
       resource :period_close, only: %i[show update]
       resources :documents, only: %i[show create] do
         member do

@@ -143,6 +143,86 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
     assert_equal "requires_gstr_2b_and_eligibility_review", summary.dig("gstr_3b", "input_tax_status")
   end
 
+  test "browser downloads current GSTR-1 Save JSON with a deterministic filing cross-check" do
+    get gstr1_filing_report_path, params: {
+      tax_registration_id: @registration.id, from: "2026-07-01", to: "2026-07-31"
+    }
+    assert_response :success
+    assert_equal "application/json", response.media_type
+    assert_match(/gstr1-072026-27AAPFU0939F1ZV\.json/, response.headers.fetch("Content-Disposition"))
+    payload = JSON.parse(response.body)
+    assert_equal "072026", payload.fetch("fp")
+    assert_equal @invoice.document_number, payload.dig("b2b", 0, "inv", 0, "inum")
+    assert_equal 100, payload.dig("b2b", 0, "inv", 0, "itms", 0, "itm_det", "txval")
+    assert_equal "998311", payload.dig("hsn", "hsn_b2b", 0, "hsn_sc")
+
+    post "/api/v1/reports/gst_filing", params: {
+      form: "GSTR-1", tax_registration_id: @registration.id,
+      from: "2026-07-01", to: "2026-07-31"
+    }
+    assert_response :success
+    filing = JSON.parse(response.body).fetch("gst_filing")
+    assert_equal "v5.0", filing.fetch("schema_version")
+    assert_equal "FINAL", filing.fetch("schema_status")
+    assert_equal "matched", filing.dig("crosscheck", "status")
+    assert_equal 10_000, filing.dig("crosscheck", "taxable_value_minor")
+    assert_match(/\A[0-9a-f]{64}\z/, filing.fetch("payload_sha256"))
+  end
+
+  test "GSTR-3B filing requires reviewed ITC and caps it to the purchase book" do
+    post "/api/v1/reports/gst_filing", params: {
+      form: "GSTR-3B", tax_registration_id: @registration.id,
+      from: "2026-07-01", to: "2026-07-31"
+    }
+    assert_response :bad_request
+    assert_match(/reviewed_itc/, JSON.parse(response.body).fetch("error"))
+
+    post "/api/v1/reports/gst_filing", params: {
+      form: "GSTR-3B", tax_registration_id: @registration.id,
+      from: "2026-07-01", to: "2026-07-31",
+      reviewed_itc: {
+        status: "gstr_2b_reconciled",
+        available: { igst_minor: 1_800, cgst_minor: 0, sgst_minor: 0, cess_minor: 0 }
+      }
+    }
+    assert_response :success
+    filing = JSON.parse(response.body).fetch("gst_filing")
+    assert_equal "v7.1", filing.fetch("schema_version")
+    assert_equal "DRAFT", filing.fetch("schema_status")
+    assert_equal 100, filing.dig("payload", "sup_details", "osup_det", "txval")
+    assert_equal 9, filing.dig("payload", "sup_details", "osup_det", "camt")
+    assert_equal 18, filing.dig("payload", "itc_elg", "itc_net", "iamt")
+    assert_equal "gstr_2b_reconciled", filing.dig("crosscheck", "itc_source")
+
+    post "/api/v1/reports/gst_filing", params: {
+      form: "GSTR-3B", tax_registration_id: @registration.id,
+      from: "2026-07-01", to: "2026-07-31",
+      reviewed_itc: {
+        status: "gstr_2b_reconciled",
+        available: { igst_minor: 1_801, cgst_minor: 0, sgst_minor: 0, cess_minor: 0 }
+      }
+    }
+    assert_response :unprocessable_entity
+    assert_match(/exceeds Folio's purchase-book reference/, JSON.parse(response.body).fetch("error"))
+  end
+
+  test "CMP-08 filing uses explicitly reviewed quarterly turnover" do
+    post "/api/v1/reports/gst_filing", params: {
+      form: "CMP-08", tax_registration_id: @registration.id,
+      from: "2026-04-01", to: "2026-06-30",
+      composition_type: "service", reviewed_turnover_minor: 1_000_000,
+      composition_rate_basis_points: 600
+    }
+    assert_response :success
+    filing = JSON.parse(response.body).fetch("gst_filing")
+    assert_equal "v1.2", filing.fetch("schema_version")
+    assert_equal "N", filing.dig("payload", "isnil")
+    assert_equal 10_000, filing.dig("payload", "table3", "out_ser", "tax_val")
+    assert_equal 300, filing.dig("payload", "table3", "tax_pay", "camt")
+    assert_equal 300, filing.dig("payload", "table3", "tax_pay", "samt")
+    assert_equal 60_000, filing.dig("crosscheck", "tax_payable_minor")
+  end
+
   test "GST preparation nets credit notes and negative postings while isolating reversal review" do
     credit_note = CreditNotes::BuildDraft.call(
       tenant: @org.tenant, invoice_id: @invoice.id,
@@ -187,6 +267,14 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
     assert_equal 7_500, report.dig(:gstr_3b, :table_4_a_5_book_input_tax_reference, :taxable_value_minor)
     assert_equal 1_350, report.dig(:gstr_3b, :table_4_a_5_book_input_tax_reference, :tax, :igst)
     assert_equal 3.5.to_d, report.dig(:gstr_1, :hsn_summary, 0, :quantity)
+
+    error = assert_raises(Taxes::India::Gst::Filing::NotReady) do
+      Reports.gstr1_filing(
+        @org.tenant.id, tax_registration_id: @registration.id,
+        from_date: Date.new(2026, 7, 1), to_date: Date.new(2026, 7, 31)
+      )
+    end
+    assert_match(/internal invoice reversal/, error.message)
   end
 
   test "statutory reports reject invalid periods and cross-tenant registrations" do

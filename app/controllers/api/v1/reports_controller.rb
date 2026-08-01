@@ -73,6 +73,47 @@ module Api
         render_error(e.message, :unprocessable_entity)
       end
 
+      def gst_filing
+        form = params.require(:form).to_s.upcase.delete("-")
+        regular_from = report_date(:from, business_date.beginning_of_month)
+        regular_to = report_date(:to, regular_from.end_of_month)
+        result = case form
+        when "GSTR1"
+          Reports.gstr1_filing(
+            Current.tenant.id,
+            tax_registration_id: params.require(:tax_registration_id),
+            from_date: regular_from,
+            to_date: regular_to
+          )
+        when "GSTR3B"
+          Reports.gstr3b_filing(
+            Current.tenant.id,
+            tax_registration_id: params.require(:tax_registration_id),
+            from_date: regular_from,
+            to_date: regular_to,
+            reviewed_itc: required_object!(:reviewed_itc)
+          )
+        when "CMP08"
+          registration = TaxRegistration.where(tenant_id: Current.tenant.id, kind: "GSTIN")
+            .find(params.require(:tax_registration_id))
+          quarter_from = report_date(:from, business_date.beginning_of_quarter)
+          Taxes::India::Gst::Filing.cmp08(
+            gstin: registration.identifier,
+            from_date: quarter_from,
+            to_date: report_date(:to, quarter_from + 3.months - 1.day),
+            composition_type: params.require(:composition_type),
+            reviewed_turnover_minor: params.require(:reviewed_turnover_minor),
+            composition_rate_basis_points: params.require(:composition_rate_basis_points)
+          )
+        else
+          raise ArgumentError, "form must be GSTR-1, GSTR-3B, or CMP-08"
+        end
+        render json: { gst_filing: result.as_json }
+      rescue Date::Error, ArgumentError, Taxes::India::Gst::Filing::NotReady,
+             Taxes::India::Gst::Filing::InvalidPayload => e
+        render_error(e.message, :unprocessable_entity)
+      end
+
       private
 
       def fiscal_year_start(date)
@@ -84,6 +125,13 @@ module Api
 
       def report_date(key, fallback)
         params[key].present? ? Date.iso8601(params[key]) : fallback
+      end
+
+      def required_object!(key)
+        value = params.require(key)
+        raise ArgumentError, "#{key} must be an object" unless value.respond_to?(:to_unsafe_h)
+
+        value.to_unsafe_h
       end
 
       def render_aged_open_items(role)

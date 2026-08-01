@@ -75,6 +75,25 @@ module Reports
     )
   end
 
+  def gstr1_filing(tenant_id, tax_registration_id:, from_date:, to_date:)
+    Taxes::India::Gst::Filing.gstr1(
+      tenant_id: tenant_id,
+      tax_registration_id: tax_registration_id,
+      from_date: from_date,
+      to_date: to_date
+    )
+  end
+
+  def gstr3b_filing(tenant_id, tax_registration_id:, from_date:, to_date:, reviewed_itc:)
+    Taxes::India::Gst::Filing.gstr3b(
+      tenant_id: tenant_id,
+      tax_registration_id: tax_registration_id,
+      from_date: from_date,
+      to_date: to_date,
+      reviewed_itc: reviewed_itc
+    )
+  end
+
   # Form 26Q — quarterly TDS return (deductor summary + deductee-wise breakup).
   def tds_return_26q(tenant_id, fiscal_year:, quarter:)
     TdsReturn.call(tenant_id: tenant_id, fiscal_year: fiscal_year, quarter: quarter)

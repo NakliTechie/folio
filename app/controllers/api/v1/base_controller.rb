@@ -12,6 +12,9 @@ module Api
       protect_from_forgery with: :exception
 
       rescue_from ActiveRecord::RecordNotFound, with: :not_found
+      rescue_from ActionController::ParameterMissing do |e|
+        render_error(e.message, :bad_request)
+      end
       rescue_from ActiveRecord::RecordInvalid do |e|
         render_error(e.record.errors.full_messages.to_sentence, :unprocessable_entity)
       end

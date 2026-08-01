@@ -37,8 +37,17 @@
     </section>
 
     <section class="panel">
-      <div class="section-heading"><div><p class="eyebrow">GSTR-1</p><h2>Outward-supply preparation</h2></div></div>
-      <p class="table-note">Folio currently emits governed regular B2B service invoices in table 4A and registered credit notes in table 9B. Internal reversals are isolated for operator review because their GST-portal treatment is not inferred.</p>
+      <div class="section-heading">
+        <div><p class="eyebrow">GSTR-1</p><h2>Outward-supply preparation</h2></div>
+        <%= link_to "Download GSTN JSON", gstr1_filing_report_path(
+          tenant_route_options.merge(
+            tax_registration_id: @selected_registration.id,
+            from: @from_date.iso8601,
+            to: @to_date.iso8601
+          )
+        ), class: "button button--secondary" %>
+      </div>
+      <p class="table-note">Folio emits GSTN Save v5.0 JSON for governed regular B2B invoices and registered credit notes. Internal reversals and incomplete months fail closed instead of producing an upload file.</p>
     </section>
 
     <% [
@@ -119,7 +128,8 @@
         <%= input_tax[:supplier_credit_note_count] %> supplier credit note(s),
         <%= input_tax[:supplier_debit_note_count] %> supplier debit note(s), and
         <%= input_tax[:reversal_count] %> internal reversal(s).</p>
-      <p class="table-note"><strong>Preparation only.</strong> Reconcile outward values to the GST portal and input-tax values to GSTR-2B, eligibility, reversals and reclaims before filing.</p>
+      <p class="table-note"><strong>GSTR-3B JSON is gated.</strong> The filing API requires an explicit GSTR-2B-reconciled ITC object; this book-reference page cannot silently promote purchase tax into eligible ITC.</p>
+      <p class="table-note">Reconcile outward values to the GST portal and input-tax values to GSTR-2B before filing.</p>
     </section>
   <% else %>
     <section class="panel empty-state">
