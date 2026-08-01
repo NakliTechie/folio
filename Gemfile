@@ -22,6 +22,9 @@ gem "bcrypt", "~> 3.1.7"
 # Render the IRP-signed QR payload on acknowledged India e-invoices.
 gem "rqrcode", "~> 3.2"
 
+# Deterministic enterprise export bundles and the production .khata bridge.
+gem "rubyzip", "~> 3.4"
+
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem "tzinfo-data", platforms: %i[ windows jruby ]
 

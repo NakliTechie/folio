@@ -16,7 +16,7 @@ module Rbac
                                  assets.read assets.manage assets.post
                                  controlling.read controlling.manage controlling.allocate
                                  procurement.read procurement.manage procurement.approve procurement.receive
-                                 consolidation.read consolidation.manage consolidation.post] },
+                                 consolidation.read consolidation.manage consolidation.post exports.read] },
       "operator"   => { name: "Operator",
                         caps: %w[invoices.create bills.create payments.create documents.simulate
                                  accounts.read masters.read reports.read gst.place_of_supply.override
@@ -24,7 +24,8 @@ module Rbac
       "ca_auditor" => { name: "CA/Auditor",
                         caps: %w[documents.post documents.reverse documents.simulate accounts.read
                                  masters.read reports.read period.lock contracts.read currency.read banking.read
-                                 inventory.read assets.read controlling.read procurement.read consolidation.read] },
+                                 inventory.read assets.read controlling.read procurement.read consolidation.read
+                                 exports.read] },
       "viewer"     => { name: "Viewer",
                         caps: %w[accounts.read masters.read reports.read contracts.read currency.read banking.read
                                  inventory.read assets.read controlling.read procurement.read consolidation.read] }

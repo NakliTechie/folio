@@ -77,6 +77,9 @@ Rails.application.routes.draw do
     post :post_intercompany
     post :eliminate
   end
+  resource :enterprise_export, path: "enterprise-exports", only: :show do
+    get :sap_b1_dtw, path: "sap-business-one-dtw"
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

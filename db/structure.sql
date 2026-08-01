@@ -8401,6 +8401,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801193000'),
 ('20260801192000'),
 ('20260801191000'),
 ('20260801190000'),
