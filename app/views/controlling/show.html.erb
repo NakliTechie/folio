@@ -1,0 +1,56 @@
+<% content_for :title, "Controlling · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading"><div><p class="eyebrow">Management accounting</p><h1>Controlling</h1><p>Govern cost-center, profit-center, and segment assignments; compare plan with actual; and post auditable allocations into the universal journal.</p></div></header>
+
+  <% if permitted?("controlling.manage") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Responsibility hierarchy</p><h2>Add management dimensions</h2></div></div>
+      <div class="stacked-form">
+        <%= form_with scope: :controlling_segment, url: create_segment_controlling_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+          <strong>Segment</strong><%= form.label :code %><%= form.text_field :code, required: true %><%= form.label :name %><%= form.text_field :name, required: true %><%= form.submit "Add segment", class: "button button--quiet" %>
+        <% end %>
+        <%= form_with scope: :profit_center, url: create_profit_center_controlling_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+          <strong>Profit center</strong><%= form.label :code %><%= form.text_field :code, required: true %><%= form.label :name %><%= form.text_field :name, required: true %><%= form.label :controlling_segment_id, "Segment" %><%= form.select :controlling_segment_id, @segments.map { |segment| ["#{segment.code} · #{segment.name}", segment.id] }, required: true %><%= form.label :valid_from %><%= form.date_field :valid_from, value: business_date, required: true %><%= form.submit "Add profit center", class: "button button--quiet" %>
+        <% end %>
+        <%= form_with scope: :cost_center, url: create_cost_center_controlling_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+          <strong>Cost center</strong><%= form.label :code %><%= form.text_field :code, required: true %><%= form.label :name %><%= form.text_field :name, required: true %><%= form.label :profit_center_id, "Profit center" %><%= form.select :profit_center_id, @profit_centers.map { |center| ["#{center.code} · #{center.name}", center.id] }, required: true %><%= form.label :valid_from %><%= form.date_field :valid_from, value: business_date, required: true %><%= form.submit "Add cost center", class: "button button--quiet" %>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Plan / actual</p><h2>Add budget line</h2></div></div>
+      <%= form_with scope: :controlling_plan, url: create_plan_controlling_path(tenant_route_options), method: :post, class: "inline-form" do |form| %>
+        <%= form.label :cost_center_id %><%= form.select :cost_center_id, @cost_centers.map { |center| ["#{center.code} · #{center.name}", center.id] }, required: true %>
+        <%= form.label :account_code %><%= form.select :account_code, @expense_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %>
+        <%= form.label :version %><%= form.text_field :version, value: "BUDGET", required: true %>
+        <%= form.label :fiscal_year %><%= form.number_field :fiscal_year, value: @current_fiscal_year, required: true %>
+        <%= form.label :period_no %><%= form.number_field :period_no, value: @current_period, min: 1, max: 16, required: true %>
+        <%= form.label :amount %><%= form.number_field :amount, min: 0, step: "0.01", required: true %>
+        <%= form.submit "Save plan", class: "button button--quiet" %>
+      <% end %>
+    </section>
+
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Distribution cycle</p><h2>Create allocation</h2></div></div>
+      <%= form_with scope: :allocation_cycle, url: create_cycle_controlling_path(tenant_route_options), method: :post, class: "stacked-form" do |form| %>
+        <div class="form-grid">
+          <div class="field"><%= form.label :code %><%= form.text_field :code, required: true %></div><div class="field"><%= form.label :name %><%= form.text_field :name, required: true %></div>
+          <div class="field"><%= form.label :sender_cost_center_id, "Sender" %><%= form.select :sender_cost_center_id, @cost_centers.map { |center| ["#{center.code} · #{center.name}", center.id] }, required: true %></div>
+          <div class="field"><%= form.label :source_account_code, "Expense account" %><%= form.select :source_account_code, @expense_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, required: true %></div>
+          <div class="field"><%= form.label :valid_from %><%= form.date_field :valid_from, value: business_date, required: true %></div>
+          <% 1.upto(3) do |index| %><div class="field"><%= form.label "receiver_#{index}_id", "Receiver #{index}" %><%= form.select "receiver_#{index}_id", [["None", ""]] + @cost_centers.map { |center| ["#{center.code} · #{center.name}", center.id] } %></div><div class="field"><%= form.label "receiver_#{index}_weight", "Weight %" %><%= form.number_field "receiver_#{index}_weight", min: 0, max: 100, step: "0.01" %></div><% end %>
+        </div>
+        <p class="form-hint">Receiver weights must total exactly 100%. Distribution preserves the original expense account.</p>
+        <%= form.submit "Create allocation cycle", class: "button button--primary" %>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table"><div class="panel__header"><div><p class="eyebrow">Complete hierarchy</p><h2>Cost centers</h2></div></div><div class="table-wrap"><table><thead><tr><th>Cost center</th><th>Profit center</th><th>Segment</th><th>Effective</th></tr></thead><tbody><% @cost_centers.each do |center| %><tr><td><strong><%= center.code %> · <%= center.name %></strong></td><td><%= center.profit_center.code %> · <%= center.profit_center.name %></td><td><%= center.profit_center.controlling_segment.code %></td><td><%= center.valid_from.to_fs(:long) %><%= " → #{center.valid_to.to_fs(:long)}" if center.valid_to %></td></tr><% end %></tbody></table></div></section>
+
+  <section class="panel panel--table"><div class="panel__header"><div><p class="eyebrow">Variance</p><h2>Plan versus actual</h2></div></div><% if @plan_lines.empty? %><div class="empty-state"><p>No controlling plan lines yet.</p></div><% else %><div class="table-wrap"><table><thead><tr><th>Version</th><th>Period</th><th>Cost center</th><th>Account</th><th>Plan</th><th>Actual</th><th>Variance</th></tr></thead><tbody><% @plan_lines.each do |line| %><% actual = @plan_actuals.fetch(line) %><tr><td><%= line.version %></td><td><%= line.fiscal_year %>/<%= line.period_no %></td><td><%= line.cost_center.code %></td><td><%= line.account_code %></td><td class="money"><%= money_amount(line.amount_minor) %></td><td class="money"><%= money_amount(actual) %></td><td class="money"><%= money_amount(line.amount_minor - actual) %></td></tr><% end %></tbody></table></div><% end %></section>
+
+  <section class="panel panel--table"><div class="panel__header"><div><p class="eyebrow">Auditable period-end postings</p><h2>Allocation cycles</h2></div></div><% if @cycles.empty? %><div class="empty-state"><p>No allocation cycles yet.</p></div><% else %><div class="table-wrap"><table><thead><tr><th>Cycle</th><th>Sender</th><th>Account</th><th>Receivers</th><th>Run</th></tr></thead><tbody><% @cycles.each do |cycle| %><tr><td><strong><%= cycle.code %> · <%= cycle.name %></strong></td><td><%= cycle.sender_cost_center.code %></td><td><%= cycle.source_account_code %></td><td><%= cycle.allocation_receivers.map { |receiver| "#{receiver.cost_center.code} #{receiver.weight_basis_points / 100.0}%" }.join(", ") %></td><td><% if permitted?("controlling.allocate") %><%= form_with url: run_allocation_controlling_path(tenant_route_options.merge(id: cycle.id)), method: :post, class: "inline-form" do |form| %><%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %><%= form.date_field :through_date, value: business_date, required: true, aria: { label: "Through date" } %><%= form.date_field :posting_date, value: business_date, required: true, aria: { label: "Posting date" } %><%= form.select :mode, [["Simulate", "simulate"], ["Post", "post"]], aria: { label: "Mode" } %><%= form.submit "Run", class: "button button--quiet" %><% end %><% end %></td></tr><% end %></tbody></table></div><% end %></section>
+</main>

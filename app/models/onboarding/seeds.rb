@@ -109,5 +109,23 @@ module Onboarding
         record.default_useful_life_months = 60
       end
     end
+
+    def controlling!(tenant, entity:)
+      segment = ControllingSegment.find_or_create_by!(tenant_id: tenant.id, code: "UNASSIGNED") do |record|
+        record.name = "Unassigned segment"
+      end
+      profit = ProfitCenter.find_or_create_by!(tenant_id: tenant.id, code: "UNASSIGNED") do |record|
+        record.entity = entity
+        record.controlling_segment = segment
+        record.name = "Unassigned profit center"
+        record.valid_from = Date.new(1900, 1, 1)
+      end
+      CostCenter.find_or_create_by!(tenant_id: tenant.id, code: "GENERAL") do |record|
+        record.entity = entity
+        record.profit_center = profit
+        record.name = "General overhead"
+        record.valid_from = Date.new(1900, 1, 1)
+      end
+    end
   end
 end

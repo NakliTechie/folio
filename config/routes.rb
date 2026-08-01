@@ -55,6 +55,14 @@ Rails.application.routes.draw do
       post :run_depreciation
     end
   end
+  resource :controlling, controller: "controlling", only: :show do
+    post :create_segment
+    post :create_profit_center
+    post :create_cost_center
+    post :create_plan
+    post :create_cycle
+    post :run_allocation
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

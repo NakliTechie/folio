@@ -112,6 +112,8 @@ class JournalVouchersController < BrowserController
     @accounts = account_scope.in_code_order
     @cash_accounts = @accounts.select { |account| account.account_type == "asset" && %w[1000 1010].include?(account.code) }
     @expense_accounts = @accounts.select { |account| account.account_type == "expense" }
+    @cost_centers = CostCenter.active.includes(profit_center: :controlling_segment)
+      .where(tenant_id: Current.tenant.id).order(:code)
     return unless document
 
     debit = document.document_lines.find { |line| line.amount_minor&.positive? }
@@ -124,7 +126,8 @@ class JournalVouchersController < BrowserController
       ),
       currency: debit&.currency,
       debit_account_code: debit&.account_code,
-      credit_account_code: credit&.account_code
+      credit_account_code: credit&.account_code,
+      cost_center_id: debit&.extra.to_h.dig("controlling", "costCenterId")
     }
   end
 
@@ -139,7 +142,8 @@ class JournalVouchersController < BrowserController
       :debit_account_code,
       :credit_account_code,
       :amount,
-      :currency
+      :currency,
+      :cost_center_id
     )
   end
 
@@ -179,12 +183,21 @@ class JournalVouchersController < BrowserController
       posting_date: posting_date,
       narration: narration,
       lines: [
-        { account_code: debit_code, amount_minor: amount_minor, currency: currency },
+        { account_code: debit_code, amount_minor: amount_minor, currency: currency,
+          extra: controlling_extra(posting_date) },
         { account_code: credit_code, amount_minor: -amount_minor, currency: currency }
       ]
     }
   rescue Date::Error
     raise ArgumentError, "Posting date must be a valid date"
+  end
+
+  def controlling_extra(posting_date)
+    return if voucher_params[:cost_center_id].blank?
+
+    center = CostCenter.includes(profit_center: :controlling_segment)
+      .where(tenant_id: Current.tenant.id).find(voucher_params[:cost_center_id])
+    { "controlling" => Controlling::Dimensions.snapshot(center, on: posting_date) }
   end
 
   def amount_minor!(raw_amount, currency)

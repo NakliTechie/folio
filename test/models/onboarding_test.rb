@@ -19,6 +19,7 @@ class OnboardingTest < ActiveSupport::TestCase
     assert Ledger.where(tenant_id: r.tenant.id).exists?(code: "PRIMARY")
     assert Warehouse.where(tenant_id: r.tenant.id).exists?(code: "MAIN")
     assert AssetClass.where(tenant_id: r.tenant.id).exists?(code: "PPE")
+    assert CostCenter.where(tenant_id: r.tenant.id).exists?(code: "GENERAL")
     assert_equal 5, RoleTemplate.where(tenant_id: r.tenant.id).count
     assert Authorization.permits?(user: r.user, tenant_id: r.tenant.id, capability: "documents.post"),
       "the new owner can post immediately"

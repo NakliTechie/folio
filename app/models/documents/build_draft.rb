@@ -76,6 +76,11 @@ module Documents
         end
 
         extra = value(line, :extra).to_h.deep_stringify_keys
+        if extra["controlling"]
+          extra["controlling"] = Controlling::Dimensions.validate_snapshot!(
+            tenant, extra.fetch("controlling"), on: posting_date
+          )
+        end
         if currency != expected_currency
           translation = ForeignExchange.translate(
             tenant_id: tenant.id, amount_minor: amount,
@@ -96,6 +101,8 @@ module Documents
           extra: extra.presence
         }
       end
+    rescue Controlling::InvalidControl => e
+      raise InvalidDocument, e.message
     end
 
     def parse_date!(value, label)

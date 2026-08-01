@@ -9,6 +9,8 @@ class EntryLine < ApplicationRecord
   belongs_to :party, optional: true
   belongs_to :item, optional: true
   belongs_to :fixed_asset, optional: true
+  belongs_to :profit_center, optional: true
+  belongs_to :controlling_segment, foreign_key: :segment_id, optional: true
   belongs_to :tax_registration, optional: true
   belongs_to :residual_of, class_name: "EntryLine", optional: true
   has_many :amounts, class_name: "JournalEntryLineAmount", dependent: :destroy

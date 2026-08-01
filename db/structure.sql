@@ -50,6 +50,19 @@ $$;
 
 
 --
+-- Name: folio_controlling_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_controlling_evidence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: % on row id=% rejected', TG_TABLE_NAME, TG_OP, OLD.id;
+END;
+$$;
+
+
+--
 -- Name: folio_domain_events_append_only(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -191,6 +204,169 @@ CREATE SEQUENCE public.accounts_id_seq
 --
 
 ALTER SEQUENCE public.accounts_id_seq OWNED BY public.accounts.id;
+
+
+--
+-- Name: allocation_cycles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.allocation_cycles (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    sender_cost_center_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    allocation_type character varying DEFAULT 'distribution'::character varying NOT NULL,
+    source_account_code character varying NOT NULL,
+    valid_from date NOT NULL,
+    valid_to date,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT allocation_cycles_range_valid CHECK (((valid_to IS NULL) OR (valid_to >= valid_from))),
+    CONSTRAINT allocation_cycles_type_valid CHECK (((allocation_type)::text = 'distribution'::text))
+);
+
+
+--
+-- Name: allocation_cycles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.allocation_cycles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: allocation_cycles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.allocation_cycles_id_seq OWNED BY public.allocation_cycles.id;
+
+
+--
+-- Name: allocation_receivers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.allocation_receivers (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    allocation_cycle_id bigint NOT NULL,
+    cost_center_id bigint NOT NULL,
+    weight_basis_points integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT allocation_receivers_weight_valid CHECK (((weight_basis_points >= 1) AND (weight_basis_points <= 10000)))
+);
+
+
+--
+-- Name: allocation_receivers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.allocation_receivers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: allocation_receivers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.allocation_receivers_id_seq OWNED BY public.allocation_receivers.id;
+
+
+--
+-- Name: allocation_run_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.allocation_run_items (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    allocation_run_id bigint NOT NULL,
+    sender_cost_center_id bigint NOT NULL,
+    receiver_cost_center_id bigint NOT NULL,
+    account_code character varying NOT NULL,
+    weight_basis_points integer NOT NULL,
+    amount_minor bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT allocation_run_items_amount_positive CHECK ((amount_minor > 0))
+);
+
+
+--
+-- Name: allocation_run_items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.allocation_run_items_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: allocation_run_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.allocation_run_items_id_seq OWNED BY public.allocation_run_items.id;
+
+
+--
+-- Name: allocation_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.allocation_runs (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    allocation_cycle_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    ledger_event_id bigint,
+    idempotency_key character varying NOT NULL,
+    request_sha256 character varying NOT NULL,
+    mode character varying NOT NULL,
+    status character varying NOT NULL,
+    period_start date NOT NULL,
+    through_date date NOT NULL,
+    posting_date date NOT NULL,
+    allocated_amount_minor bigint DEFAULT 0 NOT NULL,
+    result jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT allocation_runs_amount_nonnegative CHECK ((allocated_amount_minor >= 0)),
+    CONSTRAINT allocation_runs_dates_valid CHECK ((through_date >= period_start)),
+    CONSTRAINT allocation_runs_mode_valid CHECK (((mode)::text = ANY ((ARRAY['simulate'::character varying, 'post'::character varying])::text[]))),
+    CONSTRAINT allocation_runs_status_valid CHECK (((status)::text = ANY ((ARRAY['simulated'::character varying, 'posted'::character varying])::text[])))
+);
+
+
+--
+-- Name: allocation_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.allocation_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: allocation_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.allocation_runs_id_seq OWNED BY public.allocation_runs.id;
 
 
 --
@@ -952,6 +1128,119 @@ CREATE SEQUENCE public.contracts_id_seq
 --
 
 ALTER SEQUENCE public.contracts_id_seq OWNED BY public.contracts.id;
+
+
+--
+-- Name: controlling_plan_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.controlling_plan_lines (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    cost_center_id bigint NOT NULL,
+    account_code character varying NOT NULL,
+    version character varying DEFAULT 'BUDGET'::character varying NOT NULL,
+    fiscal_year integer NOT NULL,
+    period_no integer NOT NULL,
+    currency character varying NOT NULL,
+    amount_minor bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT controlling_plan_lines_period_valid CHECK (((period_no >= 1) AND (period_no <= 16)))
+);
+
+
+--
+-- Name: controlling_plan_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.controlling_plan_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: controlling_plan_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.controlling_plan_lines_id_seq OWNED BY public.controlling_plan_lines.id;
+
+
+--
+-- Name: controlling_segments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.controlling_segments (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: controlling_segments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.controlling_segments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: controlling_segments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.controlling_segments_id_seq OWNED BY public.controlling_segments.id;
+
+
+--
+-- Name: cost_centers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cost_centers (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    profit_center_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    valid_from date NOT NULL,
+    valid_to date,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT cost_centers_range_valid CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))
+);
+
+
+--
+-- Name: cost_centers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.cost_centers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: cost_centers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.cost_centers_id_seq OWNED BY public.cost_centers.id;
 
 
 --
@@ -2496,6 +2785,45 @@ ALTER SEQUENCE public.posting_limits_id_seq OWNED BY public.posting_limits.id;
 
 
 --
+-- Name: profit_centers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.profit_centers (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    controlling_segment_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    valid_from date NOT NULL,
+    valid_to date,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT profit_centers_range_valid CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))
+);
+
+
+--
+-- Name: profit_centers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.profit_centers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: profit_centers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.profit_centers_id_seq OWNED BY public.profit_centers.id;
+
+
+--
 -- Name: role_permissions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2972,6 +3300,34 @@ ALTER TABLE ONLY public.accounts ALTER COLUMN id SET DEFAULT nextval('public.acc
 
 
 --
+-- Name: allocation_cycles id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_cycles ALTER COLUMN id SET DEFAULT nextval('public.allocation_cycles_id_seq'::regclass);
+
+
+--
+-- Name: allocation_receivers id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_receivers ALTER COLUMN id SET DEFAULT nextval('public.allocation_receivers_id_seq'::regclass);
+
+
+--
+-- Name: allocation_run_items id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_run_items ALTER COLUMN id SET DEFAULT nextval('public.allocation_run_items_id_seq'::regclass);
+
+
+--
+-- Name: allocation_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_runs ALTER COLUMN id SET DEFAULT nextval('public.allocation_runs_id_seq'::regclass);
+
+
+--
 -- Name: asset_classes id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -3081,6 +3437,27 @@ ALTER TABLE ONLY public.contract_schedules ALTER COLUMN id SET DEFAULT nextval('
 --
 
 ALTER TABLE ONLY public.contracts ALTER COLUMN id SET DEFAULT nextval('public.contracts_id_seq'::regclass);
+
+
+--
+-- Name: controlling_plan_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.controlling_plan_lines ALTER COLUMN id SET DEFAULT nextval('public.controlling_plan_lines_id_seq'::regclass);
+
+
+--
+-- Name: controlling_segments id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.controlling_segments ALTER COLUMN id SET DEFAULT nextval('public.controlling_segments_id_seq'::regclass);
+
+
+--
+-- Name: cost_centers id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cost_centers ALTER COLUMN id SET DEFAULT nextval('public.cost_centers_id_seq'::regclass);
 
 
 --
@@ -3329,6 +3706,13 @@ ALTER TABLE ONLY public.posting_limits ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
+-- Name: profit_centers id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.profit_centers ALTER COLUMN id SET DEFAULT nextval('public.profit_centers_id_seq'::regclass);
+
+
+--
 -- Name: role_permissions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -3418,6 +3802,38 @@ ALTER TABLE ONLY public.warehouses ALTER COLUMN id SET DEFAULT nextval('public.w
 
 ALTER TABLE ONLY public.accounts
     ADD CONSTRAINT accounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: allocation_cycles allocation_cycles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_cycles
+    ADD CONSTRAINT allocation_cycles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: allocation_receivers allocation_receivers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_receivers
+    ADD CONSTRAINT allocation_receivers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: allocation_run_items allocation_run_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_run_items
+    ADD CONSTRAINT allocation_run_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: allocation_runs allocation_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_runs
+    ADD CONSTRAINT allocation_runs_pkey PRIMARY KEY (id);
 
 
 --
@@ -3554,6 +3970,30 @@ ALTER TABLE ONLY public.contract_schedules
 
 ALTER TABLE ONLY public.contracts
     ADD CONSTRAINT contracts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: controlling_plan_lines controlling_plan_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.controlling_plan_lines
+    ADD CONSTRAINT controlling_plan_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: controlling_segments controlling_segments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.controlling_segments
+    ADD CONSTRAINT controlling_segments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cost_centers cost_centers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cost_centers
+    ADD CONSTRAINT cost_centers_pkey PRIMARY KEY (id);
 
 
 --
@@ -3842,6 +4282,14 @@ ALTER TABLE ONLY public.period_controls
 
 ALTER TABLE ONLY public.posting_limits
     ADD CONSTRAINT posting_limits_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: profit_centers profit_centers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.profit_centers
+    ADD CONSTRAINT profit_centers_pkey PRIMARY KEY (id);
 
 
 --
@@ -4156,6 +4604,104 @@ CREATE UNIQUE INDEX index_accounts_on_tenant_id_and_code ON public.accounts USIN
 --
 
 CREATE INDEX index_accounts_on_tenant_id_and_monetary ON public.accounts USING btree (tenant_id, monetary) WHERE (monetary = true);
+
+
+--
+-- Name: index_allocation_cycles_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_cycles_on_entity_id ON public.allocation_cycles USING btree (entity_id);
+
+
+--
+-- Name: index_allocation_cycles_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_cycles_on_office_id ON public.allocation_cycles USING btree (office_id);
+
+
+--
+-- Name: index_allocation_cycles_on_sender_cost_center_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_cycles_on_sender_cost_center_id ON public.allocation_cycles USING btree (sender_cost_center_id);
+
+
+--
+-- Name: index_allocation_cycles_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_allocation_cycles_on_tenant_id_and_code ON public.allocation_cycles USING btree (tenant_id, code);
+
+
+--
+-- Name: index_allocation_receivers_on_allocation_cycle_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_receivers_on_allocation_cycle_id ON public.allocation_receivers USING btree (allocation_cycle_id);
+
+
+--
+-- Name: index_allocation_receivers_on_cost_center_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_receivers_on_cost_center_id ON public.allocation_receivers USING btree (cost_center_id);
+
+
+--
+-- Name: index_allocation_receivers_on_cycle_and_center; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_allocation_receivers_on_cycle_and_center ON public.allocation_receivers USING btree (allocation_cycle_id, cost_center_id);
+
+
+--
+-- Name: index_allocation_run_items_on_allocation_run_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_run_items_on_allocation_run_id ON public.allocation_run_items USING btree (allocation_run_id);
+
+
+--
+-- Name: index_allocation_run_items_on_receiver; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_allocation_run_items_on_receiver ON public.allocation_run_items USING btree (allocation_run_id, receiver_cost_center_id);
+
+
+--
+-- Name: index_allocation_run_items_on_receiver_cost_center_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_run_items_on_receiver_cost_center_id ON public.allocation_run_items USING btree (receiver_cost_center_id);
+
+
+--
+-- Name: index_allocation_run_items_on_sender_cost_center_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_run_items_on_sender_cost_center_id ON public.allocation_run_items USING btree (sender_cost_center_id);
+
+
+--
+-- Name: index_allocation_runs_on_allocation_cycle_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_runs_on_allocation_cycle_id ON public.allocation_runs USING btree (allocation_cycle_id);
+
+
+--
+-- Name: index_allocation_runs_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_allocation_runs_on_created_by_id ON public.allocation_runs USING btree (created_by_id);
+
+
+--
+-- Name: index_allocation_runs_on_tenant_id_and_idempotency_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_allocation_runs_on_tenant_id_and_idempotency_key ON public.allocation_runs USING btree (tenant_id, idempotency_key);
 
 
 --
@@ -4618,6 +5164,55 @@ CREATE INDEX index_contracts_on_tenant_id_and_party_id_and_status ON public.cont
 --
 
 CREATE INDEX index_contracts_on_tenant_id_and_status_and_end_date ON public.contracts USING btree (tenant_id, status, end_date);
+
+
+--
+-- Name: index_controlling_plan_lines_on_coordinate; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_controlling_plan_lines_on_coordinate ON public.controlling_plan_lines USING btree (tenant_id, version, fiscal_year, period_no, cost_center_id, account_code);
+
+
+--
+-- Name: index_controlling_plan_lines_on_cost_center_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_controlling_plan_lines_on_cost_center_id ON public.controlling_plan_lines USING btree (cost_center_id);
+
+
+--
+-- Name: index_controlling_plan_lines_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_controlling_plan_lines_on_created_by_id ON public.controlling_plan_lines USING btree (created_by_id);
+
+
+--
+-- Name: index_controlling_segments_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_controlling_segments_on_tenant_id_and_code ON public.controlling_segments USING btree (tenant_id, code);
+
+
+--
+-- Name: index_cost_centers_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cost_centers_on_entity_id ON public.cost_centers USING btree (entity_id);
+
+
+--
+-- Name: index_cost_centers_on_profit_center_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cost_centers_on_profit_center_id ON public.cost_centers USING btree (profit_center_id);
+
+
+--
+-- Name: index_cost_centers_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_cost_centers_on_tenant_id_and_code ON public.cost_centers USING btree (tenant_id, code);
 
 
 --
@@ -5363,6 +5958,27 @@ CREATE UNIQUE INDEX index_period_controls_on_scope ON public.period_controls USI
 
 
 --
+-- Name: index_profit_centers_on_controlling_segment_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_profit_centers_on_controlling_segment_id ON public.profit_centers USING btree (controlling_segment_id);
+
+
+--
+-- Name: index_profit_centers_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_profit_centers_on_entity_id ON public.profit_centers USING btree (entity_id);
+
+
+--
+-- Name: index_profit_centers_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_profit_centers_on_tenant_id_and_code ON public.profit_centers USING btree (tenant_id, code);
+
+
+--
 -- Name: index_role_permissions_on_role_template_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5573,6 +6189,20 @@ CREATE UNIQUE INDEX index_warehouses_on_tenant_id_and_code ON public.warehouses 
 
 
 --
+-- Name: allocation_run_items allocation_run_items_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER allocation_run_items_immutable BEFORE DELETE OR UPDATE ON public.allocation_run_items FOR EACH ROW EXECUTE FUNCTION public.folio_controlling_evidence_immutable();
+
+
+--
+-- Name: allocation_runs allocation_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER allocation_runs_immutable BEFORE DELETE OR UPDATE ON public.allocation_runs FOR EACH ROW EXECUTE FUNCTION public.folio_controlling_evidence_immutable();
+
+
+--
 -- Name: asset_transactions asset_transactions_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -5657,6 +6287,14 @@ CREATE TRIGGER protect_last_tenant_owner BEFORE DELETE OR UPDATE ON public.user_
 
 
 --
+-- Name: allocation_cycles fk_rails_006403eb83; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_cycles
+    ADD CONSTRAINT fk_rails_006403eb83 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
+
+
+--
 -- Name: einvoice_submissions fk_rails_017120e64f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5686,6 +6324,14 @@ ALTER TABLE ONLY public.bank_statement_imports
 
 ALTER TABLE ONLY public.contracts
     ADD CONSTRAINT fk_rails_0475753257 FOREIGN KEY (party_id) REFERENCES public.parties(id);
+
+
+--
+-- Name: allocation_runs fk_rails_0859381c9d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_runs
+    ADD CONSTRAINT fk_rails_0859381c9d FOREIGN KEY (allocation_cycle_id) REFERENCES public.allocation_cycles(id);
 
 
 --
@@ -5833,6 +6479,22 @@ ALTER TABLE ONLY public.office_tax_registrations
 
 
 --
+-- Name: profit_centers fk_rails_347123f6e9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.profit_centers
+    ADD CONSTRAINT fk_rails_347123f6e9 FOREIGN KEY (controlling_segment_id) REFERENCES public.controlling_segments(id);
+
+
+--
+-- Name: allocation_cycles fk_rails_34eb2dc812; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_cycles
+    ADD CONSTRAINT fk_rails_34eb2dc812 FOREIGN KEY (sender_cost_center_id) REFERENCES public.cost_centers(id);
+
+
+--
 -- Name: exchange_rates fk_rails_3908165cb0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5873,6 +6535,14 @@ ALTER TABLE ONLY public.einvoice_cancellations
 
 
 --
+-- Name: allocation_run_items fk_rails_4128d48bcd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_run_items
+    ADD CONSTRAINT fk_rails_4128d48bcd FOREIGN KEY (allocation_run_id) REFERENCES public.allocation_runs(id);
+
+
+--
 -- Name: einvoice_submissions fk_rails_41f91a62ff; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5886,6 +6556,14 @@ ALTER TABLE ONLY public.einvoice_submissions
 
 ALTER TABLE ONLY public.exchange_revaluation_runs
     ADD CONSTRAINT fk_rails_423a47e852 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: allocation_receivers fk_rails_4280ec531a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_receivers
+    ADD CONSTRAINT fk_rails_4280ec531a FOREIGN KEY (allocation_cycle_id) REFERENCES public.allocation_cycles(id);
 
 
 --
@@ -5905,11 +6583,27 @@ ALTER TABLE ONLY public.exchange_revaluation_runs
 
 
 --
+-- Name: allocation_run_items fk_rails_481502944d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_run_items
+    ADD CONSTRAINT fk_rails_481502944d FOREIGN KEY (sender_cost_center_id) REFERENCES public.cost_centers(id);
+
+
+--
 -- Name: contract_posting_runs fk_rails_490d24d00d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.contract_posting_runs
     ADD CONSTRAINT fk_rails_490d24d00d FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: allocation_runs fk_rails_4fdcd44d82; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_runs
+    ADD CONSTRAINT fk_rails_4fdcd44d82 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
 
 
 --
@@ -5953,6 +6647,14 @@ ALTER TABLE ONLY public.asset_valuations
 
 
 --
+-- Name: cost_centers fk_rails_6d9c77f2cd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cost_centers
+    ADD CONSTRAINT fk_rails_6d9c77f2cd FOREIGN KEY (profit_center_id) REFERENCES public.profit_centers(id);
+
+
+--
 -- Name: asset_transactions fk_rails_6dc5e10bfe; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5990,6 +6692,14 @@ ALTER TABLE ONLY public.inventory_transactions
 
 ALTER TABLE ONLY public.contract_milestones
     ADD CONSTRAINT fk_rails_754ebeb234 FOREIGN KEY (contract_performance_obligation_id) REFERENCES public.contract_performance_obligations(id);
+
+
+--
+-- Name: cost_centers fk_rails_755747d762; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cost_centers
+    ADD CONSTRAINT fk_rails_755747d762 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -6046,6 +6756,14 @@ ALTER TABLE ONLY public.fixed_assets
 
 ALTER TABLE ONLY public.user_office_roles
     ADD CONSTRAINT fk_rails_84f904cce7 FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: allocation_cycles fk_rails_897630b18f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_cycles
+    ADD CONSTRAINT fk_rails_897630b18f FOREIGN KEY (office_id) REFERENCES public.offices(id);
 
 
 --
@@ -6209,11 +6927,35 @@ ALTER TABLE ONLY public.contract_allocation_lines
 
 
 --
+-- Name: controlling_plan_lines fk_rails_c2a584b4c4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.controlling_plan_lines
+    ADD CONSTRAINT fk_rails_c2a584b4c4 FOREIGN KEY (cost_center_id) REFERENCES public.cost_centers(id);
+
+
+--
+-- Name: allocation_run_items fk_rails_c35d17c2e7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_run_items
+    ADD CONSTRAINT fk_rails_c35d17c2e7 FOREIGN KEY (receiver_cost_center_id) REFERENCES public.cost_centers(id);
+
+
+--
 -- Name: financial_statement_sections fk_rails_c48cc303c2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.financial_statement_sections
     ADD CONSTRAINT fk_rails_c48cc303c2 FOREIGN KEY (parent_id) REFERENCES public.financial_statement_sections(id);
+
+
+--
+-- Name: allocation_receivers fk_rails_c67bbcc836; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.allocation_receivers
+    ADD CONSTRAINT fk_rails_c67bbcc836 FOREIGN KEY (cost_center_id) REFERENCES public.cost_centers(id);
 
 
 --
@@ -6281,6 +7023,14 @@ ALTER TABLE ONLY public.inventory_transactions
 
 
 --
+-- Name: profit_centers fk_rails_edbffecb67; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.profit_centers
+    ADD CONSTRAINT fk_rails_edbffecb67 FOREIGN KEY (entity_id) REFERENCES public.entities(id);
+
+
+--
 -- Name: contract_performance_obligations fk_rails_ef44a79072; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6302,6 +7052,14 @@ ALTER TABLE ONLY public.financial_statement_sections
 
 ALTER TABLE ONLY public.contract_allocation_runs
     ADD CONSTRAINT fk_rails_f7d2ea3f42 FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: controlling_plan_lines fk_rails_f8e9ee0273; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.controlling_plan_lines
+    ADD CONSTRAINT fk_rails_f8e9ee0273 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
 
 
 --
@@ -6343,6 +7101,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801183000'),
 ('20260801180000'),
 ('20260801173000'),
 ('20260801172000'),

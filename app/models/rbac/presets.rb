@@ -13,7 +13,8 @@ module Rbac
                                  currency.read currency.manage currency.post
                                  banking.read banking.manage banking.reconcile
                                  inventory.read inventory.manage inventory.post
-                                 assets.read assets.manage assets.post] },
+                                 assets.read assets.manage assets.post
+                                 controlling.read controlling.manage controlling.allocate] },
       "operator"   => { name: "Operator",
                         caps: %w[invoices.create bills.create payments.create documents.simulate
                                  accounts.read masters.read reports.read gst.place_of_supply.override
@@ -21,10 +22,10 @@ module Rbac
       "ca_auditor" => { name: "CA/Auditor",
                         caps: %w[documents.post documents.reverse documents.simulate accounts.read
                                  masters.read reports.read period.lock contracts.read currency.read banking.read
-                                 inventory.read assets.read] },
+                                 inventory.read assets.read controlling.read] },
       "viewer"     => { name: "Viewer",
                         caps: %w[accounts.read masters.read reports.read contracts.read currency.read banking.read
-                                 inventory.read assets.read] }
+                                 inventory.read assets.read controlling.read] }
     }.freeze
 
     module_function

@@ -141,6 +141,16 @@
           </fieldset>
         <% end %>
 
+        <% unless @event_kind == "owner_deposit" %>
+          <div class="form-group">
+            <%= form.label :cost_center_id, "Debit cost center (optional)" %>
+            <%= form.select :cost_center_id,
+              [["No management assignment", ""]] + @cost_centers.map { |center| ["#{center.code} · #{center.name} · #{center.profit_center.code}", center.id] },
+              { selected: params.dig(:journal_voucher, :cost_center_id).presence || values[:cost_center_id] } %>
+            <small>The governed profit center and segment are derived and frozen with the debit line.</small>
+          </div>
+        <% end %>
+
         <div class="balance-note">
           <span aria-hidden="true">=</span>
           <p><strong>Nothing posts yet.</strong> Folio derives a balanced preview that you can edit or discard.</p>

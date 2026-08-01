@@ -42,6 +42,15 @@ module Posting
             entity_id: document.entity_id, office_id: document.office_id,
             amounts: amounts
           }
+          if (controlling = dl.extra.to_h["controlling"])
+            line.merge!(
+              cost_object_type: "cost_center",
+              cost_object_id: controlling.fetch("costCenterId"),
+              profit_center_id: controlling.fetch("profitCenterId"),
+              segment_id: controlling.fetch("segmentId"),
+              extra: { "controlling" => controlling }
+            )
+          end
           line[:is_negative_posting] = true if negative
           line
         end
