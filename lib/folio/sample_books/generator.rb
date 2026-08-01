@@ -11,7 +11,7 @@ module Folio
       Result = Data.define(
         :scenario_code, :org_name, :tenant_id, :email, :password,
         :counts, :trial_balance_tied, :trial_balance_debit_minor, :trial_balance_credit_minor,
-        :tds_previews
+        :tds_previews, :tds_deductions_posted
       ) do
         def balanced? = trial_balance_tied
       end
@@ -107,14 +107,19 @@ module Folio
       end
 
       def create_party(party, role)
+        attributes = {
+          party_number: party.ref, name: party.name, state_code: party.state_code,
+          country_code: "IN", address_line1: "1 #{party.name} Marg",
+          city: party.city, postal_code: party.postal_code
+        }
+        # A vendor's default TDS section = the section tagged on the purchases from it, so its
+        # payments withhold automatically (exercises the default_tds_section resolution path).
+        if role == "vendor"
+          section = s.purchases.find { |p| p.vendor_ref == party.ref && p.tds_section }&.tds_section
+          attributes[:default_tds_section] = section if section
+        end
         Parties::Manage.create!(
-          tenant: @tenant,
-          attributes: {
-            party_number: party.ref, name: party.name, state_code: party.state_code,
-            country_code: "IN", address_line1: "1 #{party.name} Marg",
-            city: party.city, postal_code: party.postal_code
-          },
-          roles: [ role ],
+          tenant: @tenant, attributes: attributes, roles: [ role ],
           tax_registration_attributes: {
             kind: "GSTIN", identifier: gstin_for(party.state_code, party.pan),
             valid_from: Date.new(2026, 4, 1)
@@ -188,13 +193,17 @@ module Folio
 
           # The scenario struct carries the PAN (the persisted Party record does not).
           vendor = s.vendors.find { |v| v.ref == purchase.vendor_ref }
+          service = s.services.find { |item| item.code == purchase.service_code }
           taxable = (BigDecimal(purchase.unit_price) * 100).to_i * Integer(purchase.quantity)
+          # Preview on the GROSS bill (taxable + GST) so it equals what a full payment actually
+          # withholds — the posting uses the gross settlement amount as the base (matching Bahi).
+          gross = taxable + Taxes::India::Tds::Deduction.round_half_up(taxable, service.rate_basis_points)
           d = Taxes::India::Tds::Deduction.compute(
             section: purchase.tds_section, on: purchase.date,
-            amount_minor: taxable, pan: vendor.pan
+            amount_minor: gross, pan: vendor.pan
           )
           { purchase: purchase.ref, vendor: vendor.name, section: purchase.tds_section,
-            taxable_minor: taxable, applied: d.applied,
+            taxable_minor: gross, applied: d.applied,
             rate_basis_points: d.rate_basis_points, tds_minor: d.tds_minor }
         end
       end
@@ -213,7 +222,8 @@ module Folio
           },
           trial_balance_tied: debit == credit,
           trial_balance_debit_minor: debit, trial_balance_credit_minor: credit,
-          tds_previews: tds_previews
+          tds_previews: tds_previews,
+          tds_deductions_posted: TdsDeduction.for_tenant(@tenant.id).count
         )
       end
     end

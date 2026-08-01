@@ -13,7 +13,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_response :success, "signed in, on the authenticated landing"
     tenant = Tenant.find_by(slug: "acme-co")
-    assert_equal 10, Account.where(tenant_id: tenant.id).count, "starter COA seeded"
+    assert_equal 11, Account.where(tenant_id: tenant.id).count, "starter COA seeded (incl. TDS Payable)"
     assert_equal "queued", User.find_by!(email_address: "founder@acme.com").verification_delivery_state
   end
 
