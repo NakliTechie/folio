@@ -62,4 +62,11 @@ class TdsDeductionTest < ActiveSupport::TestCase
     end
     assert_match(/tds_deductions_quarter_valid/, err.message)
   end
+
+  test "the database rejects changes and deletion of statutory evidence" do
+    row = TdsDeduction.create!(valid_attrs)
+
+    assert_raises(ActiveRecord::StatementInvalid) { row.update_columns(tds_minor: 2) }
+    assert_raises(ActiveRecord::StatementInvalid) { row.delete }
+  end
 end

@@ -126,6 +126,32 @@ module Api
         render_error(e.message, :unprocessable_entity)
       end
 
+      def tds_form_26q
+        fiscal_year, quarter = tds_period
+        render json: {
+          tds_return: Reports.tds_return_26q(
+            Current.tenant.id, fiscal_year: fiscal_year, quarter: quarter
+          )
+        }
+      rescue ArgumentError => e
+        render_error(e.message, :unprocessable_entity)
+      end
+
+      def tds_form_16a
+        fiscal_year, quarter = tds_period
+        scope = TdsDeduction.for_tenant(Current.tenant.id).in_period(fiscal_year, quarter)
+        raise ActiveRecord::RecordNotFound unless scope.exists?(party_id: params.require(:party_id))
+
+        render json: {
+          tds_certificate: Reports.tds_certificate_16a(
+            Current.tenant.id, party_id: params[:party_id],
+            fiscal_year: fiscal_year, quarter: quarter
+          )
+        }
+      rescue ArgumentError => e
+        render_error(e.message, :unprocessable_entity)
+      end
+
       private
 
       def report_entity
@@ -143,6 +169,19 @@ module Api
 
       def report_date(key, fallback)
         params[key].present? ? Date.iso8601(params[key]) : fallback
+      end
+
+      def tds_period
+        fiscal_year = params[:fiscal_year].present? ? Integer(params[:fiscal_year], 10) :
+          Documents.fiscal_year(business_date, variant: report_entity.fiscal_year_variant)
+        quarter = params[:quarter].present? ? Integer(params[:quarter], 10) :
+          TdsDeduction.india_quarter(business_date)
+        raise ArgumentError, "fiscal_year is invalid" unless fiscal_year.between?(2000, 2200)
+        raise ArgumentError, "quarter must be between 1 and 4" unless quarter.between?(1, 4)
+
+        [ fiscal_year, quarter ]
+      rescue ArgumentError => e
+        raise ArgumentError, e.message.match?(/quarter|fiscal_year/) ? e.message : "TDS period is invalid"
       end
 
       def required_object!(key)

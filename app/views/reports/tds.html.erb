@@ -1,0 +1,81 @@
+<% content_for :title, "TDS returns · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= render "navigation" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">India TDS</p>
+      <h1>Form 26Q and Form 16A</h1>
+      <p>Quarterly withholding evidence from immutable posted purchase-bill snapshots. Downloads are preparation files for review, not filed returns or TRACES certificates.</p>
+    </div>
+  </header>
+
+  <section class="panel report-filter">
+    <%= form_with url: tds_report_path, method: :get, class: "filter-form" do |form| %>
+      <%= hidden_field_tag :tenant_id, Current.tenant.id %>
+      <div class="form-group">
+        <%= form.label :fiscal_year, "Fiscal year starting" %>
+        <%= form.number_field :fiscal_year, value: @fiscal_year, min: 2000, max: 2200, required: true %>
+      </div>
+      <div class="form-group">
+        <%= form.label :quarter, "Quarter" %>
+        <%= form.select :quarter, (1..4).map { |number| ["Q#{number}", number] }, { selected: @quarter }, required: true %>
+      </div>
+      <% if @tds_deductees.any? %>
+        <div class="form-group">
+          <%= form.label :party_id, "Deductee certificate" %>
+          <%= form.select :party_id,
+            @tds_deductees.map { |deductee| ["#{deductee.fetch('name')} · #{deductee.fetch('pan').presence || 'PAN unavailable'}", deductee.fetch('party_id')] },
+            { selected: @tds_certificate&.dig("deductee", "party_id") } %>
+        </div>
+      <% end %>
+      <%= form.submit "Prepare TDS reports", class: "button button--secondary" %>
+    <% end %>
+  </section>
+
+  <section class="summary-strip" aria-label="TDS quarter summary">
+    <div><span>Return</span><strong>Form 26Q</strong><small>FY <%= @fiscal_year %> · Q<%= @quarter %></small></div>
+    <div><span>Evidence rows</span><strong><%= @tds_return.fetch("deduction_count") %></strong><small>Deductions and reversals</small></div>
+    <div><span>Taxable base</span><strong><%= money_amount(@tds_return.fetch("total_taxable_minor")) %></strong><small>Net statutory base</small></div>
+    <div><span>TDS</span><strong><%= money_amount(@tds_return.fetch("total_tds_minor")) %></strong><small>Net tax withheld</small></div>
+  </section>
+
+  <section class="panel panel--table">
+    <div class="section-heading">
+      <div><h2>Deductee summary</h2><p>Form 26Q preparation</p></div>
+      <%= link_to "Download Form 26Q JSON", tds_form_26q_report_path(
+        tenant_route_options.merge(fiscal_year: @fiscal_year, quarter: @quarter)
+      ), class: "button button--secondary" %>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Deductee</th><th scope="col">PAN</th><th scope="col">Rows</th><th scope="col">Taxable base</th><th scope="col">TDS</th></tr></thead>
+      <tbody>
+        <% @tds_deductees.each do |deductee| %>
+          <tr><td><strong><%= deductee.fetch("name") %></strong></td><td><%= deductee.fetch("pan").presence || "Not available" %></td>
+            <td><%= deductee.fetch("count") %></td><td class="money"><%= money_amount(deductee.fetch("taxable_minor")) %></td>
+            <td class="money"><%= money_amount(deductee.fetch("tds_minor")) %></td></tr>
+        <% end %>
+      </tbody>
+    </table></div>
+  </section>
+
+  <% if @tds_certificate %>
+    <section class="panel">
+      <div class="section-heading">
+        <div><p class="eyebrow">Form 16A</p><h2><%= @tds_certificate.dig("deductee", "name") %></h2>
+          <p><%= @tds_certificate.dig("deductee", "pan").presence || "PAN unavailable" %> · <%= money_amount(@tds_certificate.fetch("total_tds_minor")) %> net TDS</p></div>
+        <%= link_to "Download Form 16A JSON", tds_form_16a_report_path(
+          @tds_certificate.dig("deductee", "party_id"),
+          tenant_route_options.merge(fiscal_year: @fiscal_year, quarter: @quarter)
+        ), class: "button button--secondary" %>
+      </div>
+      <p class="table-note">Folio prepares the book-derived certificate data. Issue the final certificate only after reconciling the filed return and challan details in the statutory system.</p>
+    </section>
+  <% else %>
+    <section class="panel empty-state">
+      <span class="empty-state__icon" aria-hidden="true">TDS</span>
+      <h2>No TDS evidence in this quarter</h2>
+      <p>Post an in-scope purchase bill, or choose a quarter that contains withholding or reversal evidence.</p>
+    </section>
+  <% end %>
+</main>

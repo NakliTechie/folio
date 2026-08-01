@@ -91,9 +91,36 @@ class SettlementTdsTest < ActiveSupport::TestCase
     assert_equal 80_000, deduction.tds_minor
     assert_equal @bill.id, deduction.source_document_id
     assert_equal @bill_entry.id, deduction.entry_id
+    assert_equal @bill_entry.ledger_event_id, deduction.ledger_event_id
     assert_equal VENDOR_PAN, deduction.deductee_pan
     assert_equal 2026, deduction.fiscal_year
     assert_equal 2, deduction.quarter
+  end
+
+  test "TDS evidence survives projection rebuild and is bound to the fat event" do
+    deduction = TdsDeduction.for_tenant(@org.tenant.id).sole
+    event = LedgerEvent.find(@bill_entry.ledger_event_id)
+    assert_equal @bill.id, JSON.parse(event.payload).dig(
+      "statutoryEvidence", "tdsDeduction", "sourceDocumentId"
+    )
+
+    Posting.rebuild!(@org.tenant.id)
+
+    assert_equal deduction.id, TdsDeduction.for_tenant(@org.tenant.id).sole.id
+    assert_equal 80_000,
+      Reports.tds_return_26q(@org.tenant.id, fiscal_year: 2026, quarter: 2).fetch("total_tds_minor")
+  end
+
+  test "an earlier TDS bill cannot be reversed while a later assessment depends on it" do
+    later = build_bill(reference: "NS-116", date: Date.new(2026, 8, 2), amount: "5000.00")
+    Documents::Post.call(later, actor: "u:#{@org.user.id}")
+
+    error = assert_raises(Documents::Reverse::NotReversible) do
+      Documents::Reverse.call(@bill, actor: "u:#{@org.user.id}", on: Date.new(2026, 8, 3))
+    end
+
+    assert_match(/reverse later TDS-assessed bill/, error.message)
+    assert_equal "posted", @bill.reload.state
   end
 
   test "payment clears the net AP in a plain two-way entry without deducting twice" do

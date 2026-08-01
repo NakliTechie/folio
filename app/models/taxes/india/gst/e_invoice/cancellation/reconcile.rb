@@ -35,6 +35,7 @@ module Taxes
               end
 
               cancellation.with_lock do
+                Provider.validate_raw_response!(status.raw_response)
                 cancellation.update!(
                   status: "prepared",
                   provider_response: status.raw_response,

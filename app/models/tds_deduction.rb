@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # One recorded tax-deducted-at-source event on a vendor credit (or its explicit reversal).
-# Frozen, derived evidence
+# Immutable, event-replayable evidence
 # for the Form 26Q return and Form 16A certificate — see CreateTdsDeductions for why it holds
 # soft references and frozen snapshots rather than hard foreign keys.
 class TdsDeduction < ApplicationRecord
@@ -30,6 +30,7 @@ class TdsDeduction < ApplicationRecord
   validates :tds_minor, numericality: { only_integer: true, greater_than: 0 }
   validates :quarter, inclusion: { in: 1..4 }
   validates :source_document_id, uniqueness: { scope: :tenant_id }
+  validates :ledger_event_id, uniqueness: { scope: :tenant_id }, allow_nil: true
   validates :reverses_tds_deduction_id, presence: true, if: -> { kind == "reversal" }
   validates :reverses_tds_deduction_id, absence: true, if: -> { kind == "deduction" }
 

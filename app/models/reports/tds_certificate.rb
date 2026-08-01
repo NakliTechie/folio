@@ -12,6 +12,7 @@ module Reports
   class TdsCertificate
     class << self
       def call(tenant_id:, party_id:, fiscal_year:, quarter:)
+        party_id = Integer(party_id)
         rows = TdsDeduction.for_tenant(tenant_id).in_period(fiscal_year, quarter)
           .where(party_id: party_id).order(:deduction_date, :id).to_a
         entity = Entity.find_by(tenant_id: tenant_id, code: "PRIMARY")

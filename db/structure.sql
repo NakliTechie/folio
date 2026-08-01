@@ -249,6 +249,19 @@ $$;
 
 
 --
+-- Name: folio_tds_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_tds_evidence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'tds_deductions are immutable';
+END;
+$$;
+
+
+--
 -- Name: folio_tenant_khata_workspace_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -641,7 +654,7 @@ CREATE TABLE public.asset_transactions (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT asset_transactions_amount_positive CHECK ((amount_minor > 0)),
     CONSTRAINT asset_transactions_code_valid CHECK (((valuation_code)::text = ANY (ARRAY[('BOOK'::character varying)::text, ('TAX_IT'::character varying)::text]))),
-    CONSTRAINT asset_transactions_type_valid CHECK (((transaction_type)::text = ANY ((ARRAY['acquisition'::character varying, 'depreciation'::character varying, 'retirement'::character varying])::text[])))
+    CONSTRAINT asset_transactions_type_valid CHECK (((transaction_type)::text = ANY (ARRAY[('acquisition'::character varying)::text, ('depreciation'::character varying)::text, ('retirement'::character varying)::text])))
 );
 
 
@@ -1918,6 +1931,7 @@ CREATE TABLE public.einvoice_cancellations (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_einvoice_cancellation_evidence_size CHECK (((octet_length(COALESCE((provider_response)::text, ''::text)) <= 262144) AND (octet_length(COALESCE(error_message, ''::text)) <= 2048))),
     CONSTRAINT einvoice_cancellations_attempt_count_nonnegative CHECK ((attempt_count >= 0)),
     CONSTRAINT einvoice_cancellations_evidence_complete CHECK ((((status)::text <> 'cancelled'::text) OR ((cancelled_at IS NOT NULL) AND (provider_response IS NOT NULL) AND (provider_response_sha256 IS NOT NULL)))),
     CONSTRAINT einvoice_cancellations_reason_valid CHECK (((reason_code)::text = ANY (ARRAY[('1'::character varying)::text, ('2'::character varying)::text]))),
@@ -1974,6 +1988,7 @@ CREATE TABLE public.einvoice_submissions (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT chk_einvoice_submission_evidence_size CHECK (((octet_length(COALESCE(signed_invoice, ''::text)) <= 1048576) AND (octet_length(COALESCE(signed_qr_code, ''::text)) <= 1048576) AND (octet_length(COALESCE((provider_response)::text, ''::text)) <= 262144) AND (octet_length(COALESCE(error_message, ''::text)) <= 2048))),
     CONSTRAINT einvoice_submissions_ack_evidence_complete CHECK ((((status)::text <> 'acknowledged'::text) OR ((irn IS NOT NULL) AND (ack_number IS NOT NULL) AND (acknowledged_at IS NOT NULL) AND (signed_invoice IS NOT NULL) AND (signed_qr_code IS NOT NULL) AND (provider_response IS NOT NULL) AND (provider_response_sha256 IS NOT NULL)))),
     CONSTRAINT einvoice_submissions_attempt_count_nonnegative CHECK ((attempt_count >= 0)),
     CONSTRAINT einvoice_submissions_signature_status_valid CHECK (((signature_status)::text = ANY (ARRAY[('not_checked'::character varying)::text, ('provider_verified'::character varying)::text, ('locally_verified'::character varying)::text, ('failed'::character varying)::text]))),
@@ -3886,6 +3901,7 @@ CREATE TABLE public.tds_deductions (
     statutory_reference character varying NOT NULL,
     kind character varying DEFAULT 'deduction'::character varying NOT NULL,
     reverses_tds_deduction_id bigint,
+    ledger_event_id bigint,
     CONSTRAINT tds_deductions_amounts_nonneg CHECK (((taxable_minor >= 0) AND (tds_minor >= 0))),
     CONSTRAINT tds_deductions_evidence_amounts_valid CHECK (((gross_minor >= 0) AND (gst_minor >= 0) AND (deductible_base_minor >= 0))),
     CONSTRAINT tds_deductions_kind_valid CHECK (((kind)::text = ANY (ARRAY[('deduction'::character varying)::text, ('reversal'::character varying)::text]))),
@@ -5709,6 +5725,13 @@ CREATE INDEX idx_statement_versions_effective ON public.financial_statement_vers
 --
 
 CREATE UNIQUE INDEX idx_statement_versions_tenant_version ON public.financial_statement_versions USING btree (tenant_id, version);
+
+
+--
+-- Name: idx_tds_deductions_event; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_tds_deductions_event ON public.tds_deductions USING btree (tenant_id, ledger_event_id) WHERE (ledger_event_id IS NOT NULL);
 
 
 --
@@ -8099,6 +8122,20 @@ CREATE TRIGGER protect_last_tenant_owner BEFORE DELETE OR UPDATE ON public.user_
 
 
 --
+-- Name: tds_deductions tds_deductions_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER tds_deductions_immutable BEFORE DELETE OR UPDATE ON public.tds_deductions FOR EACH ROW EXECUTE FUNCTION public.folio_tds_evidence_immutable();
+
+
+--
+-- Name: tds_deductions tds_deductions_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER tds_deductions_no_truncate BEFORE TRUNCATE ON public.tds_deductions FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: tenants tenants_khata_workspace_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9318,6 +9355,8 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260802031000'),
+('20260802030000'),
 ('20260802020000'),
 ('20260802011000'),
 ('20260802010000'),

@@ -153,6 +153,9 @@ Rails.application.routes.draw do
   get "reports/day-book", to: "reports#day_book", as: :day_book_report
   get "reports/gst-summary", to: "reports#gst_summary", as: :gst_summary_report
   get "reports/gst-summary/gstr1.json", to: "reports#gstr1_filing", as: :gstr1_filing_report
+  get "reports/tds", to: "reports#tds", as: :tds_report
+  get "reports/tds/form-26q.json", to: "reports#tds_form_26q", as: :tds_form_26q_report
+  get "reports/tds/form-16a/:party_id.json", to: "reports#tds_form_16a", as: :tds_form_16a_report
   resource :period_close, path: "period-close", only: %i[show update]
   resource :reports, only: :show, controller: :reports
   resource :team, only: :show, controller: :team
@@ -176,6 +179,8 @@ Rails.application.routes.draw do
       get "reports/day_book", to: "reports#day_book"
       get "reports/gst_summary", to: "reports#gst_summary"
       post "reports/gst_filing", to: "reports#gst_filing"
+      get "reports/tds/form_26q", to: "reports#tds_form_26q"
+      get "reports/tds/form_16a/:party_id", to: "reports#tds_form_16a"
       resource :period_close, only: %i[show update]
       resources :documents, only: %i[show create] do
         member do

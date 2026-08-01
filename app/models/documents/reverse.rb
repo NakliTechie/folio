@@ -19,6 +19,7 @@ module Documents
           raise NotReversible,
             "only a posted, unsettled, not-yet-reversed document can be reversed; reset settlements or use a credit note"
         end
+        PurchaseBills::TdsAssessment.assert_no_dependent_bills!(document) if document.doc_type == "PB"
 
         date = on || document.posting_date || Tenant.find(document.tenant_id).business_date
         entity = Entity.find_by!(tenant_id: document.tenant_id, id: document.entity_id)

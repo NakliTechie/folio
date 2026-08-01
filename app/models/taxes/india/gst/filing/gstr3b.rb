@@ -98,7 +98,7 @@ module Taxes
               else
                 book_tax.fetch(component, 0)
               end
-              if amount > reference
+              if amount > [ reference, 0 ].max
                 raise NotReady,
                   "reviewed #{component.to_s.upcase} ITC exceeds Folio's purchase-book reference"
               end
@@ -143,9 +143,6 @@ module Taxes
             COMPONENTS.to_h do |component|
               value = review.dig(:available, component) -
                 review.dig(:reversal_rule, component) - review.dig(:reversal_other, component)
-              if value.negative?
-                raise NotReady, "reviewed ITC reversals exceed available #{component.to_s.upcase}"
-              end
               [ component, value ]
             end
           end

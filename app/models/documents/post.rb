@@ -43,7 +43,9 @@ module Documents
           actor_user_id: authorize&.dig(:user)&.id,
           document_date: document.document_date || posting, posting_date: posting,
           entered_at: Time.now.utc, fiscal_year: document.fiscal_year, period_no: Documents.period_no_for(document),
-          capabilities: effective_capabilities, authority: authority, document: { id: document.id }, lines: sim[:lines]
+          capabilities: effective_capabilities, authority: authority, document: { id: document.id },
+          statutory_evidence: rule.respond_to?(:statutory_evidence) ? rule.statutory_evidence(document) : nil,
+          lines: sim[:lines]
         )
         document.update!(state: "posted", document_number: number, posted_entry_id: entry.id)
         rule.after_post!(document: document, entry: entry, actor: actor) if rule.respond_to?(:after_post!)

@@ -87,6 +87,32 @@ module PurchaseBills
       end
     end
 
+    def assert_no_dependent_bills!(document)
+      return if document.reverses_document_id.present? || document.tds_section.blank?
+
+      category = Taxes::India::Pan.deductee_category(
+        pan_from_gstin(document.party_snapshot.fetch("gstin"))
+      ) || :other
+      rate = Taxes::India::Tds::Schedule.resolve(
+        section: document.tds_section, deductee_category: category, on: document.document_date
+      )
+      scope = Document.where(
+        tenant_id: document.tenant_id, party_id: document.party_id, doc_type: "PB",
+        state: "posted", tds_section: document.tds_section
+      ).where(reverses_document_id: nil).where.not(id: document.id)
+      scope = if rate.threshold_period == :month
+        scope.where(document_date: document.document_date.beginning_of_month..document.document_date.end_of_month)
+      else
+        scope.where(fiscal_year: document.fiscal_year)
+      end
+      dependent = scope.where("document_date >= ?", document.document_date)
+        .order(:document_date, :id).first
+      return unless dependent
+
+      raise Documents::Reverse::NotReversible,
+        "reverse later TDS-assessed bill #{dependent.document_number} first; its frozen threshold assessment depends on this bill"
+    end
+
     def empty_snapshot
       {
         tds_section: nil,

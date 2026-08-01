@@ -132,7 +132,7 @@ module Posting
           [ vendor_line, *expense_lines, *tax_lines, *[ tds_line ].compact ]
         end
 
-        def after_post!(document:, entry:, actor:)
+        def statutory_evidence(document)
           return unless document.tds_minor.positive?
 
           original = if document.reverses_document_id
@@ -142,31 +142,31 @@ module Posting
               kind: "deduction"
             )
           end
-          TdsDeduction.create!(
-            tenant_id: document.tenant_id,
-            party_id: document.party_id,
-            section: document.tds_section,
-            statutory_reference: document.tds_statutory_reference,
-            rate_basis_points: document.tds_rate_basis_points,
-            gross_minor: document.total_minor,
-            gst_minor: document.tax_minor,
-            taxable_minor: document.tds_taxable_minor,
-            deductible_base_minor: document.tds_deductible_base_minor,
-            tds_minor: document.tds_minor,
-            base_basis: document.tds_base_basis,
-            trigger_event: document.tds_trigger_event,
-            kind: original ? "reversal" : "deduction",
-            reverses_tds_deduction_id: original&.id,
-            deduction_date: document.document_date,
-            deductee_pan: PurchaseBills::TdsAssessment.pan_from_gstin(
-              document.party_snapshot.fetch("gstin")
-            ),
-            deductee_name_snapshot: document.party_snapshot.fetch("name"),
-            source_document_id: document.id,
-            entry_id: entry.id,
-            fiscal_year: document.fiscal_year,
-            quarter: TdsDeduction.india_quarter(document.document_date)
-          )
+          {
+            "tdsDeduction" => {
+              "partyId" => document.party_id,
+              "section" => document.tds_section,
+              "statutoryReference" => document.tds_statutory_reference,
+              "rateBasisPoints" => document.tds_rate_basis_points,
+              "grossMinor" => document.total_minor,
+              "gstMinor" => document.tax_minor,
+              "taxableMinor" => document.tds_taxable_minor,
+              "deductibleBaseMinor" => document.tds_deductible_base_minor,
+              "tdsMinor" => document.tds_minor,
+              "baseBasis" => document.tds_base_basis,
+              "triggerEvent" => document.tds_trigger_event,
+              "kind" => original ? "reversal" : "deduction",
+              "reversesTdsDeductionId" => original&.id,
+              "deductionDate" => document.document_date.to_s,
+              "deducteePan" => PurchaseBills::TdsAssessment.pan_from_gstin(
+                document.party_snapshot.fetch("gstin")
+              ),
+              "deducteeName" => document.party_snapshot.fetch("name"),
+              "sourceDocumentId" => document.id,
+              "fiscalYear" => document.fiscal_year,
+              "quarter" => TdsDeduction.india_quarter(document.document_date)
+            }.compact
+          }
         end
 
         private

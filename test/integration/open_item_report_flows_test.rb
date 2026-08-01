@@ -171,6 +171,48 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
     assert_match(/\A[0-9a-f]{64}\z/, filing.fetch("payload_sha256"))
   end
 
+  test "authorized browser and API users can prepare and download Form 26Q and Form 16A" do
+    TdsDeduction.create!(
+      tenant_id: @org.tenant.id, party_id: @vendor.id, section: "194C",
+      statutory_reference: "Income-tax Act 2025 §393(1), Table Sl. 6(i)",
+      rate_basis_points: 200, gross_minor: 118_000, gst_minor: 18_000,
+      taxable_minor: 100_000, deductible_base_minor: 100_000, tds_minor: 2_000,
+      base_basis: "invoice_excluding_separately_stated_gst", trigger_event: "credit",
+      kind: "deduction", deduction_date: Date.new(2026, 7, 31),
+      deductee_pan: "AAAAA0300L", deductee_name_snapshot: @vendor.name,
+      source_document_id: @bill.id, fiscal_year: 2026, quarter: 2
+    )
+
+    get tds_report_path, params: { fiscal_year: 2026, quarter: 2, party_id: @vendor.id }
+    assert_response :success
+    assert_select "h1", "Form 26Q and Form 16A"
+    assert_select ".summary-strip", text: /INR 20\.00/
+    assert_select "h2", text: @vendor.name
+
+    get tds_form_26q_report_path, params: { fiscal_year: 2026, quarter: 2 }
+    assert_response :success
+    assert_equal "application/json", response.media_type
+    assert_match(/form-26q-fy2026-q2\.json/, response.headers.fetch("Content-Disposition"))
+    assert_equal 2_000, JSON.parse(response.body).fetch("total_tds_minor")
+
+    get tds_form_16a_report_path(@vendor), params: { fiscal_year: 2026, quarter: 2 }
+    assert_response :success
+    assert_match(/form-16a-fy2026-q2-deductee-#{@vendor.id}\.json/,
+      response.headers.fetch("Content-Disposition"))
+    assert_equal "16A", JSON.parse(response.body).fetch("form")
+
+    get "/api/v1/reports/tds/form_26q", params: { fiscal_year: 2026, quarter: 2 }
+    assert_response :success
+    assert_equal 2_000, JSON.parse(response.body).dig("tds_return", "total_tds_minor")
+
+    get "/api/v1/reports/tds/form_16a/#{@vendor.id}", params: {
+      fiscal_year: 2026, quarter: 2
+    }
+    assert_response :success
+    assert_equal @vendor.id,
+      JSON.parse(response.body).dig("tds_certificate", "deductee", "party_id")
+  end
+
   test "GSTR-3B filing requires reviewed ITC and caps it to the purchase book" do
     post "/api/v1/reports/gst_filing", params: {
       form: "GSTR-3B", tax_registration_id: @registration.id,
@@ -206,6 +248,23 @@ class OpenItemReportFlowsTest < ActionDispatch::IntegrationTest
     }
     assert_response :unprocessable_entity
     assert_match(/exceeds Folio's purchase-book reference/, JSON.parse(response.body).fetch("error"))
+  end
+
+  test "GSTR-3B represents a reversal-heavy period with net-negative ITC" do
+    post "/api/v1/reports/gst_filing", params: {
+      form: "GSTR-3B", tax_registration_id: @registration.id,
+      from: "2026-07-01", to: "2026-07-31",
+      reviewed_itc: {
+        status: "gstr_2b_reconciled",
+        available: { igst_minor: 0, cgst_minor: 0, sgst_minor: 0, cess_minor: 0 },
+        reversal_other: { igst_minor: 2_000 }
+      }
+    }
+
+    assert_response :success
+    filing = JSON.parse(response.body).fetch("gst_filing")
+    assert_equal(-20, filing.dig("payload", "itc_elg", "itc_net", "iamt"))
+    assert_equal(-2_000, filing.dig("crosscheck", "reviewed_itc_minor", "igst"))
   end
 
   test "CMP-08 filing uses explicitly reviewed quarterly turnover" do

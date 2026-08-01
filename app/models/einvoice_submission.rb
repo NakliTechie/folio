@@ -31,6 +31,7 @@ class EinvoiceSubmission < ApplicationRecord
   validate :scope_matches_document
   validate :payload_is_immutable, on: :update
   validate :acknowledgement_is_complete
+  validate :evidence_size_is_bounded
   validate :acknowledgement_is_immutable, on: :update
 
   def acknowledged? = status == "acknowledged"
@@ -70,5 +71,19 @@ class EinvoiceSubmission < ApplicationRecord
     return if (changes_to_save.keys & ACKNOWLEDGEMENT_FIELDS).empty?
 
     errors.add(:base, "acknowledged IRP evidence is immutable")
+  end
+
+  def evidence_size_is_bounded
+    limit = Taxes::India::Gst::EInvoice::Provider::MAX_SIGNED_ARTIFACT_BYTES
+    if signed_invoice.to_s.bytesize > limit || signed_qr_code.to_s.bytesize > limit
+      errors.add(:base, "signed IRP artifacts exceed the evidence size limit")
+    end
+    if provider_response.present? && provider_response.to_json.bytesize >
+       Taxes::India::Gst::EInvoice::Provider::MAX_RAW_RESPONSE_BYTES
+      errors.add(:provider_response, "exceeds the evidence size limit")
+    end
+    if error_message.to_s.bytesize > Taxes::India::Gst::EInvoice::Provider::MAX_ERROR_MESSAGE_BYTES
+      errors.add(:error_message, "exceeds the evidence size limit")
+    end
   end
 end

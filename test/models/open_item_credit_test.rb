@@ -53,6 +53,28 @@ class OpenItemCreditTest < ActiveSupport::TestCase
     assert_equal 0, rebuilt[:credit_total_minor]
   end
 
+  test "netting cannot change open items in a closed source period" do
+    charge = post_open_item(role: "customer", party: @customer, amount: 10_000, assignment: "SI/3")
+    credit = post_open_item(role: "customer", party: @customer, amount: -6_000, assignment: "CN/3")
+    PeriodControl.create!(
+      tenant_id: @org.tenant.id, entity_id: @entity.id, ledger_id: @ledger.id,
+      account_class: "AR", fiscal_year: charge.entry.fiscal_year,
+      period_no: charge.entry.period_no, state: "closed", domain: "posting"
+    )
+
+    error = assert_raises(OpenItemCredits::InvalidCreditAction) do
+      OpenItemCredits::Net.call(
+        tenant: @org.tenant, credit_entry_line_id: credit.id,
+        target_entry_line_id: charge.id, amount_minor: 6_000,
+        applied_on: DATE, actor: "u:#{@org.user.id}", actor_user: @org.user
+      )
+    end
+
+    assert_match(/period .* is closed/, error.message)
+    assert_equal 10_000, Posting::Clearing.open_amount(charge.reload)
+    assert_equal 6_000, Posting::Clearing.open_amount(credit.reload)
+  end
+
   test "customer and vendor credits can be refunded with the correct cash direction" do
     customer_credit = post_open_item(
       role: "customer", party: @customer, amount: -5_000, assignment: "CN/2"

@@ -104,6 +104,45 @@ class ReportsController < BrowserController
     redirect_to gst_summary_report_path(tenant_route_options), alert: e.message
   end
 
+  def tds
+    @fiscal_year, @quarter = tds_period
+    @tds_return = Reports.tds_return_26q(
+      Current.tenant.id, fiscal_year: @fiscal_year, quarter: @quarter
+    )
+    @tds_deductees = @tds_return.fetch("deductees")
+    selected_id = params[:party_id].presence || @tds_deductees.first&.fetch("party_id")
+    @tds_certificate = if selected_id
+      Reports.tds_certificate_16a(
+        Current.tenant.id, party_id: selected_id,
+        fiscal_year: @fiscal_year, quarter: @quarter
+      )
+    end
+  rescue ArgumentError => e
+    redirect_to tds_report_path(tenant_route_options), alert: e.message
+  end
+
+  def tds_form_26q
+    fiscal_year, quarter = tds_period
+    result = Reports.tds_return_26q(
+      Current.tenant.id, fiscal_year: fiscal_year, quarter: quarter
+    )
+    send_tds_json(result, "form-26q-fy#{fiscal_year}-q#{quarter}.json")
+  rescue ArgumentError => e
+    redirect_to tds_report_path(tenant_route_options), alert: e.message
+  end
+
+  def tds_form_16a
+    fiscal_year, quarter = tds_period
+    ensure_tds_deductee!(params.require(:party_id), fiscal_year, quarter)
+    result = Reports.tds_certificate_16a(
+      Current.tenant.id, party_id: params[:party_id],
+      fiscal_year: fiscal_year, quarter: quarter
+    )
+    send_tds_json(result, "form-16a-fy#{fiscal_year}-q#{quarter}-deductee-#{params[:party_id]}.json")
+  rescue ArgumentError, ActionController::ParameterMissing => e
+    redirect_to tds_report_path(tenant_route_options), alert: e.message
+  end
+
   private
 
   def load_report_entity
@@ -119,6 +158,31 @@ class ReportsController < BrowserController
     params[key].present? ? Date.iso8601(params[key]) : fallback
   rescue Date::Error
     raise ArgumentError, "#{key.to_s.humanize} must be a valid date"
+  end
+
+  def tds_period
+    fiscal_year = params[:fiscal_year].present? ? Integer(params[:fiscal_year], 10) :
+      Documents.fiscal_year(business_date, variant: @report_entity.fiscal_year_variant)
+    quarter = params[:quarter].present? ? Integer(params[:quarter], 10) :
+      TdsDeduction.india_quarter(business_date)
+    raise ArgumentError, "Fiscal year is invalid" unless fiscal_year.between?(2000, 2200)
+    raise ArgumentError, "Quarter must be between 1 and 4" unless quarter.between?(1, 4)
+
+    [ fiscal_year, quarter ]
+  rescue ArgumentError => e
+    raise ArgumentError, e.message.match?(/Quarter|Fiscal/) ? e.message : "TDS period is invalid"
+  end
+
+  def ensure_tds_deductee!(party_id, fiscal_year, quarter)
+    return if TdsDeduction.for_tenant(Current.tenant.id).in_period(fiscal_year, quarter)
+      .exists?(party_id: party_id)
+
+    raise ActiveRecord::RecordNotFound, "TDS deductee not found for this period"
+  end
+
+  def send_tds_json(result, filename)
+    send_data JSON.pretty_generate(result), filename: filename,
+      type: "application/json", disposition: "attachment"
   end
 
   def load_aged_report(role)

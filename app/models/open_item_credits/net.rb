@@ -8,7 +8,8 @@ module OpenItemCredits
 
     module_function
 
-    def call(tenant:, credit_entry_line_id:, target_entry_line_id:, amount_minor:, applied_on:, actor:)
+    def call(tenant:, credit_entry_line_id:, target_entry_line_id:, amount_minor:, applied_on:, actor:,
+             actor_user: nil)
       ActiveRecord::Base.transaction do
         LedgerEvent.acquire_tenant_lock!(tenant.id)
         lines = EntryLine.where(tenant_id: tenant.id, id: [ credit_entry_line_id, target_entry_line_id ])
@@ -16,6 +17,11 @@ module OpenItemCredits
         credit = lines.find { |line| line.id.to_s == credit_entry_line_id.to_s }
         target = lines.find { |line| line.id.to_s == target_entry_line_id.to_s }
         validate_pair!(credit, target, amount_minor, applied_on)
+        begin
+          Settlements::PeriodGuard.assert_mutable!(lines: [ credit, target ], user: actor_user)
+        rescue Settlements::InvalidReset => e
+          raise InvalidCreditAction, e.message
+        end
 
         reference = SecureRandom.uuid
         amount = Integer(amount_minor)

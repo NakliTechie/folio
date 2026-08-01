@@ -20,6 +20,7 @@
     <div>
       <%= link_to "Day book", day_book_report_path(tenant_route_options), class: action_name == "day_book" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
       <%= link_to "GST summary", gst_summary_report_path(tenant_route_options), class: action_name == "gst_summary" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
+      <%= link_to "TDS returns", tds_report_path(tenant_route_options), class: action_name.start_with?("tds") ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
       <%= link_to "Period close", period_close_path(tenant_route_options), class: controller_name == "period_closes" ? "report-nav__link report-nav__link--active" : "report-nav__link" %>
     </div>
   </div>

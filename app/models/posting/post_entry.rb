@@ -177,7 +177,52 @@ module Posting
           )
         end
       end
+      project_statutory_evidence!(event: event, entry: entry, data: data)
       entry
+    end
+
+    def self.project_statutory_evidence!(event:, entry:, data:)
+      evidence = data.dig("statutoryEvidence", "tdsDeduction")
+      return unless evidence.is_a?(Hash)
+
+      attributes = {
+        tenant_id: event.tenant_id,
+        party_id: evidence.fetch("partyId"),
+        section: evidence.fetch("section"),
+        statutory_reference: evidence.fetch("statutoryReference"),
+        rate_basis_points: evidence.fetch("rateBasisPoints"),
+        gross_minor: evidence.fetch("grossMinor"),
+        gst_minor: evidence.fetch("gstMinor"),
+        taxable_minor: evidence.fetch("taxableMinor"),
+        deductible_base_minor: evidence.fetch("deductibleBaseMinor"),
+        tds_minor: evidence.fetch("tdsMinor"),
+        base_basis: evidence.fetch("baseBasis"),
+        trigger_event: evidence.fetch("triggerEvent"),
+        kind: evidence.fetch("kind"),
+        reverses_tds_deduction_id: evidence["reversesTdsDeductionId"],
+        deduction_date: evidence.fetch("deductionDate"),
+        deductee_pan: evidence["deducteePan"],
+        deductee_name_snapshot: evidence.fetch("deducteeName"),
+        source_document_id: evidence.fetch("sourceDocumentId"),
+        entry_id: entry.id,
+        ledger_event_id: event.id,
+        fiscal_year: evidence.fetch("fiscalYear"),
+        quarter: evidence.fetch("quarter")
+      }
+      existing = TdsDeduction.find_by(
+        tenant_id: event.tenant_id, source_document_id: evidence.fetch("sourceDocumentId")
+      )
+      if existing
+        stable = attributes.except(:entry_id).transform_values { |value| value&.to_s }
+        actual = existing.attributes.symbolize_keys.slice(*stable.keys)
+          .transform_values { |value| value&.to_s }
+        unless actual == stable
+          raise Posting::IntegrityError,
+            "stored TDS evidence does not match ledger event #{event.seq}"
+        end
+      else
+        TdsDeduction.create!(attributes)
+      end
     end
 
     # ---- REPLAY INGESTION (the M4-bridge shape) --------------------------------------
@@ -253,7 +298,8 @@ module Posting
             "roleTemplateId" => draft.dig(:authority, :role_template_id),
             "postingLimitId" => draft.dig(:authority, :posting_limit_id)
           }
-        }
+        },
+        "statutoryEvidence" => draft[:statutory_evidence]
       )
     end
 

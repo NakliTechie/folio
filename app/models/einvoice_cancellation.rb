@@ -25,6 +25,7 @@ class EinvoiceCancellation < ApplicationRecord
   validate :scope_matches_submission
   validate :request_is_immutable, on: :update
   validate :cancelled_evidence_is_complete
+  validate :evidence_size_is_bounded
   validate :cancelled_evidence_is_immutable, on: :update
 
   def cancelled? = status == "cancelled"
@@ -61,5 +62,15 @@ class EinvoiceCancellation < ApplicationRecord
     return if (changes_to_save.keys & CONCLUSION_FIELDS).empty?
 
     errors.add(:base, "cancelled IRN evidence is immutable")
+  end
+
+  def evidence_size_is_bounded
+    if provider_response.present? && provider_response.to_json.bytesize >
+       Taxes::India::Gst::EInvoice::Provider::MAX_RAW_RESPONSE_BYTES
+      errors.add(:provider_response, "exceeds the evidence size limit")
+    end
+    if error_message.to_s.bytesize > Taxes::India::Gst::EInvoice::Provider::MAX_ERROR_MESSAGE_BYTES
+      errors.add(:error_message, "exceeds the evidence size limit")
+    end
   end
 end

@@ -81,6 +81,7 @@ module Taxes
 
           def acknowledge!(submission, acknowledgement, actor:, actor_user_id:)
             ack = Provider.validate_acknowledgement!(acknowledgement)
+            Provider.bind_acknowledgement!(ack, submission.payload)
             response_digest = EInvoice.canonical_digest(ack.raw_response)
             submission.with_lock do
               submission.update!(
@@ -109,11 +110,11 @@ module Taxes
             submission.with_lock do
               return if submission.acknowledged?
 
-              response = error.raw_response if error.raw_response.is_a?(Hash)
+              response = Provider.safe_error_response(error)
               submission.update!(
                 status: status,
-                error_code: error.code,
-                error_message: error.message,
+                error_code: Provider.safe_error_code(error),
+                error_message: Provider.safe_error_message(error),
                 provider_response: response,
                 provider_response_sha256: response ? EInvoice.canonical_digest(response) : nil
               )

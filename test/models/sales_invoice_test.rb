@@ -435,6 +435,44 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     assert_match(/signature has not been verified/, error.message)
   end
 
+  test "provider acknowledgement is cryptographically bound to the submitted document" do
+    invoice = build_invoice
+    Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+    submission = Taxes::India::Gst::EInvoice::Prepare.call(
+      document: invoice, actor: "test", actor_user_id: @org.user.id
+    )
+    wrong_identity = irp_acknowledgement.document_identity.with(document_number: "SI/26-27/99999")
+    provider = FakeIrpProvider.new(
+      generate_result: irp_acknowledgement.with(document_identity: wrong_identity)
+    )
+
+    error = assert_raises(Taxes::India::Gst::EInvoice::InvalidPayload) do
+      Taxes::India::Gst::EInvoice::Submit.call(
+        submission: submission, actor: "test", actor_user_id: @org.user.id, provider: provider
+      )
+    end
+
+    assert_match(/different statutory document/, error.message)
+    assert_equal "indeterminate", submission.reload.status
+    assert_nil submission.irn
+  end
+
+  test "provider evidence rejects credential fields and oversized signed artifacts" do
+    secret_response = irp_acknowledgement.with(raw_response: { "access_token" => "do-not-store" })
+    secret_error = assert_raises(Taxes::India::Gst::EInvoice::InvalidPayload) do
+      Taxes::India::Gst::EInvoice::Provider.validate_acknowledgement!(secret_response)
+    end
+    assert_match(/forbidden credential field/, secret_error.message)
+
+    oversized = irp_acknowledgement.with(
+      signed_invoice: "x" * (Taxes::India::Gst::EInvoice::Provider::MAX_SIGNED_ARTIFACT_BYTES + 1)
+    )
+    size_error = assert_raises(Taxes::India::Gst::EInvoice::InvalidPayload) do
+      Taxes::India::Gst::EInvoice::Provider.validate_acknowledgement!(oversized)
+    end
+    assert_match(/size limit/, size_error.message)
+  end
+
   test "a transport ambiguity must reconcile by document identity before any retry" do
     invoice = build_invoice
     Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
@@ -570,7 +608,8 @@ class SalesInvoiceTest < ActiveSupport::TestCase
 
     assert_difference -> { DomainEvent.where(action: "einvoice.cancelled").count }, 1 do
       Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
-        cancellation: cancellation, actor: @org.user, provider: provider
+        cancellation: cancellation, actor: @org.user, provider: provider,
+        at: submission.acknowledged_at + 2.hours
       )
     end
 
@@ -586,6 +625,26 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     assert cancellation.reload.cancelled?
   end
 
+  test "IRP cancellation submission rechecks the 24-hour deadline before transport" do
+    _invoice, submission = acknowledged_invoice
+    cancellation = Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
+      submission: submission, reason_code: "2", remarks: "Incorrect recipient details",
+      actor: @org.user, at: submission.acknowledged_at + 1.hour
+    )
+    provider = FakeIrpProvider.new(cancel_result: irp_cancellation_acknowledgement(submission.irn))
+
+    error = assert_raises(Taxes::India::Gst::EInvoice::NotReady) do
+      Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
+        cancellation: cancellation, actor: @org.user, provider: provider,
+        at: submission.acknowledged_at + 24.hours + 1.second
+      )
+    end
+
+    assert_match(/24-hour cancellation window has closed/, error.message)
+    assert_equal 0, provider.cancel_calls
+    assert_equal "prepared", cancellation.reload.status
+  end
+
   test "an ambiguous IRP cancellation cannot retry until get-by-IRN reconciliation" do
     _invoice, submission = acknowledged_invoice
     cancellation = Taxes::India::Gst::EInvoice::Cancellation::Prepare.call(
@@ -599,13 +658,15 @@ class SalesInvoiceTest < ActiveSupport::TestCase
 
     assert_raises(Taxes::India::Gst::EInvoice::Provider::TransportError) do
       Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
-        cancellation: cancellation, actor: @org.user, provider: provider
+        cancellation: cancellation, actor: @org.user, provider: provider,
+        at: submission.acknowledged_at + 2.hours
       )
     end
     assert_equal "indeterminate", cancellation.reload.status
     assert_raises(Taxes::India::Gst::EInvoice::Provider::Error) do
       Taxes::India::Gst::EInvoice::Cancellation::Submit.call(
-        cancellation: cancellation, actor: @org.user, provider: provider
+        cancellation: cancellation, actor: @org.user, provider: provider,
+        at: submission.acknowledged_at + 2.hours
       )
     end
     assert_equal 1, provider.cancel_calls
@@ -659,8 +720,13 @@ class SalesInvoiceTest < ActiveSupport::TestCase
   end
 
   def irp_acknowledgement
+    payload = EinvoiceSubmission.order(:id).last&.payload || {
+      "SellerDtls" => { "Gstin" => @seller_registration.identifier },
+      "DocDtls" => { "Typ" => "INV", "No" => "SI/26-27/00001", "Dt" => INVOICE_DATE.strftime("%d/%m/%Y") }
+    }
+    provider = Taxes::India::Gst::EInvoice::Provider
     Taxes::India::Gst::EInvoice::Provider::Acknowledgement.new(
-      irn: "a" * 64,
+      irn: provider.expected_irn(payload),
       ack_number: "112026000000001",
       acknowledged_at: Time.zone.parse("2026-07-31 12:00:00"),
       signed_invoice: "signed-invoice-jws",
@@ -669,7 +735,8 @@ class SalesInvoiceTest < ActiveSupport::TestCase
         "Status" => 1,
         "Data" => { "Irn" => "a" * 64, "AckNo" => "112026000000001" }
       },
-      signature_status: "provider_verified"
+      signature_status: "provider_verified",
+      document_identity: provider.document_identity(payload)
     )
   end
 

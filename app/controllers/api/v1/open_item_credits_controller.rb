@@ -16,7 +16,7 @@ module Api
           target_entry_line_id: params.fetch(:target_entry_line_id),
           amount_minor: amount,
           applied_on: params[:applied_on].present? ? Date.iso8601(params[:applied_on]) : business_date,
-          actor: "u:#{current_user.id}"
+          actor: "u:#{current_user.id}", actor_user: current_user
         )
         render json: { netting: { reference: result.reference, amount_minor: result.amount_minor } },
           status: :created

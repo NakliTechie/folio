@@ -8,12 +8,12 @@ module Taxes
           module Submit
             module_function
 
-            def call(cancellation:, actor:, provider:)
+            def call(cancellation:, actor:, provider:, at: Time.current)
               attempted = false
               Prepare.validate_actor!(cancellation.einvoice_submission, actor)
               ensure_provider!(provider)
               return cancellation if cancellation.cancelled?
-              return cancellation unless mark_submitting!(cancellation, provider)
+              return cancellation unless mark_submitting!(cancellation, provider, at: at)
 
               attempted = true
               acknowledgement = provider.cancel_irn(
@@ -43,7 +43,7 @@ module Taxes
               raise
             end
 
-            def mark_submitting!(cancellation, provider)
+            def mark_submitting!(cancellation, provider, at:)
               cancellation.with_lock do
                 next false if cancellation.cancelled?
                 if cancellation.unresolved?
@@ -53,12 +53,17 @@ module Taxes
                 unless cancellation.status == "prepared"
                   raise Provider::Error, "a rejected IRN cancellation cannot be retried unchanged"
                 end
+                deadline = Cancellation.eligible_until(cancellation.einvoice_submission)
+                if !deadline || at > deadline
+                  raise NotReady,
+                    "the IRP 24-hour cancellation window has closed; use a governed credit note and return adjustment"
+                end
 
                 cancellation.update!(
                   provider: provider.name,
                   status: "submitting",
                   attempt_count: cancellation.attempt_count + 1,
-                  last_attempt_at: Time.current,
+                  last_attempt_at: at,
                   error_code: nil,
                   error_message: nil
                 )
@@ -92,11 +97,11 @@ module Taxes
               cancellation.with_lock do
                 return if cancellation.cancelled?
 
-                response = error.raw_response if error.raw_response.is_a?(Hash)
+                response = Provider.safe_error_response(error)
                 cancellation.update!(
                   status: status,
-                  error_code: error.code,
-                  error_message: error.message,
+                  error_code: Provider.safe_error_code(error),
+                  error_message: Provider.safe_error_message(error),
                   provider_response: response,
                   provider_response_sha256: response ? EInvoice.canonical_digest(response) : nil
                 )

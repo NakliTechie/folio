@@ -12,7 +12,7 @@ class OpenItemCreditsController < BrowserController
       target_entry_line_id: credit_input.fetch(:target_entry_line_id),
       amount_minor: amount,
       applied_on: parsed_date(:applied_on),
-      actor: "u:#{Current.user.id}"
+      actor: "u:#{Current.user.id}", actor_user: Current.user
     )
     redirect_to report_path_for(role),
       notice: "#{money_amount_for_notice(result.amount_minor)} credit applied to the selected open item."

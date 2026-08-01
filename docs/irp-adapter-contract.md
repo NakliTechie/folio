@@ -18,6 +18,12 @@ Transport failures are never automatic retries. A generation timeout must reconc
 document identity; a cancellation timeout must reconcile by IRN. Only a conclusive `active` result
 makes the same frozen cancellation request safely retryable.
 
+Every normalized acknowledgement must include the seller GSTIN, document type, document number,
+and document date recovered from verified provider evidence. Folio compares that identity to the
+frozen request and recomputes the published SHA-256 IRN preimage (supplier GSTIN + financial year +
+document type + document number) before storing the acknowledgement. Raw response objects are
+limited to 256 KiB, signed artifacts to 1 MiB each, and credential-bearing fields are rejected.
+
 ## Cancellation policy
 
 The IRIS IRP documentation says cancellation reason and remarks are mandatory and only an active IRN
