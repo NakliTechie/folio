@@ -1,0 +1,87 @@
+<% content_for :title, "Access reviews · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Governance, risk & controls</p>
+      <h1>Access reviews</h1>
+      <p>Detect toxic capability combinations, then preserve a signed recertification snapshot.</p>
+    </div>
+    <% if permitted?("grc.manage") %>
+      <%= button_to "Capture access review", access_review_path(tenant_route_options), class: "button" %>
+    <% end %>
+  </div>
+
+  <div class="metric-grid">
+    <% %w[critical high medium total].each do |severity| %>
+      <article class="metric-card">
+        <span><%= severity.humanize %></span>
+        <strong><%= @summary.fetch(severity) %></strong>
+      </article>
+    <% end %>
+  </div>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><h2>Current conflicts</h2><span class="count-pill"><%= @findings.size %></span></div>
+    <% if @findings.any? %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>User</th><th>Scope</th><th>Role</th><th>Severity</th><th>Conflict</th><th>Control response</th></tr></thead>
+          <tbody>
+            <% @findings.each do |finding| %>
+              <tr>
+                <td><strong><%= finding.fetch("userEmail") %></strong></td>
+                <td><%= finding["officeCode"] || "All offices" %></td>
+                <td><%= finding.fetch("roleCode").humanize %></td>
+                <td><span class="status-badge"><%= finding.fetch("severity").humanize %></span></td>
+                <td><strong><%= finding.fetch("name") %></strong><br><small><%= finding.fetch("description") %></small></td>
+                <td><%= finding.fetch("remediation") %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="empty-state empty-state--compact"><p>No toxic capability combinations detected.</p></div>
+    <% end %>
+  </section>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><h2>Signed review evidence</h2><span class="count-pill"><%= @reviews.size %></span></div>
+    <% if @reviews.any? %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Captured</th><th>Reviewer</th><th>Findings</th><th>Snapshot</th><th>Attestation</th></tr></thead>
+          <tbody>
+            <% @reviews.each do |review| %>
+              <% attestation = review.access_review_attestation %>
+              <tr>
+                <td><%= l(review.created_at, format: :long) %></td>
+                <td><%= review.created_by.email_address %></td>
+                <td><%= review.snapshot.dig("summary", "total") %></td>
+                <td><code><%= review.snapshot_sha256.first(12) %>…</code><br><small><%= review.digest_valid? ? "Verified" : "Invalid" %></small></td>
+                <td>
+                  <% if attestation %>
+                    <span class="status-badge status-badge--success"><%= attestation.outcome.humanize %></span><br>
+                    <small><%= attestation.notes %> · <%= attestation.attested_by.email_address %></small>
+                  <% elsif permitted?("grc.manage") %>
+                    <%= form_with url: attest_access_review_path(tenant_route_options), class: "stacked-form" do |form| %>
+                      <%= hidden_field_tag :id, review.id %>
+                      <%= form.select :outcome, [["Access remains appropriate", "approved"], ["Remediation required", "remediation_required"]] %>
+                      <%= form.text_field :notes, required: true, placeholder: "Decision and compensating controls" %>
+                      <%= form.submit "Attest", class: "button button--compact button--quiet" %>
+                    <% end %>
+                  <% else %>
+                    <span class="status-badge">Awaiting owner</span>
+                  <% end %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="empty-state empty-state--compact"><p>No access review has been captured.</p></div>
+    <% end %>
+  </section>
+</main>

@@ -26,6 +26,7 @@ module Onboarding
         )
         Membership.create!(user: user, tenant: tenant)
         Rbac::Presets.seed_for!(tenant)
+        Grc::Rules.seed_for!(tenant)
         UserOfficeRole.create!(user: user, tenant_id: tenant.id,
           role_template: Rbac::Presets.role_for(tenant, "owner"))
         spine = Seeds.org_spine!(

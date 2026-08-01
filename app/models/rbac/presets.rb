@@ -16,7 +16,8 @@ module Rbac
                                  assets.read assets.manage assets.post
                                  controlling.read controlling.manage controlling.allocate
                                  procurement.read procurement.manage procurement.approve procurement.receive
-                                 consolidation.read consolidation.manage consolidation.post exports.read] },
+                                 consolidation.read consolidation.manage consolidation.post exports.read
+                                 grc.read] },
       "operator"   => { name: "Operator",
                         caps: %w[invoices.create bills.create payments.create documents.simulate
                                  accounts.read masters.read reports.read gst.place_of_supply.override
@@ -25,7 +26,7 @@ module Rbac
                         caps: %w[documents.post documents.reverse documents.simulate accounts.read
                                  masters.read reports.read period.lock contracts.read currency.read banking.read
                                  inventory.read assets.read controlling.read procurement.read consolidation.read
-                                 exports.read] },
+                                 exports.read grc.read] },
       "viewer"     => { name: "Viewer",
                         caps: %w[accounts.read masters.read reports.read contracts.read currency.read banking.read
                                  inventory.read assets.read controlling.read procurement.read consolidation.read] }

@@ -4,6 +4,7 @@
 # office_id nil = tenant-wide). Carries the posting limit in force for that assignment.
 class UserOfficeRole < ApplicationRecord
   belongs_to :user
+  belongs_to :office, optional: true
   belongs_to :role_template
   belongs_to :posting_limit, optional: true
   validates :tenant_id, presence: true

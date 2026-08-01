@@ -20,6 +20,9 @@ class OnboardingConcurrencyTest < ActiveSupport::TestCase
       IntercompanyTransaction.where(tenant_id: tenant_ids).delete_all
       ConsolidationGroupMember.where(tenant_id: tenant_ids).delete_all
       ConsolidationGroup.where(tenant_id: tenant_ids).delete_all
+      AccessReviewAttestation.where(tenant_id: tenant_ids).delete_all
+      AccessReviewRun.where(tenant_id: tenant_ids).delete_all
+      SodConflictRule.where(tenant_id: tenant_ids).delete_all
       Invitation.where(tenant_id: tenant_ids).delete_all
       UserOfficeRole.where(tenant_id: tenant_ids).delete_all
       RolePermission.where(role_template_id: role_ids).delete_all

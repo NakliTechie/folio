@@ -24,6 +24,19 @@ COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiS
 
 
 --
+-- Name: folio_access_review_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_access_review_evidence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: % on row id=% rejected', TG_TABLE_NAME, TG_OP, OLD.id;
+END;
+$$;
+
+
+--
 -- Name: folio_asset_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -195,6 +208,78 @@ $$;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: access_review_attestations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.access_review_attestations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    access_review_run_id bigint NOT NULL,
+    attested_by_id bigint NOT NULL,
+    domain_event_id bigint NOT NULL,
+    outcome character varying NOT NULL,
+    notes text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT access_review_attestations_outcome_valid CHECK (((outcome)::text = ANY ((ARRAY['approved'::character varying, 'remediation_required'::character varying])::text[])))
+);
+
+
+--
+-- Name: access_review_attestations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.access_review_attestations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: access_review_attestations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.access_review_attestations_id_seq OWNED BY public.access_review_attestations.id;
+
+
+--
+-- Name: access_review_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.access_review_runs (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    domain_event_id bigint NOT NULL,
+    snapshot jsonb NOT NULL,
+    snapshot_sha256 character varying(64) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: access_review_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.access_review_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: access_review_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.access_review_runs_id_seq OWNED BY public.access_review_runs.id;
+
 
 --
 -- Name: accounts; Type: TABLE; Schema: public; Owner: -
@@ -3409,6 +3494,47 @@ ALTER SEQUENCE public.settlement_reallocations_id_seq OWNED BY public.settlement
 
 
 --
+-- Name: sod_conflict_rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sod_conflict_rules (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    severity character varying NOT NULL,
+    capability_a character varying NOT NULL,
+    capability_b character varying NOT NULL,
+    description text NOT NULL,
+    remediation text NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT sod_conflict_rules_capabilities_distinct CHECK (((capability_a)::text <> (capability_b)::text)),
+    CONSTRAINT sod_conflict_rules_severity_valid CHECK (((severity)::text = ANY ((ARRAY['critical'::character varying, 'high'::character varying, 'medium'::character varying, 'low'::character varying])::text[])))
+);
+
+
+--
+-- Name: sod_conflict_rules_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.sod_conflict_rules_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: sod_conflict_rules_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.sod_conflict_rules_id_seq OWNED BY public.sod_conflict_rules.id;
+
+
+--
 -- Name: stock_balances; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3768,6 +3894,20 @@ CREATE SEQUENCE public.warehouses_id_seq
 --
 
 ALTER SEQUENCE public.warehouses_id_seq OWNED BY public.warehouses.id;
+
+
+--
+-- Name: access_review_attestations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_review_attestations ALTER COLUMN id SET DEFAULT nextval('public.access_review_attestations_id_seq'::regclass);
+
+
+--
+-- Name: access_review_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_review_runs ALTER COLUMN id SET DEFAULT nextval('public.access_review_runs_id_seq'::regclass);
 
 
 --
@@ -4289,6 +4429,13 @@ ALTER TABLE ONLY public.settlement_reallocations ALTER COLUMN id SET DEFAULT nex
 
 
 --
+-- Name: sod_conflict_rules id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sod_conflict_rules ALTER COLUMN id SET DEFAULT nextval('public.sod_conflict_rules_id_seq'::regclass);
+
+
+--
 -- Name: stock_balances id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4349,6 +4496,22 @@ ALTER TABLE ONLY public.vendor_profiles ALTER COLUMN id SET DEFAULT nextval('pub
 --
 
 ALTER TABLE ONLY public.warehouses ALTER COLUMN id SET DEFAULT nextval('public.warehouses_id_seq'::regclass);
+
+
+--
+-- Name: access_review_attestations access_review_attestations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_review_attestations
+    ADD CONSTRAINT access_review_attestations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: access_review_runs access_review_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_review_runs
+    ADD CONSTRAINT access_review_runs_pkey PRIMARY KEY (id);
 
 
 --
@@ -4968,6 +5131,14 @@ ALTER TABLE ONLY public.settlement_reallocations
 
 
 --
+-- Name: sod_conflict_rules sod_conflict_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sod_conflict_rules
+    ADD CONSTRAINT sod_conflict_rules_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: stock_balances stock_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5233,6 +5404,41 @@ CREATE INDEX idx_statement_versions_effective ON public.financial_statement_vers
 --
 
 CREATE UNIQUE INDEX idx_statement_versions_tenant_version ON public.financial_statement_versions USING btree (tenant_id, version);
+
+
+--
+-- Name: index_access_review_attestations_on_access_review_run_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_access_review_attestations_on_access_review_run_id ON public.access_review_attestations USING btree (access_review_run_id);
+
+
+--
+-- Name: index_access_review_attestations_on_attested_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_access_review_attestations_on_attested_by_id ON public.access_review_attestations USING btree (attested_by_id);
+
+
+--
+-- Name: index_access_review_runs_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_access_review_runs_on_created_by_id ON public.access_review_runs USING btree (created_by_id);
+
+
+--
+-- Name: index_access_review_runs_on_tenant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_access_review_runs_on_tenant_id ON public.access_review_runs USING btree (tenant_id);
+
+
+--
+-- Name: index_access_review_runs_on_tenant_id_and_snapshot_sha256; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_access_review_runs_on_tenant_id_and_snapshot_sha256 ON public.access_review_runs USING btree (tenant_id, snapshot_sha256);
 
 
 --
@@ -6993,6 +7199,20 @@ CREATE UNIQUE INDEX index_settlement_reallocations_on_document_allocation_id ON 
 
 
 --
+-- Name: index_sod_conflict_rules_on_tenant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_sod_conflict_rules_on_tenant_id ON public.sod_conflict_rules USING btree (tenant_id);
+
+
+--
+-- Name: index_sod_conflict_rules_on_tenant_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_sod_conflict_rules_on_tenant_id_and_code ON public.sod_conflict_rules USING btree (tenant_id, code);
+
+
+--
 -- Name: index_stock_balances_on_item_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7186,6 +7406,20 @@ CREATE INDEX index_warehouses_on_office_id ON public.warehouses USING btree (off
 --
 
 CREATE UNIQUE INDEX index_warehouses_on_tenant_id_and_code ON public.warehouses USING btree (tenant_id, code);
+
+
+--
+-- Name: access_review_attestations access_review_attestations_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER access_review_attestations_immutable BEFORE DELETE OR UPDATE ON public.access_review_attestations FOR EACH ROW EXECUTE FUNCTION public.folio_access_review_evidence_immutable();
+
+
+--
+-- Name: access_review_runs access_review_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER access_review_runs_immutable BEFORE DELETE OR UPDATE ON public.access_review_runs FOR EACH ROW EXECUTE FUNCTION public.folio_access_review_evidence_immutable();
 
 
 --
@@ -7691,6 +7925,14 @@ ALTER TABLE ONLY public.intercompany_transactions
 
 
 --
+-- Name: access_review_attestations fk_rails_457eb4387c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_review_attestations
+    ADD CONSTRAINT fk_rails_457eb4387c FOREIGN KEY (attested_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: allocation_run_items fk_rails_481502944d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7712,6 +7954,14 @@ ALTER TABLE ONLY public.contract_posting_runs
 
 ALTER TABLE ONLY public.allocation_runs
     ADD CONSTRAINT fk_rails_4fdcd44d82 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
+-- Name: access_review_runs fk_rails_5232756c76; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_review_runs
+    ADD CONSTRAINT fk_rails_5232756c76 FOREIGN KEY (created_by_id) REFERENCES public.users(id);
 
 
 --
@@ -7907,6 +8157,14 @@ ALTER TABLE ONLY public.fixed_assets
 
 
 --
+-- Name: access_review_attestations fk_rails_80230896e9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_review_attestations
+    ADD CONSTRAINT fk_rails_80230896e9 FOREIGN KEY (access_review_run_id) REFERENCES public.access_review_runs(id);
+
+
+--
 -- Name: procurement_matches fk_rails_8422dcd887; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8075,6 +8333,14 @@ ALTER TABLE ONLY public.party_roles
 
 
 --
+-- Name: access_review_runs fk_rails_a3eff96c0a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_review_runs
+    ADD CONSTRAINT fk_rails_a3eff96c0a FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
 -- Name: purchase_order_lines fk_rails_a4215877c0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8112,6 +8378,14 @@ ALTER TABLE ONLY public.inventory_movements
 
 ALTER TABLE ONLY public.memberships
     ADD CONSTRAINT fk_rails_a959f0d1fb FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
+-- Name: sod_conflict_rules fk_rails_ad131fb59e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sod_conflict_rules
+    ADD CONSTRAINT fk_rails_ad131fb59e FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 
 --
@@ -8401,6 +8675,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801194000'),
 ('20260801193000'),
 ('20260801192000'),
 ('20260801191000'),

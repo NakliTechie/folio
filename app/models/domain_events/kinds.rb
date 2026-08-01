@@ -50,6 +50,10 @@ module DomainEvents
       "vendor.approved"         => "A vendor was independently approved for procurement.",
       "vendor.suspended"        => "A vendor was suspended.",
 
+      # --- governance, risk & access recertification (Batch 9) ---
+      "access_review.captured" => "An immutable access and SoD review snapshot was captured.",
+      "access_review.attested" => "An owner attested a captured access review.",
+
       # --- India e-invoice lifecycle (statutory, non-financial) ---
       "einvoice.prepared"      => "An immutable INV-01 request was prepared.",
       "einvoice.acknowledged"  => "An IRP acknowledged a document and returned an IRN.",
