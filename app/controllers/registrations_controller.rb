@@ -27,6 +27,7 @@ class RegistrationsController < ApplicationController
       time_zone: params[:time_zone]
     )
     start_new_session_for result.user
+    session.delete(:return_to_after_authenticating)
     result.user.queue_verification_delivery!
     redirect_to root_path, notice: "Welcome to Folio — #{result.tenant.name} is ready."
   rescue ActiveRecord::RecordInvalid, Onboarding::AccountingProfile::InvalidChoice => e

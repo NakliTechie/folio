@@ -17,6 +17,23 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_equal "queued", User.find_by!(email_address: "founder@acme.com").verification_delivery_state
   end
 
+  test "signup clears a stale protected return path before a later login" do
+    get reports_path
+    assert_redirected_to new_session_path
+
+    post registration_path, params: {
+      org_name: "Fresh Destination Co", email_address: "fresh-destination@example.com",
+      password: "correct-horse-battery"
+    }
+    assert_redirected_to root_path
+
+    delete session_path
+    post session_path, params: {
+      email_address: "fresh-destination@example.com", password: "correct-horse-battery"
+    }
+    assert_redirected_to root_path
+  end
+
   test "signup preserves source-order keyboard orientation and an exact brand name" do
     get new_registration_path
     assert_response :success
