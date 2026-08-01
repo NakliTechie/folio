@@ -1,0 +1,85 @@
+<% content_for :title, "#{@contract.contract_number} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <%= link_to "← Back to contracts", contracts_path(tenant_route_options), class: "back-link" %>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow"><%= Contract::TYPES.fetch(@contract.contract_type) %></p>
+      <h1><%= @contract.contract_number %></h1>
+      <p><%= @contract.title %> · <%= @contract.party.name %></p>
+    </div>
+    <span class="<%= status_class(@contract.status) %>"><%= @contract.status.humanize %></span>
+  </header>
+
+  <section class="summary-strip" aria-label="Contract summary">
+    <div><small>Contract value</small><strong><%= money_amount(@contract.total_contract_value_minor, currency: @contract.currency) %></strong></div>
+    <div><small>Effective</small><strong><%= @contract.effective_date&.to_fs(:long) || "Not set" %></strong></div>
+    <div><small>Stated end</small><strong><%= @contract.end_date&.to_fs(:long) || @contract.term_type.humanize %></strong></div>
+    <div><small>Notice deadline</small><strong><%= @contract.notice_deadline_date&.to_fs(:long) || "Not set" %></strong></div>
+  </section>
+
+  <% if @contract.compliance_flags.any? %>
+    <section class="notification" role="status">
+      <strong>Evidence review needed</strong>
+      <ul><% @contract.compliance_flags.each do |flag| %><li><%= flag %></li><% end %></ul>
+    </section>
+  <% end %>
+
+  <div class="detail-grid">
+    <section class="panel">
+      <div class="panel__header"><div><p class="eyebrow">Commercial record</p><h2>Terms</h2></div></div>
+      <dl class="summary-list">
+        <div><dt>Customer</dt><dd><%= @contract.party.party_number %> · <%= @contract.party.name %></dd></div>
+        <div><dt>Accounting treatment</dt><dd>IND AS 115 revenue</dd></div>
+        <div><dt>Enforceable period end</dt><dd><%= @contract.enforceable_period_end&.to_fs(:long) || "Not assessed" %></dd></div>
+        <div><dt>Renewal</dt><dd><%= @contract.auto_renew? ? "Auto-renewing" : @contract.term_type.humanize %></dd></div>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <div class="panel__header"><div><p class="eyebrow">India record</p><h2>Execution evidence</h2></div></div>
+      <dl class="summary-list">
+        <div><dt>Signature</dt><dd><%= Contract::SIGNATURE_STATUSES.fetch(@contract.signature_status) %></dd></div>
+        <div><dt>Stamping</dt><dd><%= Contract::STAMP_STATUSES.fetch(@contract.stamp_status) %></dd></div>
+        <div><dt>Stamp date</dt><dd><%= @contract.stamp_date&.to_fs(:long) || "Not recorded" %></dd></div>
+        <div><dt>Registration</dt><dd><%= Contract::REGISTRATION_STATUSES.fetch(@contract.registration_status) %></dd></div>
+      </dl>
+    </section>
+  </div>
+
+  <% if permitted?("contracts.manage") && @contract.status == "draft" %>
+    <div class="form-actions"><%= link_to "Edit draft", edit_contract_path(@contract, tenant_route_options), class: "button button--quiet" %></div>
+  <% end %>
+
+  <% if permitted?("contracts.approve") %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Governed lifecycle</p><h2>Next transition</h2></div></div>
+      <% case @contract.status %>
+      <% when "draft" %>
+        <%= form_with url: sign_contract_path(@contract, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+          <%= form.label :execution_date, "Execution date" %><%= form.date_field :execution_date, value: @contract.execution_date || business_date, required: true %>
+          <%= form.submit "Mark signed", class: "button button--primary", data: { turbo_confirm: "Freeze this draft as signed?" } %>
+        <% end %>
+      <% when "signed" %>
+        <%= form_with url: activate_contract_path(@contract, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+          <%= form.label :effective_date %><%= form.date_field :effective_date, value: @contract.effective_date || business_date, required: true %>
+          <%= form.submit "Activate contract", class: "button button--primary" %>
+        <% end %>
+      <% when "active" %>
+        <%= form_with url: close_contract_path(@contract, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+          <%= form.label :closed_on, "Close date" %><%= form.date_field :closed_on, value: business_date, required: true %>
+          <%= form.submit "Close contract", class: "button button--quiet", data: { turbo_confirm: "Close this active contract?" } %>
+        <% end %>
+      <% else %>
+        <p>This contract is closed. Its lifecycle and accounting evidence remain immutable.</p>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="panel panel--table">
+    <div class="panel__header"><div><p class="eyebrow">Hash-chained evidence</p><h2>Lifecycle events</h2></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Sequence</th><th>Event</th><th>Recorded</th><th>Actor</th></tr></thead><tbody>
+      <% @events.each do |event| %><tr><td><%= event.seq %></td><td><%= event.action.humanize %></td><td><%= event.recorded_at.to_fs(:long) %></td><td><%= event.actor %></td></tr><% end %>
+    </tbody></table></div>
+  </section>
+</main>

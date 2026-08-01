@@ -1,0 +1,13 @@
+<% content_for :title, "Edit #{@contract.contract_number} · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <%= link_to "← Back to contract", contract_path(@contract, tenant_route_options), class: "back-link" %>
+  <header class="page-heading page-heading--stacked">
+    <p class="eyebrow"><%= @contract.contract_number %></p>
+    <h1>Edit contract draft</h1>
+    <p>Signing freezes the reviewed master. Later commercial changes become explicit amendments.</p>
+  </header>
+  <section class="panel form-panel">
+    <%= render "form", contract: @contract, form_url: contract_path(@contract, tenant_route_options), submit_label: "Save contract draft" %>
+  </section>
+</main>

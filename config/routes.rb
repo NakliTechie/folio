@@ -18,6 +18,13 @@ Rails.application.routes.draw do
       patch :reactivate
     end
   end
+  resources :contracts, only: %i[index show new create edit update] do
+    member do
+      post :sign
+      post :activate
+      post :close
+    end
+  end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do
     member do
       patch :deactivate

@@ -166,6 +166,124 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: contract_number_ranges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_number_ranges (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    fiscal_year integer NOT NULL,
+    next_value integer DEFAULT 1 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_number_ranges_next_value_positive CHECK ((next_value > 0))
+);
+
+
+--
+-- Name: contract_number_ranges_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_number_ranges_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_number_ranges_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_number_ranges_id_seq OWNED BY public.contract_number_ranges.id;
+
+
+--
+-- Name: contracts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contracts (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    entity_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    party_id bigint NOT NULL,
+    created_domain_event_id bigint NOT NULL,
+    contract_number character varying NOT NULL,
+    fiscal_year integer NOT NULL,
+    title character varying NOT NULL,
+    side character varying DEFAULT 'sell'::character varying NOT NULL,
+    contract_type character varying DEFAULT 'service_agreement'::character varying NOT NULL,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    approval_date date,
+    inception_date date,
+    effective_date date,
+    end_date date,
+    enforceable_period_end date,
+    closed_on date,
+    term_type character varying DEFAULT 'fixed'::character varying NOT NULL,
+    auto_renew boolean DEFAULT false NOT NULL,
+    renewal_notice_days integer,
+    notice_deadline_date date,
+    currency character varying NOT NULL,
+    total_contract_value_minor bigint NOT NULL,
+    accounting_treatment character varying DEFAULT 'revenue_115'::character varying NOT NULL,
+    jurisdiction character varying DEFAULT 'IN'::character varying NOT NULL,
+    instrument_type character varying,
+    execution_date date,
+    stamp_status character varying DEFAULT 'pending'::character varying NOT NULL,
+    stamp_state_code character varying,
+    stamp_amount_minor bigint,
+    stamp_certificate_reference character varying,
+    stamp_date date,
+    signature_status character varying DEFAULT 'unsigned'::character varying NOT NULL,
+    signed_at timestamp(6) without time zone,
+    registration_required boolean DEFAULT false NOT NULL,
+    registration_status character varying DEFAULT 'not_required'::character varying NOT NULL,
+    registration_reference character varying,
+    tds_section character varying,
+    gst_treatment character varying DEFAULT 'domestic_b2b'::character varying NOT NULL,
+    place_of_supply_state_code character varying,
+    hsn_sac_code character varying,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contracts_accounting_treatment_valid CHECK (((accounting_treatment)::text = ANY ((ARRAY['none'::character varying, 'revenue_115'::character varying, 'prepaid'::character varying, 'commitment'::character varying])::text[]))),
+    CONSTRAINT contracts_registration_status_valid CHECK (((registration_status)::text = ANY ((ARRAY['not_required'::character varying, 'pending'::character varying, 'registered'::character varying, 'overdue'::character varying])::text[]))),
+    CONSTRAINT contracts_renewal_notice_nonnegative CHECK (((renewal_notice_days IS NULL) OR (renewal_notice_days >= 0))),
+    CONSTRAINT contracts_side_valid CHECK (((side)::text = ANY ((ARRAY['sell'::character varying, 'buy'::character varying, 'mutual'::character varying, 'internal'::character varying])::text[]))),
+    CONSTRAINT contracts_signature_status_valid CHECK (((signature_status)::text = ANY ((ARRAY['unsigned'::character varying, 'partially_signed'::character varying, 'signed'::character varying])::text[]))),
+    CONSTRAINT contracts_stamp_amount_nonnegative CHECK (((stamp_amount_minor IS NULL) OR (stamp_amount_minor >= 0))),
+    CONSTRAINT contracts_stamp_status_valid CHECK (((stamp_status)::text = ANY ((ARRAY['not_applicable'::character varying, 'pending'::character varying, 'stamped'::character varying, 'under_stamped'::character varying])::text[]))),
+    CONSTRAINT contracts_status_valid CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'signed'::character varying, 'active'::character varying, 'closed'::character varying])::text[]))),
+    CONSTRAINT contracts_term_type_valid CHECK (((term_type)::text = ANY ((ARRAY['fixed'::character varying, 'evergreen'::character varying, 'auto_renew'::character varying, 'perpetual'::character varying, 'at_will'::character varying])::text[]))),
+    CONSTRAINT contracts_total_value_nonnegative CHECK ((total_contract_value_minor >= 0))
+);
+
+
+--
+-- Name: contracts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contracts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contracts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contracts_id_seq OWNED BY public.contracts.id;
+
+
+--
 -- Name: dimensions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1740,6 +1858,20 @@ ALTER TABLE ONLY public.accounts ALTER COLUMN id SET DEFAULT nextval('public.acc
 
 
 --
+-- Name: contract_number_ranges id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_number_ranges ALTER COLUMN id SET DEFAULT nextval('public.contract_number_ranges_id_seq'::regclass);
+
+
+--
+-- Name: contracts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts ALTER COLUMN id SET DEFAULT nextval('public.contracts_id_seq'::regclass);
+
+
+--
 -- Name: dimensions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2012,6 +2144,22 @@ ALTER TABLE ONLY public.accounts
 
 ALTER TABLE ONLY public.ar_internal_metadata
     ADD CONSTRAINT ar_internal_metadata_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: contract_number_ranges contract_number_ranges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_number_ranges
+    ADD CONSTRAINT contract_number_ranges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contracts contracts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT contracts_pkey PRIMARY KEY (id);
 
 
 --
@@ -2520,6 +2668,69 @@ CREATE INDEX index_accounts_on_tenant_id_and_active ON public.accounts USING btr
 --
 
 CREATE UNIQUE INDEX index_accounts_on_tenant_id_and_code ON public.accounts USING btree (tenant_id, code);
+
+
+--
+-- Name: index_contract_number_ranges_on_series; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_number_ranges_on_series ON public.contract_number_ranges USING btree (tenant_id, entity_id, office_id, fiscal_year);
+
+
+--
+-- Name: index_contracts_on_created_domain_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contracts_on_created_domain_event_id ON public.contracts USING btree (created_domain_event_id);
+
+
+--
+-- Name: index_contracts_on_entity_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contracts_on_entity_id ON public.contracts USING btree (entity_id);
+
+
+--
+-- Name: index_contracts_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contracts_on_office_id ON public.contracts USING btree (office_id);
+
+
+--
+-- Name: index_contracts_on_party_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contracts_on_party_id ON public.contracts USING btree (party_id);
+
+
+--
+-- Name: index_contracts_on_tenant_id_and_contract_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contracts_on_tenant_id_and_contract_number ON public.contracts USING btree (tenant_id, contract_number);
+
+
+--
+-- Name: index_contracts_on_tenant_id_and_notice_deadline_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contracts_on_tenant_id_and_notice_deadline_date ON public.contracts USING btree (tenant_id, notice_deadline_date) WHERE (((status)::text = 'active'::text) AND (notice_deadline_date IS NOT NULL));
+
+
+--
+-- Name: index_contracts_on_tenant_id_and_party_id_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contracts_on_tenant_id_and_party_id_and_status ON public.contracts USING btree (tenant_id, party_id, status);
+
+
+--
+-- Name: index_contracts_on_tenant_id_and_status_and_end_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contracts_on_tenant_id_and_status_and_end_date ON public.contracts USING btree (tenant_id, status, end_date);
 
 
 --
@@ -3204,6 +3415,14 @@ ALTER TABLE ONLY public.office_tax_registrations
 
 
 --
+-- Name: contracts fk_rails_0475753257; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_rails_0475753257 FOREIGN KEY (party_id) REFERENCES public.parties(id);
+
+
+--
 -- Name: role_permissions fk_rails_0b72cb6964; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3217,6 +3436,14 @@ ALTER TABLE ONLY public.role_permissions
 
 ALTER TABLE ONLY public.user_office_roles
     ADD CONSTRAINT fk_rails_1018c65b31 FOREIGN KEY (role_template_id) REFERENCES public.role_templates(id);
+
+
+--
+-- Name: contracts fk_rails_18adba9082; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_rails_18adba9082 FOREIGN KEY (created_domain_event_id) REFERENCES public.domain_events(id);
 
 
 --
@@ -3281,6 +3508,22 @@ ALTER TABLE ONLY public.document_allocations
 
 ALTER TABLE ONLY public.sessions
     ADD CONSTRAINT fk_rails_758836b4f0 FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contracts fk_rails_767f3c1ac0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_rails_767f3c1ac0 FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
+-- Name: contracts fk_rails_7f020f7c9b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contracts
+    ADD CONSTRAINT fk_rails_7f020f7c9b FOREIGN KEY (entity_id) REFERENCES public.entities(id);
 
 
 --
@@ -3378,6 +3621,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801160000'),
 ('20260801150000'),
 ('20260801140000'),
 ('20260801130000'),

@@ -1,0 +1,74 @@
+<%= form_with model: contract, url: form_url, class: "stacked-form" do |form| %>
+  <fieldset class="profile-fieldset">
+    <legend>Commercial identity</legend>
+    <div class="form-grid form-grid--two">
+      <div class="form-group">
+        <%= form.label :party_id, "Customer" %>
+        <%= form.select :party_id,
+          @customers.map { |party| ["#{party.party_number} · #{party.name}", party.id] },
+          { prompt: "Choose a customer" }, required: true %>
+      </div>
+      <div class="form-group">
+        <%= form.label :contract_type, "Contract type" %>
+        <%= form.select :contract_type, Contract::TYPES.map { |code, label| [label, code] } %>
+      </div>
+      <div class="form-group">
+        <%= form.label :title %>
+        <%= form.text_field :title, required: true, maxlength: 200, placeholder: "For example, FY27 managed services" %>
+      </div>
+      <div class="form-group">
+        <%= form.label :total_contract_value, "Total contract value (#{Current.tenant.functional_currency})" %>
+        <%= form.number_field :total_contract_value,
+          value: params.dig(:contract, :total_contract_value).presence || money_input_value(contract.total_contract_value_minor),
+          required: true, min: 0, step: 0.01, inputmode: "decimal" %>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="profile-fieldset">
+    <legend>Term and enforceable period</legend>
+    <p class="form-hint">The stated end date and enforceable-period end are separate because cancellation rights can shorten the IND AS 115 accounting term.</p>
+    <div class="form-grid form-grid--two">
+      <div class="form-group"><%= form.label :effective_date %><%= form.date_field :effective_date %></div>
+      <div class="form-group"><%= form.label :end_date, "Stated end date" %><%= form.date_field :end_date %></div>
+      <div class="form-group"><%= form.label :enforceable_period_end %><%= form.date_field :enforceable_period_end %></div>
+      <div class="form-group"><%= form.label :term_type %><%= form.select :term_type, Contract::TERM_TYPES.map { |code, label| [label, code] } %></div>
+      <div class="form-group"><%= form.label :renewal_notice_days, "Renewal notice (days)" %><%= form.number_field :renewal_notice_days, min: 0 %></div>
+      <label class="choice-card"><%= form.check_box :auto_renew %><span><strong>Auto-renews</strong><small>Folio will materialize the notice deadline.</small></span></label>
+    </div>
+  </fieldset>
+
+  <fieldset class="profile-fieldset">
+    <legend>Execution and India evidence</legend>
+    <p class="form-hint">Stamping, notarisation, registration, and signing are distinct. These are your recorded facts, not a Folio legal opinion.</p>
+    <div class="form-grid form-grid--two">
+      <div class="form-group"><%= form.label :instrument_type %><%= form.text_field :instrument_type, placeholder: "For example, services agreement" %></div>
+      <div class="form-group"><%= form.label :execution_date %><%= form.date_field :execution_date %></div>
+      <div class="form-group"><%= form.label :signature_status %><%= form.select :signature_status, Contract::SIGNATURE_STATUSES.map { |code, label| [label, code] } %></div>
+      <div class="form-group"><%= form.label :stamp_status %><%= form.select :stamp_status, Contract::STAMP_STATUSES.map { |code, label| [label, code] } %></div>
+      <div class="form-group"><%= form.label :stamp_state_code, "Stamp state code" %><%= form.text_field :stamp_state_code, maxlength: 2, inputmode: "numeric" %></div>
+      <div class="form-group"><%= form.label :stamp_amount, "Stamp amount (#{Current.tenant.functional_currency})" %><%= form.number_field :stamp_amount, value: params.dig(:contract, :stamp_amount).presence || (money_input_value(contract.stamp_amount_minor) if contract.stamp_amount_minor), min: 0, step: 0.01 %></div>
+      <div class="form-group"><%= form.label :stamp_certificate_reference %><%= form.text_field :stamp_certificate_reference %></div>
+      <div class="form-group"><%= form.label :stamp_date %><%= form.date_field :stamp_date %></div>
+      <label class="choice-card"><%= form.check_box :registration_required %><span><strong>Registration required</strong><small>Record the status separately from stamping.</small></span></label>
+      <div class="form-group"><%= form.label :registration_status %><%= form.select :registration_status, Contract::REGISTRATION_STATUSES.map { |code, label| [label, code] } %></div>
+      <div class="form-group"><%= form.label :registration_reference %><%= form.text_field :registration_reference %></div>
+    </div>
+  </fieldset>
+
+  <fieldset class="profile-fieldset">
+    <legend>Tax inheritance defaults</legend>
+    <p class="form-hint">These defaults will flow to contract-linked invoices; document-time statutory validation remains authoritative.</p>
+    <div class="form-grid form-grid--two">
+      <div class="form-group"><%= form.label :gst_treatment %><%= form.select :gst_treatment, [["Domestic B2B", "domestic_b2b"], ["Export under LUT", "export_lut"], ["SEZ", "sez"]] %></div>
+      <div class="form-group"><%= form.label :place_of_supply_state_code %><%= form.text_field :place_of_supply_state_code, maxlength: 2, inputmode: "numeric" %></div>
+      <div class="form-group"><%= form.label :hsn_sac_code, "Default HSN/SAC" %><%= form.text_field :hsn_sac_code, maxlength: 8 %></div>
+      <div class="form-group"><%= form.label :tds_section, "Counterparty TDS section (optional)" %><%= form.select :tds_section, [["None", ""]] + Taxes::India::Tds::Schedule.sections.map { |code, label| ["#{code} · #{label}", code] } %></div>
+    </div>
+  </fieldset>
+
+  <div class="form-actions">
+    <%= form.submit submit_label, class: "button button--primary" %>
+    <%= link_to "Cancel", contracts_path(tenant_route_options), class: "button button--quiet" %>
+  </div>
+<% end %>

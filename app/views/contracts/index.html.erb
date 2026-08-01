@@ -1,0 +1,44 @@
+<% content_for :title, "Contracts · #{Current.tenant.name} · Folio" %>
+
+<main id="main-content" class="page-shell">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Revenue contracts</p>
+      <h1>Contracts</h1>
+      <p>The sell-side commercial record behind renewal dates, performance obligations, and IND AS 115 schedules.</p>
+    </div>
+    <% if permitted?("contracts.manage") %>
+      <%= link_to "New contract", new_contract_path(tenant_route_options), class: "button button--primary" %>
+    <% end %>
+  </header>
+
+  <section class="panel panel--table">
+    <% if @contracts.any? %>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Contracts for <%= Current.tenant.name %></caption>
+          <thead><tr><th>Contract</th><th>Customer</th><th>Term</th><th>Value</th><th>Status</th><th>Compliance</th></tr></thead>
+          <tbody>
+            <% @contracts.each do |contract| %>
+              <tr>
+                <td><%= link_to contract.contract_number, contract_path(contract, tenant_route_options), class: "text-link" %><br><small><%= contract.title %></small></td>
+                <td><%= contract.party.name %></td>
+                <td><%= contract.effective_date&.to_fs(:long) || "Not active" %> → <%= contract.end_date&.to_fs(:long) || contract.term_type.humanize %></td>
+                <td><%= money_amount(contract.total_contract_value_minor, currency: contract.currency) %></td>
+                <td><span class="<%= status_class(contract.status) %>"><%= contract.status.humanize %></span></td>
+                <td><%= contract.compliance_flags.any? ? contract.compliance_flags.join(" · ") : "Clear" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="empty-state">
+        <span class="empty-state__icon" aria-hidden="true">◇</span>
+        <h2>No contracts yet</h2>
+        <p>Create the signed commercial record before generating revenue schedules.</p>
+        <%= link_to "Create the first contract", new_contract_path(tenant_route_options), class: "button button--primary" if permitted?("contracts.manage") %>
+      </div>
+    <% end %>
+  </section>
+</main>

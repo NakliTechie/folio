@@ -19,6 +19,7 @@ module DomainEvents
     REGISTRY = {
       # --- contract management (Batch 6 beachhead) ---
       "contract.drafted"    => "A contract was created in draft.",
+      "contract.updated"    => "A draft contract's governed terms or evidence were updated.",
       "contract.signed"     => "A contract was signed by the counterparties.",
       "contract.activated"  => "A signed contract became active (obligations begin).",
       "contract.amended"    => "An active contract was amended.",

@@ -70,10 +70,11 @@
         <nav class="app-nav" aria-label="Primary navigation">
           <%= link_to "Home", root_path(tenant_route_options), class: navigation_class("home") %>
 
-          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("sales_invoices", "credit_notes", "parties") %>">
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("sales_invoices", "credit_notes", "parties", "contracts") %>">
             <summary>Sales</summary>
             <div class="nav-group__menu">
               <%= link_to "Sales invoices", sales_invoices_path(tenant_route_options), class: navigation_class("sales_invoices", "credit_notes") %>
+              <%= link_to "Contracts", contracts_path(tenant_route_options), class: navigation_class("contracts") if permitted?("contracts.read") %>
               <%= link_to "Customers", parties_path(tenant_route_options), class: navigation_class("parties") if permitted?("masters.read") %>
             </div>
           </details>
