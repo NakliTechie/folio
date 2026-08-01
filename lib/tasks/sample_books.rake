@@ -40,6 +40,7 @@ namespace :sample_books do
       status = p[:applied] ? "#{rupees.call(p[:tds_minor])} @ #{p[:rate_basis_points] / 100.0}%" : "none (below threshold)"
       puts "  TDS #{p[:section]} on #{p[:purchase]} (#{p[:vendor]}): #{status}"
     end
+    puts "  TDS posted: #{result.tds_deductions_posted} deduction(s) withheld on vendor payments"
     abort "Trial balance did not tie — seed is inconsistent" unless result.balanced?
   end
 end

@@ -26,18 +26,31 @@ class Folio::SampleBooksTest < ActiveSupport::TestCase
                    receipts: 3, payments: 1 }, result.counts)
   end
 
+  test "a seeded book withholds real TDS on a vendor payment and yields a non-empty 26Q" do
+    result = Folio::SampleBooks.seed!(scenario: "consulting", email: "sb-tds-lifecycle@folio.invalid")
+    assert_equal 1, result.tds_deductions_posted, "the 194C subcontractor payment withholds"
+    assert result.balanced?, "the book still ties with the 3-way withholding split"
+
+    # BILL1 paid 2026-06-04 → FY2026 Q1; 2% of the ₹47,200 gross = ₹944.
+    return_26q = Reports.tds_return_26q(result.tenant_id, fiscal_year: 2026, quarter: 1)
+    assert_equal 1, return_26q["deduction_count"]
+    assert_equal "194C", return_26q["by_section"].first["section"]
+    assert_equal 94_400, return_26q["total_tds_minor"]
+  end
+
   test "the goods scenarios exercise the 194Q and 194H TDS sections end to end" do
     manufacturing = Folio::SampleBooks.seed!(scenario: "manufacturing", email: "sb-mfg@folio.invalid")
     q = manufacturing.tds_previews.find { |p| p[:section] == "194Q" }
     assert q, "manufacturing should preview a 194Q goods purchase"
-    assert q[:applied], "a ₹60L purchase exceeds the ₹50L threshold"
-    assert_equal 100_000, q[:tds_minor], "0.1% of the ₹10L excess = ₹1,000"
+    assert q[:applied], "a ₹60L (₹70.8L gross) purchase exceeds the ₹50L threshold"
+    # gross ₹70,80,000; excess over ₹50L = ₹20,80,000; 0.1% = ₹2,080.
+    assert_equal 208_000, q[:tds_minor]
 
     pharma = Folio::SampleBooks.seed!(scenario: "pharma", email: "sb-pharma@folio.invalid")
     h = pharma.tds_previews.find { |p| p[:section] == "194H" }
     assert h, "pharma should preview a 194H commission payment"
     assert_equal 200, h[:rate_basis_points], "post-2024 194H rate is 2%"
-    assert_equal 80_000, h[:tds_minor], "2% of the ₹40,000 commission = ₹800"
+    assert_equal 94_400, h[:tds_minor], "2% of the ₹47,200 gross commission = ₹944"
   end
 
   test "the seeded book's ledger event chain verifies" do
@@ -77,8 +90,8 @@ class Folio::SampleBooksTest < ActiveSupport::TestCase
     preview = result.tds_previews.find { |p| p[:purchase] == "BILL1" }
     assert preview, "BILL1 is a 194C subcontractor bill and should be previewed"
     assert_equal "194C", preview[:section]
-    assert preview[:applied], "₹40,000 exceeds the ₹30,000 single threshold"
+    assert preview[:applied], "₹47,200 gross exceeds the ₹30,000 single threshold"
     assert_equal 200, preview[:rate_basis_points]      # firm PAN → 2% leg
-    assert_equal 80_000, preview[:tds_minor]            # 2% of ₹40,000 = ₹800
+    assert_equal 94_400, preview[:tds_minor]           # 2% of the ₹47,200 gross = ₹944 (matches the posted withholding)
   end
 end
