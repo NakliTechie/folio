@@ -72,6 +72,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     assert_match "style-src 'self'", response.headers.fetch("Content-Security-Policy")
     refute_match "unsafe-inline", response.headers.fetch("Content-Security-Policy")
     javascript = Rails.root.join("app/javascript/application.js").read
+    assert_includes javascript, 'import { Turbo } from "@hotwired/turbo-rails"'
     assert_includes javascript, "progressBarDelay = 60_000"
     assert_includes javascript, 'classList.add("turbo-loading")'
 

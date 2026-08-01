@@ -1,4 +1,4 @@
-import * as Turbo from "@hotwired/turbo-rails"
+import { Turbo } from "@hotwired/turbo-rails"
 
 // Turbo's built-in progress bar positions itself with inline styles, which a strict
 // style-src policy correctly blocks. Delay that implementation and provide the same loading

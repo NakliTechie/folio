@@ -9,6 +9,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     visit root_path
     assert_current_path new_session_path
     assert_selector "h1", text: "Sign in to Folio"
+    assert_equal 60_000, page.evaluate_script("window.Turbo?.config?.drive?.progressBarDelay")
 
     click_link "Create an account"
     fill_in "Company name", with: "Walkthrough Books"
