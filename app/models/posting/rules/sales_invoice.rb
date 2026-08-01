@@ -7,6 +7,7 @@ module Posting
     class SalesInvoice
       TAX_ACCOUNT_CODE = "2100"
       RECEIVABLE_ACCOUNT_CODE = "1200"
+      CONTRACT_LIABILITY_ACCOUNT_CODE = "2200"
 
       class << self
         def validate_document!(document)
@@ -29,6 +30,7 @@ module Posting
             raise Documents::InvalidDocument, "sales invoice seller snapshot is incomplete"
           end
           Taxes::India::PlaceOfSupplyEvidence.validate!(document)
+          validate_contract!(document) if document.contract_id
 
           validate_lines!(document, lines)
         end
@@ -65,7 +67,7 @@ module Posting
           revenue_lines = document.document_lines.map do |invoice_line|
             {
               line_no: line_no += 1,
-              account_code: invoice_line.account_code,
+              account_code: document.contract_id ? CONTRACT_LIABILITY_ACCOUNT_CODE : invoice_line.account_code,
               ledger_id: ledger.id,
               entity_id: document.entity_id,
               office_id: document.office_id,
@@ -76,7 +78,10 @@ module Posting
               hsn_sac_code: invoice_line.hsn_sac_code,
               tax_rate_basis_points: invoice_line.tax_rate_basis_points,
               taxable_amount_minor: invoice_line.taxable_minor,
-              extra: { "itemSnapshot" => invoice_line.item_snapshot },
+              extra: {
+                "itemSnapshot" => invoice_line.item_snapshot,
+                "contractSnapshot" => document.contract_snapshot
+              }.compact,
               amounts: [ amount.call(-invoice_line.taxable_minor) ]
             }.merge(negative)
           end
@@ -106,6 +111,21 @@ module Posting
         end
 
         private
+
+        def validate_contract!(document)
+          contract = document.contract
+          snapshot = document.contract_snapshot
+          unless contract && contract.tenant_id == document.tenant_id &&
+              contract.entity_id == document.entity_id && contract.office_id == document.office_id &&
+              contract.party_id == document.party_id && contract.currency == document.currency
+            raise Documents::InvalidDocument, "sales invoice contract scope is invalid"
+          end
+          unless snapshot.is_a?(Hash) && snapshot["id"].to_i == contract.id &&
+              snapshot["contractNumber"] == contract.contract_number &&
+              snapshot["accountingTreatment"] == "revenue_115"
+            raise Documents::InvalidDocument, "sales invoice contract snapshot is invalid"
+          end
+        end
 
         def validate_lines!(document, lines)
           subtotal = 0

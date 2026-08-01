@@ -5,6 +5,7 @@ module Posting
     class CreditNote
       RECEIVABLE_ACCOUNT_CODE = "1200"
       TAX_ACCOUNT_CODE = "2100"
+      CONTRACT_LIABILITY_ACCOUNT_CODE = "2200"
 
       class << self
         def lock_dependencies!(document)
@@ -56,7 +57,7 @@ module Posting
           revenue_lines = document.document_lines.map do |line|
             {
               line_no: line_no += 1,
-              account_code: line.account_code,
+              account_code: document.contract_id ? CONTRACT_LIABILITY_ACCOUNT_CODE : line.account_code,
               ledger_id: ledger.id,
               entity_id: document.entity_id,
               office_id: document.office_id,
@@ -69,8 +70,9 @@ module Posting
               taxable_amount_minor: line.taxable_minor,
               extra: {
                 "itemSnapshot" => line.item_snapshot,
-                "creditedDocumentLineId" => line.credited_document_line_id
-              },
+                "creditedDocumentLineId" => line.credited_document_line_id,
+                "contractSnapshot" => document.contract_snapshot
+              }.compact,
               amounts: [ amount.call(line.taxable_minor) ]
             }
           end
@@ -134,6 +136,7 @@ module Posting
           %i[
             entity_id office_id party_id tax_registration_id supply_type place_of_supply_state_code
             currency minor_unit_exponent party_snapshot tax_registration_snapshot place_of_supply_evidence
+            contract_id contract_snapshot
           ].all? { |attribute| document.public_send(attribute) == source.public_send(attribute) }
         end
 

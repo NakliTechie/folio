@@ -8,7 +8,7 @@ module SalesInvoices
 
     def call(tenant:, party_id:, tax_registration_id:, document_date:, due_date:,
              place_of_supply_state_code:, lines:, external_reference: nil, narration: nil,
-             place_of_supply_override_reason: nil, actor: nil)
+             place_of_supply_override_reason: nil, contract_id: nil, actor: nil)
       invoice_date = parse_date!(document_date, "invoice date")
       payment_due = parse_date!(due_date, "due date")
       raise InvalidInvoice, "due date cannot be before the invoice date" if payment_due < invoice_date
@@ -64,6 +64,10 @@ module SalesInvoices
       tax_total = breakdown.values.sum
       currency = tenant.functional_currency
       exponent = CurrencyProfile.exponent_for!(currency)
+      contract = resolve_contract!(
+        tenant: tenant, contract_id: contract_id, entity: entity, office: office,
+        party: party, currency: currency
+      )
 
       Document.transaction do
         document = Document.create!(
@@ -73,6 +77,7 @@ module SalesInvoices
           document_date: invoice_date, posting_date: invoice_date, due_date: payment_due,
           external_reference: external_reference.presence, narration: narration,
           state: "draft", party: party, tax_registration: seller_registration,
+          contract: contract, contract_snapshot: contract_snapshot(contract),
           supply_type: "B2B", place_of_supply_state_code: place_state,
           place_of_supply_evidence: place_evidence,
           currency: currency, minor_unit_exponent: exponent,
@@ -165,6 +170,30 @@ module SalesInvoices
         "city" => office.city, "postalCode" => office.postal_code,
         "countryCode" => office.country_code
       }.compact
+    end
+
+    def resolve_contract!(tenant:, contract_id:, entity:, office:, party:, currency:)
+      return if contract_id.blank?
+
+      contract = Contract.where(tenant_id: tenant.id).find(contract_id)
+      unless contract.status == "active" && contract.accounting_treatment == "revenue_115"
+        raise InvalidInvoice, "the selected revenue contract must be active"
+      end
+      unless contract.entity_id == entity.id && contract.office_id == office.id &&
+          contract.party_id == party.id && contract.currency == currency
+        raise InvalidInvoice, "the selected contract does not match this company, office, customer, and currency"
+      end
+      contract
+    end
+
+    def contract_snapshot(contract)
+      return unless contract
+
+      {
+        "id" => contract.id, "contractNumber" => contract.contract_number,
+        "title" => contract.title, "partyId" => contract.party_id,
+        "currency" => contract.currency, "accountingTreatment" => contract.accounting_treatment
+      }
     end
 
     def parse_date!(value, label)

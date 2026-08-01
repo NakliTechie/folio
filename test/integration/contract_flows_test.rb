@@ -76,6 +76,48 @@ class ContractFlowsTest < ActionDispatch::IntegrationTest
     assert_equal "draft", contract.reload.status
   end
 
+  test "owner identifies obligations allocates schedules and simulates recognition in the workspace" do
+    contract = create_contract
+
+    assert_difference "ContractPerformanceObligation.count", 1 do
+      post create_performance_obligation_contract_path(contract), params: {
+        performance_obligation: {
+          description: "Annual managed service", satisfaction: "over_time",
+          over_time_criterion: "Customer simultaneously receives the service",
+          progress_measure: "time_elapsed", standalone_selling_price: "120000.00",
+          ssp_method: "observable", service_start_date: "2026-04-01",
+          service_end_date: "2027-03-31", distinct: "1", revenue_account_code: "4000"
+        }
+      }
+    end
+    assert_redirected_to contract_path(contract, tenant_id: @org.tenant.id)
+
+    post sign_contract_path(contract), params: { execution_date: "2026-03-31" }
+    post activate_contract_path(contract), params: { effective_date: "2026-04-01" }
+    assert_difference "ContractAllocationRun.count", 1 do
+      post allocate_transaction_price_contract_path(contract), params: { effective_date: "2026-04-01" }
+    end
+    assert_difference "ContractSchedule.count", 1 do
+      post generate_revenue_schedules_contract_path(contract)
+    end
+
+    get contract_path(contract)
+    assert_response :success
+    assert_select "h2", text: "Performance obligations"
+    assert_select "table", text: /Annual managed service/
+    assert_select "table", text: /Straight line.*Current/m
+
+    assert_no_difference "LedgerEvent.count" do
+      assert_difference "ContractPostingRun.count", 1 do
+        post run_revenue_recognition_contract_path(contract), params: {
+          mode: "simulate", posting_date: "2026-04-30", idempotency_key: "browser-sim-#{contract.id}"
+        }
+      end
+    end
+    assert_equal "simulated", contract.contract_posting_runs.last.status
+    assert_equal 1_000_000, contract.contract_posting_runs.last.result.fetch("contract_asset_minor")
+  end
+
   test "contract reads are tenant opaque" do
     contract = create_contract
     other = Onboarding::SignUp.call(

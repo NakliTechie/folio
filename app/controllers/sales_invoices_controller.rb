@@ -68,6 +68,7 @@ class SalesInvoicesController < BrowserController
       due_date: invoice_params[:due_date],
       place_of_supply_state_code: invoice_params[:place_of_supply_state_code],
       place_of_supply_override_reason: invoice_params[:place_of_supply_override_reason],
+      contract_id: invoice_params[:contract_id],
       actor: Current.user,
       external_reference: invoice_params[:external_reference],
       narration: invoice_params[:narration],
@@ -130,6 +131,8 @@ class SalesInvoicesController < BrowserController
         office_tax_registrations: { office_id: primary_office.id, tenant_id: Current.tenant.id }
       ).distinct.order(:identifier)
     @items = Item.active.where(tenant_id: Current.tenant.id).order(:name)
+    @contracts = Contract.where(tenant_id: Current.tenant.id, status: "active", side: "sell")
+      .includes(:party).order(:contract_number)
     @company_profile_complete = primary_office.statutory_address_complete?
     @registered_customer_ready = Party.active.joins(:party_roles, :party_tax_registrations)
       .where(
@@ -149,6 +152,7 @@ class SalesInvoicesController < BrowserController
   def invoice_params
     params.require(:sales_invoice).permit(
       :party_id,
+      :contract_id,
       :tax_registration_id,
       :document_date,
       :due_date,

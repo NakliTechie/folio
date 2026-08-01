@@ -82,6 +82,13 @@
           <%= form.text_field :external_reference, maxlength: 100,
             value: params.dig(:sales_invoice, :external_reference), placeholder: "Purchase order or contract" %>
         </div>
+        <div class="form-group">
+          <%= form.label :contract_id, "Revenue contract (optional)" %>
+          <%= form.select :contract_id,
+            @contracts.map { |contract| ["#{contract.contract_number} · #{contract.party.name} · #{contract.title}", contract.id] },
+            { include_blank: "Recognize revenue immediately", selected: params.dig(:sales_invoice, :contract_id) } %>
+          <small>A linked invoice credits deferred revenue; the contract schedule recognizes revenue separately.</small>
+        </div>
       </div>
       <div class="form-group">
         <%= form.label :narration, "Invoice note (optional)" %>

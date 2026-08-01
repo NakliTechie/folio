@@ -39,6 +39,11 @@ class Contract < ApplicationRecord
   belongs_to :office
   belongs_to :party
   belongs_to :created_domain_event, class_name: "DomainEvent"
+  has_many :contract_performance_obligations, dependent: :restrict_with_exception
+  has_many :contract_milestones, dependent: :restrict_with_exception
+  has_many :contract_allocation_runs, dependent: :restrict_with_exception
+  has_many :contract_schedules, dependent: :restrict_with_exception
+  has_many :contract_posting_runs, dependent: :restrict_with_exception
 
   normalizes :contract_number, with: ->(value) { value.to_s.strip.upcase }
   normalizes :currency, :jurisdiction, with: ->(value) { value.to_s.strip.upcase }

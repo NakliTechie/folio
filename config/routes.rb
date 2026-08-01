@@ -23,6 +23,12 @@ Rails.application.routes.draw do
       post :sign
       post :activate
       post :close
+      post :create_performance_obligation
+      post :create_milestone
+      post :achieve_milestone
+      post :allocate_transaction_price
+      post :generate_revenue_schedules
+      post :run_revenue_recognition
     end
   end
   resources :tax_registrations, path: "tax-registrations", only: %i[index new create edit update] do

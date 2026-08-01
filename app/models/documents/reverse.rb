@@ -30,6 +30,7 @@ module Documents
           document_date: date, posting_date: date,
           narration: "Reversal of #{document.document_number}",
           party_id: document.party_id, tax_registration_id: document.tax_registration_id,
+          contract_id: document.contract_id, contract_snapshot: document.contract_snapshot,
           supply_type: document.supply_type,
           place_of_supply_state_code: document.place_of_supply_state_code,
           place_of_supply_evidence: document.place_of_supply_evidence,

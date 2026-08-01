@@ -24,6 +24,19 @@ COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiS
 
 
 --
+-- Name: folio_contract_allocations_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_contract_allocations_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: % on row id=% rejected', TG_TABLE_NAME, TG_OP, OLD.id;
+END;
+$$;
+
+
+--
 -- Name: folio_domain_events_append_only(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -166,6 +179,132 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: contract_allocation_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_allocation_lines (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    contract_allocation_run_id bigint NOT NULL,
+    contract_performance_obligation_id bigint NOT NULL,
+    standalone_selling_price_minor bigint NOT NULL,
+    allocation_ratio numeric(20,12) NOT NULL,
+    allocated_price_minor bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_allocation_lines_amounts_nonnegative CHECK (((standalone_selling_price_minor >= 0) AND (allocated_price_minor >= 0))),
+    CONSTRAINT contract_allocation_lines_ratio_valid CHECK (((allocation_ratio >= (0)::numeric) AND (allocation_ratio <= (1)::numeric)))
+);
+
+
+--
+-- Name: contract_allocation_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_allocation_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_allocation_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_allocation_lines_id_seq OWNED BY public.contract_allocation_lines.id;
+
+
+--
+-- Name: contract_allocation_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_allocation_runs (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    contract_id bigint NOT NULL,
+    created_domain_event_id bigint NOT NULL,
+    version integer NOT NULL,
+    effective_date date NOT NULL,
+    method character varying DEFAULT 'relative_ssp'::character varying NOT NULL,
+    trigger character varying DEFAULT 'initial'::character varying NOT NULL,
+    transaction_price_minor bigint NOT NULL,
+    total_ssp_minor bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_allocation_runs_amounts_valid CHECK (((transaction_price_minor >= 0) AND (total_ssp_minor > 0))),
+    CONSTRAINT contract_allocation_runs_method_valid CHECK (((method)::text = 'relative_ssp'::text)),
+    CONSTRAINT contract_allocation_runs_version_positive CHECK ((version > 0))
+);
+
+
+--
+-- Name: contract_allocation_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_allocation_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_allocation_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_allocation_runs_id_seq OWNED BY public.contract_allocation_runs.id;
+
+
+--
+-- Name: contract_milestones; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_milestones (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    contract_id bigint NOT NULL,
+    contract_performance_obligation_id bigint NOT NULL,
+    milestone_no integer NOT NULL,
+    description character varying NOT NULL,
+    planned_date date NOT NULL,
+    achieved_date date,
+    recognition_amount_minor bigint NOT NULL,
+    triggers_billing boolean DEFAULT false NOT NULL,
+    triggers_recognition boolean DEFAULT true NOT NULL,
+    acceptance_required boolean DEFAULT false NOT NULL,
+    acceptance_date date,
+    status character varying DEFAULT 'planned'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_milestones_amount_nonnegative CHECK ((recognition_amount_minor >= 0)),
+    CONSTRAINT contract_milestones_number_positive CHECK ((milestone_no > 0)),
+    CONSTRAINT contract_milestones_status_valid CHECK (((status)::text = ANY ((ARRAY['planned'::character varying, 'achieved'::character varying, 'cancelled'::character varying])::text[])))
+);
+
+
+--
+-- Name: contract_milestones_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_milestones_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_milestones_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_milestones_id_seq OWNED BY public.contract_milestones.id;
+
+
+--
 -- Name: contract_number_ranges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -199,6 +338,232 @@ CREATE SEQUENCE public.contract_number_ranges_id_seq
 --
 
 ALTER SEQUENCE public.contract_number_ranges_id_seq OWNED BY public.contract_number_ranges.id;
+
+
+--
+-- Name: contract_performance_obligations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_performance_obligations (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    contract_id bigint NOT NULL,
+    obligation_no integer NOT NULL,
+    description character varying NOT NULL,
+    "distinct" boolean DEFAULT true NOT NULL,
+    series boolean DEFAULT false NOT NULL,
+    material_right boolean DEFAULT false NOT NULL,
+    satisfaction character varying NOT NULL,
+    over_time_criterion character varying,
+    progress_measure character varying,
+    standalone_selling_price_minor bigint NOT NULL,
+    ssp_method character varying NOT NULL,
+    service_start_date date,
+    service_end_date date,
+    revenue_account_code character varying DEFAULT '4000'::character varying NOT NULL,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_obligations_number_positive CHECK ((obligation_no > 0)),
+    CONSTRAINT contract_obligations_satisfaction_valid CHECK (((satisfaction)::text = ANY ((ARRAY['point_in_time'::character varying, 'over_time'::character varying])::text[]))),
+    CONSTRAINT contract_obligations_ssp_nonnegative CHECK ((standalone_selling_price_minor >= 0))
+);
+
+
+--
+-- Name: contract_performance_obligations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_performance_obligations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_performance_obligations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_performance_obligations_id_seq OWNED BY public.contract_performance_obligations.id;
+
+
+--
+-- Name: contract_posting_run_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_posting_run_items (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    contract_posting_run_id bigint NOT NULL,
+    contract_schedule_line_id bigint NOT NULL,
+    status character varying DEFAULT 'pending'::character varying NOT NULL,
+    ledger_event_id bigint,
+    error_message character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_posting_run_items_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'simulated'::character varying, 'posted'::character varying, 'skipped'::character varying, 'failed'::character varying])::text[])))
+);
+
+
+--
+-- Name: contract_posting_run_items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_posting_run_items_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_posting_run_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_posting_run_items_id_seq OWNED BY public.contract_posting_run_items.id;
+
+
+--
+-- Name: contract_posting_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_posting_runs (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    contract_id bigint NOT NULL,
+    created_by_id bigint NOT NULL,
+    idempotency_key character varying NOT NULL,
+    run_type character varying DEFAULT 'revenue_recognition'::character varying NOT NULL,
+    mode character varying NOT NULL,
+    status character varying DEFAULT 'pending'::character varying NOT NULL,
+    posting_date date NOT NULL,
+    started_at timestamp(6) without time zone,
+    finished_at timestamp(6) without time zone,
+    result jsonb DEFAULT '{}'::jsonb NOT NULL,
+    error_message character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_posting_runs_mode_valid CHECK (((mode)::text = ANY ((ARRAY['simulate'::character varying, 'post'::character varying])::text[]))),
+    CONSTRAINT contract_posting_runs_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'running'::character varying, 'simulated'::character varying, 'posted'::character varying, 'failed'::character varying])::text[]))),
+    CONSTRAINT contract_posting_runs_type_valid CHECK (((run_type)::text = 'revenue_recognition'::text))
+);
+
+
+--
+-- Name: contract_posting_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_posting_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_posting_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_posting_runs_id_seq OWNED BY public.contract_posting_runs.id;
+
+
+--
+-- Name: contract_schedule_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_schedule_lines (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    contract_schedule_id bigint NOT NULL,
+    contract_milestone_id bigint,
+    sequence integer NOT NULL,
+    period_start date NOT NULL,
+    period_end date NOT NULL,
+    due_date date NOT NULL,
+    original_effective_date date NOT NULL,
+    amount_minor bigint NOT NULL,
+    revenue_account_code character varying NOT NULL,
+    status character varying DEFAULT 'planned'::character varying NOT NULL,
+    posted_ledger_event_id bigint,
+    posted_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_schedule_lines_amount_nonnegative CHECK ((amount_minor >= 0)),
+    CONSTRAINT contract_schedule_lines_period_valid CHECK ((period_end >= period_start)),
+    CONSTRAINT contract_schedule_lines_sequence_positive CHECK ((sequence > 0)),
+    CONSTRAINT contract_schedule_lines_status_valid CHECK (((status)::text = ANY ((ARRAY['planned'::character varying, 'posted'::character varying, 'superseded'::character varying])::text[])))
+);
+
+
+--
+-- Name: contract_schedule_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_schedule_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_schedule_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_schedule_lines_id_seq OWNED BY public.contract_schedule_lines.id;
+
+
+--
+-- Name: contract_schedules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.contract_schedules (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    office_id bigint NOT NULL,
+    contract_id bigint NOT NULL,
+    contract_performance_obligation_id bigint NOT NULL,
+    contract_allocation_line_id bigint NOT NULL,
+    created_domain_event_id bigint NOT NULL,
+    version integer NOT NULL,
+    kind character varying DEFAULT 'revenue'::character varying NOT NULL,
+    method character varying NOT NULL,
+    accounting_principle character varying DEFAULT 'ind_as'::character varying NOT NULL,
+    currency character varying NOT NULL,
+    status character varying DEFAULT 'current'::character varying NOT NULL,
+    generated_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT contract_schedules_kind_valid CHECK (((kind)::text = 'revenue'::text)),
+    CONSTRAINT contract_schedules_method_valid CHECK (((method)::text = ANY ((ARRAY['straight_line'::character varying, 'milestone'::character varying])::text[]))),
+    CONSTRAINT contract_schedules_status_valid CHECK (((status)::text = ANY ((ARRAY['current'::character varying, 'superseded'::character varying])::text[]))),
+    CONSTRAINT contract_schedules_version_positive CHECK ((version > 0))
+);
+
+
+--
+-- Name: contract_schedules_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.contract_schedules_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: contract_schedules_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.contract_schedules_id_seq OWNED BY public.contract_schedules.id;
 
 
 --
@@ -506,6 +871,8 @@ CREATE TABLE public.documents (
     tds_deductible_base_minor bigint DEFAULT 0 NOT NULL,
     tds_minor bigint DEFAULT 0 NOT NULL,
     place_of_supply_evidence jsonb DEFAULT '{}'::jsonb NOT NULL,
+    contract_id bigint,
+    contract_snapshot jsonb,
     CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying, 'quantity_underbilling'::character varying])::text[])))),
     CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
     CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
@@ -1858,10 +2225,66 @@ ALTER TABLE ONLY public.accounts ALTER COLUMN id SET DEFAULT nextval('public.acc
 
 
 --
+-- Name: contract_allocation_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_allocation_lines ALTER COLUMN id SET DEFAULT nextval('public.contract_allocation_lines_id_seq'::regclass);
+
+
+--
+-- Name: contract_allocation_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_allocation_runs ALTER COLUMN id SET DEFAULT nextval('public.contract_allocation_runs_id_seq'::regclass);
+
+
+--
+-- Name: contract_milestones id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_milestones ALTER COLUMN id SET DEFAULT nextval('public.contract_milestones_id_seq'::regclass);
+
+
+--
 -- Name: contract_number_ranges id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.contract_number_ranges ALTER COLUMN id SET DEFAULT nextval('public.contract_number_ranges_id_seq'::regclass);
+
+
+--
+-- Name: contract_performance_obligations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_performance_obligations ALTER COLUMN id SET DEFAULT nextval('public.contract_performance_obligations_id_seq'::regclass);
+
+
+--
+-- Name: contract_posting_run_items id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_posting_run_items ALTER COLUMN id SET DEFAULT nextval('public.contract_posting_run_items_id_seq'::regclass);
+
+
+--
+-- Name: contract_posting_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_posting_runs ALTER COLUMN id SET DEFAULT nextval('public.contract_posting_runs_id_seq'::regclass);
+
+
+--
+-- Name: contract_schedule_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedule_lines ALTER COLUMN id SET DEFAULT nextval('public.contract_schedule_lines_id_seq'::regclass);
+
+
+--
+-- Name: contract_schedules id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedules ALTER COLUMN id SET DEFAULT nextval('public.contract_schedules_id_seq'::regclass);
 
 
 --
@@ -2147,11 +2570,75 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 
 --
+-- Name: contract_allocation_lines contract_allocation_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_allocation_lines
+    ADD CONSTRAINT contract_allocation_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contract_allocation_runs contract_allocation_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_allocation_runs
+    ADD CONSTRAINT contract_allocation_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contract_milestones contract_milestones_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_milestones
+    ADD CONSTRAINT contract_milestones_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: contract_number_ranges contract_number_ranges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.contract_number_ranges
     ADD CONSTRAINT contract_number_ranges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contract_performance_obligations contract_performance_obligations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_performance_obligations
+    ADD CONSTRAINT contract_performance_obligations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contract_posting_run_items contract_posting_run_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_posting_run_items
+    ADD CONSTRAINT contract_posting_run_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contract_posting_runs contract_posting_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_posting_runs
+    ADD CONSTRAINT contract_posting_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contract_schedule_lines contract_schedule_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedule_lines
+    ADD CONSTRAINT contract_schedule_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: contract_schedules contract_schedules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedules
+    ADD CONSTRAINT contract_schedules_pkey PRIMARY KEY (id);
 
 
 --
@@ -2671,10 +3158,234 @@ CREATE UNIQUE INDEX index_accounts_on_tenant_id_and_code ON public.accounts USIN
 
 
 --
+-- Name: index_contract_allocation_lines_on_obligation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_allocation_lines_on_obligation ON public.contract_allocation_lines USING btree (contract_performance_obligation_id);
+
+
+--
+-- Name: index_contract_allocation_lines_on_run; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_allocation_lines_on_run ON public.contract_allocation_lines USING btree (contract_allocation_run_id);
+
+
+--
+-- Name: index_contract_allocation_lines_on_run_and_obligation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_allocation_lines_on_run_and_obligation ON public.contract_allocation_lines USING btree (contract_allocation_run_id, contract_performance_obligation_id);
+
+
+--
+-- Name: index_contract_allocation_runs_on_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_allocation_runs_on_contract_id ON public.contract_allocation_runs USING btree (contract_id);
+
+
+--
+-- Name: index_contract_allocation_runs_on_created_domain_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_allocation_runs_on_created_domain_event_id ON public.contract_allocation_runs USING btree (created_domain_event_id);
+
+
+--
+-- Name: index_contract_allocation_runs_on_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_allocation_runs_on_version ON public.contract_allocation_runs USING btree (tenant_id, contract_id, version);
+
+
+--
+-- Name: index_contract_milestones_on_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_milestones_on_contract_id ON public.contract_milestones USING btree (contract_id);
+
+
+--
+-- Name: index_contract_milestones_on_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_milestones_on_number ON public.contract_milestones USING btree (tenant_id, contract_performance_obligation_id, milestone_no);
+
+
+--
+-- Name: index_contract_milestones_on_obligation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_milestones_on_obligation ON public.contract_milestones USING btree (contract_performance_obligation_id);
+
+
+--
 -- Name: index_contract_number_ranges_on_series; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX index_contract_number_ranges_on_series ON public.contract_number_ranges USING btree (tenant_id, entity_id, office_id, fiscal_year);
+
+
+--
+-- Name: index_contract_obligations_on_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_obligations_on_number ON public.contract_performance_obligations USING btree (tenant_id, contract_id, obligation_no);
+
+
+--
+-- Name: index_contract_performance_obligations_on_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_performance_obligations_on_contract_id ON public.contract_performance_obligations USING btree (contract_id);
+
+
+--
+-- Name: index_contract_posting_run_items_on_ledger_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_posting_run_items_on_ledger_event_id ON public.contract_posting_run_items USING btree (ledger_event_id);
+
+
+--
+-- Name: index_contract_posting_run_items_on_run; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_posting_run_items_on_run ON public.contract_posting_run_items USING btree (contract_posting_run_id);
+
+
+--
+-- Name: index_contract_posting_run_items_on_run_and_line; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_posting_run_items_on_run_and_line ON public.contract_posting_run_items USING btree (contract_posting_run_id, contract_schedule_line_id);
+
+
+--
+-- Name: index_contract_posting_run_items_on_schedule_line; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_posting_run_items_on_schedule_line ON public.contract_posting_run_items USING btree (contract_schedule_line_id);
+
+
+--
+-- Name: index_contract_posting_runs_on_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_posting_runs_on_contract_id ON public.contract_posting_runs USING btree (contract_id);
+
+
+--
+-- Name: index_contract_posting_runs_on_created_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_posting_runs_on_created_by_id ON public.contract_posting_runs USING btree (created_by_id);
+
+
+--
+-- Name: index_contract_posting_runs_on_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_posting_runs_on_idempotency ON public.contract_posting_runs USING btree (tenant_id, idempotency_key);
+
+
+--
+-- Name: index_contract_posting_runs_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_posting_runs_on_office_id ON public.contract_posting_runs USING btree (office_id);
+
+
+--
+-- Name: index_contract_schedule_lines_due; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedule_lines_due ON public.contract_schedule_lines USING btree (tenant_id, due_date, status);
+
+
+--
+-- Name: index_contract_schedule_lines_on_contract_milestone_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedule_lines_on_contract_milestone_id ON public.contract_schedule_lines USING btree (contract_milestone_id);
+
+
+--
+-- Name: index_contract_schedule_lines_on_contract_schedule_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedule_lines_on_contract_schedule_id ON public.contract_schedule_lines USING btree (contract_schedule_id);
+
+
+--
+-- Name: index_contract_schedule_lines_on_posted_event; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_schedule_lines_on_posted_event ON public.contract_schedule_lines USING btree (posted_ledger_event_id) WHERE (posted_ledger_event_id IS NOT NULL);
+
+
+--
+-- Name: index_contract_schedule_lines_on_posted_ledger_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedule_lines_on_posted_ledger_event_id ON public.contract_schedule_lines USING btree (posted_ledger_event_id);
+
+
+--
+-- Name: index_contract_schedule_lines_on_sequence; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_schedule_lines_on_sequence ON public.contract_schedule_lines USING btree (contract_schedule_id, sequence);
+
+
+--
+-- Name: index_contract_schedules_on_allocation_line; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedules_on_allocation_line ON public.contract_schedules USING btree (contract_allocation_line_id);
+
+
+--
+-- Name: index_contract_schedules_on_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedules_on_contract_id ON public.contract_schedules USING btree (contract_id);
+
+
+--
+-- Name: index_contract_schedules_on_contract_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedules_on_contract_status ON public.contract_schedules USING btree (tenant_id, contract_id, status);
+
+
+--
+-- Name: index_contract_schedules_on_created_domain_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedules_on_created_domain_event_id ON public.contract_schedules USING btree (created_domain_event_id);
+
+
+--
+-- Name: index_contract_schedules_on_obligation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedules_on_obligation ON public.contract_schedules USING btree (contract_performance_obligation_id);
+
+
+--
+-- Name: index_contract_schedules_on_office_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_contract_schedules_on_office_id ON public.contract_schedules USING btree (office_id);
+
+
+--
+-- Name: index_contract_schedules_on_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_contract_schedules_on_version ON public.contract_schedules USING btree (tenant_id, contract_performance_obligation_id, version);
 
 
 --
@@ -2794,6 +3505,20 @@ CREATE INDEX index_document_lines_on_item_id ON public.document_lines USING btre
 --
 
 CREATE UNIQUE INDEX index_document_types_on_tenant_id_and_code ON public.document_types USING btree (tenant_id, code);
+
+
+--
+-- Name: index_documents_on_contract_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_documents_on_contract_id ON public.documents USING btree (contract_id);
+
+
+--
+-- Name: index_documents_on_contract_posting; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_documents_on_contract_posting ON public.documents USING btree (tenant_id, contract_id, posting_date, state);
 
 
 --
@@ -3350,6 +4075,20 @@ CREATE UNIQUE INDEX index_users_on_email_address ON public.users USING btree (em
 
 
 --
+-- Name: contract_allocation_lines contract_allocation_lines_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER contract_allocation_lines_immutable BEFORE DELETE OR UPDATE ON public.contract_allocation_lines FOR EACH ROW EXECUTE FUNCTION public.folio_contract_allocations_immutable();
+
+
+--
+-- Name: contract_allocation_runs contract_allocation_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER contract_allocation_runs_immutable BEFORE DELETE OR UPDATE ON public.contract_allocation_runs FOR EACH ROW EXECUTE FUNCTION public.folio_contract_allocations_immutable();
+
+
+--
 -- Name: domain_events domain_events_no_delete; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3431,6 +4170,14 @@ ALTER TABLE ONLY public.role_permissions
 
 
 --
+-- Name: contract_posting_run_items fk_rails_0bde27ef72; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_posting_run_items
+    ADD CONSTRAINT fk_rails_0bde27ef72 FOREIGN KEY (contract_schedule_line_id) REFERENCES public.contract_schedule_lines(id);
+
+
+--
 -- Name: user_office_roles fk_rails_1018c65b31; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3439,11 +4186,19 @@ ALTER TABLE ONLY public.user_office_roles
 
 
 --
--- Name: contracts fk_rails_18adba9082; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: contract_posting_run_items fk_rails_13b10d0e3f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.contracts
-    ADD CONSTRAINT fk_rails_18adba9082 FOREIGN KEY (created_domain_event_id) REFERENCES public.domain_events(id);
+ALTER TABLE ONLY public.contract_posting_run_items
+    ADD CONSTRAINT fk_rails_13b10d0e3f FOREIGN KEY (contract_posting_run_id) REFERENCES public.contract_posting_runs(id);
+
+
+--
+-- Name: contract_schedule_lines fk_rails_210e54af8e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedule_lines
+    ADD CONSTRAINT fk_rails_210e54af8e FOREIGN KEY (contract_schedule_id) REFERENCES public.contract_schedules(id);
 
 
 --
@@ -3452,6 +4207,14 @@ ALTER TABLE ONLY public.contracts
 
 ALTER TABLE ONLY public.financial_statement_assignments
     ADD CONSTRAINT fk_rails_260071ca82 FOREIGN KEY (financial_statement_version_id) REFERENCES public.financial_statement_versions(id);
+
+
+--
+-- Name: contract_schedules fk_rails_29fd715d70; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedules
+    ADD CONSTRAINT fk_rails_29fd715d70 FOREIGN KEY (contract_allocation_line_id) REFERENCES public.contract_allocation_lines(id);
 
 
 --
@@ -3479,6 +4242,14 @@ ALTER TABLE ONLY public.einvoice_cancellations
 
 
 --
+-- Name: contract_posting_runs fk_rails_3f0a2896ad; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_posting_runs
+    ADD CONSTRAINT fk_rails_3f0a2896ad FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
 -- Name: einvoice_cancellations fk_rails_40be4a3449; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3495,11 +4266,35 @@ ALTER TABLE ONLY public.einvoice_submissions
 
 
 --
+-- Name: contract_posting_runs fk_rails_490d24d00d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_posting_runs
+    ADD CONSTRAINT fk_rails_490d24d00d FOREIGN KEY (created_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: document_allocations fk_rails_524991528c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.document_allocations
     ADD CONSTRAINT fk_rails_524991528c FOREIGN KEY (document_id) REFERENCES public.documents(id);
+
+
+--
+-- Name: contract_milestones fk_rails_730e2eaf97; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_milestones
+    ADD CONSTRAINT fk_rails_730e2eaf97 FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: contract_milestones fk_rails_754ebeb234; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_milestones
+    ADD CONSTRAINT fk_rails_754ebeb234 FOREIGN KEY (contract_performance_obligation_id) REFERENCES public.contract_performance_obligations(id);
 
 
 --
@@ -3543,11 +4338,35 @@ ALTER TABLE ONLY public.settlement_reallocations
 
 
 --
+-- Name: contract_allocation_lines fk_rails_901065d56c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_allocation_lines
+    ADD CONSTRAINT fk_rails_901065d56c FOREIGN KEY (contract_performance_obligation_id) REFERENCES public.contract_performance_obligations(id);
+
+
+--
 -- Name: memberships fk_rails_99326fb65d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.memberships
     ADD CONSTRAINT fk_rails_99326fb65d FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: contract_schedules fk_rails_9ac99ed8ec; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedules
+    ADD CONSTRAINT fk_rails_9ac99ed8ec FOREIGN KEY (contract_performance_obligation_id) REFERENCES public.contract_performance_obligations(id);
+
+
+--
+-- Name: contract_schedules fk_rails_9df590b1bb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedules
+    ADD CONSTRAINT fk_rails_9df590b1bb FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
 
 
 --
@@ -3583,6 +4402,22 @@ ALTER TABLE ONLY public.party_tax_registrations
 
 
 --
+-- Name: contract_schedules fk_rails_bc70a72a4b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedules
+    ADD CONSTRAINT fk_rails_bc70a72a4b FOREIGN KEY (office_id) REFERENCES public.offices(id);
+
+
+--
+-- Name: contract_allocation_lines fk_rails_bd66244221; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_allocation_lines
+    ADD CONSTRAINT fk_rails_bd66244221 FOREIGN KEY (contract_allocation_run_id) REFERENCES public.contract_allocation_runs(id);
+
+
+--
 -- Name: financial_statement_sections fk_rails_c48cc303c2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3591,11 +4426,51 @@ ALTER TABLE ONLY public.financial_statement_sections
 
 
 --
+-- Name: contract_posting_runs fk_rails_cef285fc3e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_posting_runs
+    ADD CONSTRAINT fk_rails_cef285fc3e FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: documents fk_rails_dd14d0c95c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT fk_rails_dd14d0c95c FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: contract_performance_obligations fk_rails_ef44a79072; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_performance_obligations
+    ADD CONSTRAINT fk_rails_ef44a79072 FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
 -- Name: financial_statement_sections fk_rails_f389e55e55; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.financial_statement_sections
     ADD CONSTRAINT fk_rails_f389e55e55 FOREIGN KEY (financial_statement_version_id) REFERENCES public.financial_statement_versions(id);
+
+
+--
+-- Name: contract_allocation_runs fk_rails_f7d2ea3f42; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_allocation_runs
+    ADD CONSTRAINT fk_rails_f7d2ea3f42 FOREIGN KEY (contract_id) REFERENCES public.contracts(id);
+
+
+--
+-- Name: contract_schedule_lines fk_rails_fb04dcc75f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.contract_schedule_lines
+    ADD CONSTRAINT fk_rails_fb04dcc75f FOREIGN KEY (contract_milestone_id) REFERENCES public.contract_milestones(id);
 
 
 --
@@ -3621,6 +4496,11 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801165000'),
+('20260801164000'),
+('20260801163000'),
+('20260801162000'),
+('20260801161000'),
 ('20260801160000'),
 ('20260801150000'),
 ('20260801140000'),

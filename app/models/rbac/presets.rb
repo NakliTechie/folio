@@ -9,7 +9,7 @@ module Rbac
                         caps: %w[documents.post documents.reverse documents.simulate accounts.manage
                                  accounts.read masters.manage masters.read reports.read invoices.create
                                  bills.create payments.create gst.place_of_supply.override contracts.read
-                                 contracts.manage contracts.approve] },
+                                 contracts.manage contracts.approve contracts.post] },
       "operator"   => { name: "Operator",
                         caps: %w[invoices.create bills.create payments.create documents.simulate
                                  accounts.read masters.read reports.read gst.place_of_supply.override

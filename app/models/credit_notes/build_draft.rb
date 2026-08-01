@@ -36,6 +36,7 @@ module CreditNotes
           state: "draft", credit_note_for: invoice, reason_code: reason,
           narration: narration,
           party_id: invoice.party_id, tax_registration_id: invoice.tax_registration_id,
+          contract_id: invoice.contract_id, contract_snapshot: invoice.contract_snapshot,
           supply_type: invoice.supply_type,
           place_of_supply_state_code: invoice.place_of_supply_state_code,
           place_of_supply_evidence: invoice.place_of_supply_evidence,

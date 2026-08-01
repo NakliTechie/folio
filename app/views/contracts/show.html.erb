@@ -51,6 +51,173 @@
     <div class="form-actions"><%= link_to "Edit draft", edit_contract_path(@contract, tenant_route_options), class: "button button--quiet" %></div>
   <% end %>
 
+  <section class="panel">
+    <div class="panel__header">
+      <div><p class="eyebrow">IND AS 115</p><h2>Performance obligations</h2></div>
+      <span class="status"><%= @obligations.size %> identified</span>
+    </div>
+    <% if @obligations.empty? %>
+      <div class="empty-state"><p>No performance obligations have been identified yet.</p></div>
+    <% else %>
+      <div class="table-wrap"><table>
+        <thead><tr><th>PO</th><th>Promise</th><th>Satisfaction</th><th>Standalone price</th><th>Milestones</th></tr></thead>
+        <tbody>
+          <% @obligations.each do |obligation| %>
+            <tr>
+              <td>PO <%= obligation.obligation_no %></td>
+              <td><strong><%= obligation.description %></strong></td>
+              <td><%= obligation.satisfaction.humanize %><% if obligation.progress_measure.present? %><br><small><%= obligation.progress_measure.humanize %></small><% end %></td>
+              <td><%= money_amount(obligation.standalone_selling_price_minor, currency: @contract.currency) %></td>
+              <td>
+                <% if obligation.contract_milestones.empty? %>
+                  <span class="muted">None</span>
+                <% else %>
+                  <ul class="compact-list">
+                    <% obligation.contract_milestones.sort_by(&:milestone_no).each do |milestone| %>
+                      <li>
+                        <%= milestone.description %> · <%= milestone.planned_date.to_fs(:long) %>
+                        <span class="<%= status_class(milestone.status) %>"><%= milestone.status.humanize %></span>
+                        <% if milestone.status == "planned" && permitted?("contracts.approve") %>
+                          <%= form_with url: achieve_milestone_contract_path(@contract, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+                            <%= hidden_field_tag :milestone_id, milestone.id %>
+                            <%= form.date_field :achieved_date, value: business_date, aria: { label: "Achieved date" }, required: true %>
+                            <% if milestone.acceptance_required? %><%= form.date_field :acceptance_date, value: business_date, aria: { label: "Acceptance date" }, required: true %><% end %>
+                            <%= form.submit "Achieve", class: "button button--quiet" %>
+                          <% end %>
+                        <% end %>
+                      </li>
+                    <% end %>
+                  </ul>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table></div>
+    <% end %>
+
+    <% if permitted?("contracts.manage") && @contract.status == "draft" %>
+      <details class="disclosure">
+        <summary>Add a performance obligation</summary>
+        <%= form_with url: create_performance_obligation_contract_path(@contract, tenant_route_options), scope: :performance_obligation, method: :post, class: "stacked-form" do |form| %>
+          <div class="field"><%= form.label :description, "Promised good or service" %><%= form.text_field :description, required: true %></div>
+          <div class="form-grid">
+            <div class="field"><%= form.label :satisfaction %><%= form.select :satisfaction, [["Over time", "over_time"], ["Point in time", "point_in_time"]] %></div>
+            <div class="field"><%= form.label :standalone_selling_price, "Standalone selling price" %><%= form.number_field :standalone_selling_price, min: 0, step: 0.01, required: true %></div>
+            <div class="field"><%= form.label :ssp_method, "SSP evidence" %><%= form.select :ssp_method, [["Observable price", "observable"], ["Adjusted market", "adjusted_market"], ["Cost plus", "cost_plus"], ["Residual", "residual"]] %></div>
+            <div class="field"><%= form.label :progress_measure %><%= form.select :progress_measure, [["Time elapsed", "time_elapsed"], ["Output", "output"], ["Input", "input"]], include_blank: "For point-in-time promises" %></div>
+            <div class="field"><%= form.label :service_start_date %><%= form.date_field :service_start_date, value: @contract.effective_date %></div>
+            <div class="field"><%= form.label :service_end_date %><%= form.date_field :service_end_date, value: @contract.end_date %></div>
+          </div>
+          <div class="field"><%= form.label :over_time_criterion, "Why over-time recognition applies" %><%= form.text_field :over_time_criterion %></div>
+          <%= form.hidden_field :distinct, value: "1" %><%= form.hidden_field :revenue_account_code, value: "4000" %>
+          <%= form.submit "Add obligation", class: "button button--primary" %>
+        <% end %>
+      </details>
+
+      <% if @obligations.any? { |item| item.satisfaction == "point_in_time" } %>
+        <details class="disclosure">
+          <summary>Add a point-in-time milestone</summary>
+          <%= form_with url: create_milestone_contract_path(@contract, tenant_route_options), scope: :milestone, method: :post, class: "stacked-form" do |form| %>
+            <div class="form-grid">
+              <div class="field"><%= form.label :obligation_id, "Performance obligation" %><%= form.select :obligation_id, @obligations.select { |item| item.satisfaction == "point_in_time" }.map { |item| ["PO #{item.obligation_no} · #{item.description}", item.id] }, required: true %></div>
+              <div class="field"><%= form.label :description %><%= form.text_field :description, required: true %></div>
+              <div class="field"><%= form.label :planned_date %><%= form.date_field :planned_date, required: true %></div>
+              <div class="field"><%= form.label :recognition_amount %><%= form.number_field :recognition_amount, min: 0, step: 0.01, required: true %></div>
+            </div>
+            <label class="check-field"><%= form.check_box :acceptance_required %><span>Customer acceptance is required</span></label>
+            <%= form.hidden_field :triggers_recognition, value: "1" %>
+            <%= form.submit "Add milestone", class: "button button--primary" %>
+          <% end %>
+        </details>
+      <% end %>
+    <% end %>
+  </section>
+
+  <section class="panel">
+    <div class="panel__header"><div><p class="eyebrow">Allocation</p><h2>Transaction price</h2></div></div>
+    <% if @latest_allocation %>
+      <p>Version <%= @latest_allocation.version %> allocates <%= money_amount(@latest_allocation.transaction_price_minor, currency: @contract.currency) %> using relative standalone selling prices.</p>
+      <dl class="summary-list">
+        <% @latest_allocation.contract_allocation_lines.sort_by { |line| line.contract_performance_obligation.obligation_no }.each do |line| %>
+          <div><dt>PO <%= line.contract_performance_obligation.obligation_no %> · <%= line.contract_performance_obligation.description %></dt><dd><%= money_amount(line.allocated_price_minor, currency: @contract.currency) %></dd></div>
+        <% end %>
+      </dl>
+    <% else %>
+      <p>No transaction-price allocation has been recorded.</p>
+    <% end %>
+    <% if permitted?("contracts.approve") && @obligations.any? %>
+      <%= form_with url: allocate_transaction_price_contract_path(@contract, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+        <%= form.label :effective_date, "Allocation date" %><%= form.date_field :effective_date, value: business_date, required: true %>
+        <%= form.submit @latest_allocation ? "Create new allocation version" : "Allocate transaction price", class: "button button--quiet" %>
+      <% end %>
+    <% end %>
+  </section>
+
+  <section class="panel panel--table">
+    <div class="panel__header">
+      <div><p class="eyebrow">Recognition projection</p><h2>Revenue schedules</h2></div>
+      <% if permitted?("contracts.approve") && @contract.status == "active" && @latest_allocation %>
+        <%= button_to "Generate schedules", generate_revenue_schedules_contract_path(@contract, tenant_route_options), method: :post, class: "button button--quiet" %>
+      <% end %>
+    </div>
+    <% if @schedules.empty? %>
+      <div class="empty-state"><p>Activate and allocate the contract, then generate its revenue schedule.</p></div>
+    <% else %>
+      <div class="table-wrap"><table><thead><tr><th>Version</th><th>PO</th><th>Method</th><th>Status</th><th>Lines</th><th>Total</th></tr></thead><tbody>
+        <% @schedules.each do |schedule| %><tr>
+          <td>v<%= schedule.version %></td><td>PO <%= schedule.contract_performance_obligation.obligation_no %></td>
+          <td><%= schedule.method.humanize %></td><td><span class="<%= status_class(schedule.status) %>"><%= schedule.status.humanize %></span></td>
+          <td><%= schedule.contract_schedule_lines.size %></td>
+          <td><%= money_amount(schedule.contract_schedule_lines.sum(&:amount_minor), currency: schedule.currency) %></td>
+        </tr><% end %>
+      </tbody></table></div>
+      <% current_lines = @schedules.select { |schedule| schedule.status == "current" }.flat_map(&:contract_schedule_lines).sort_by { |line| [line.due_date, line.sequence] } %>
+      <div class="table-wrap"><table><thead><tr><th>Due</th><th>PO</th><th>Amount</th><th>Evidence</th><th>Status</th></tr></thead><tbody>
+        <% current_lines.each do |line| %><tr>
+          <td><%= line.due_date.to_fs(:long) %></td>
+          <td>PO <%= line.contract_schedule.contract_performance_obligation.obligation_no %></td>
+          <td><%= money_amount(line.amount_minor, currency: line.contract_schedule.currency) %></td>
+          <td><%= line.contract_milestone ? "#{line.contract_milestone.description} · #{line.contract_milestone.status.humanize}" : "Time elapsed" %></td>
+          <td><span class="<%= status_class(line.status) %>"><%= line.status.humanize %></span></td>
+        </tr><% end %>
+      </tbody></table></div>
+    <% end %>
+  </section>
+
+  <% if permitted?("contracts.post") && @contract.status == "active" && @schedules.any? { |schedule| schedule.status == "current" } %>
+    <section class="panel form-panel">
+      <div class="panel__header"><div><p class="eyebrow">Controlled posting run</p><h2>Recognize due revenue</h2></div></div>
+      <p>Simulation shows the deferred-revenue release and unbilled-receivable split without touching the ledger. Posting writes one idempotent ledger event per eligible schedule line.</p>
+      <div class="split-actions">
+        <% %w[simulate post].each do |mode| %>
+          <%= form_with url: run_revenue_recognition_contract_path(@contract, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+            <%= hidden_field_tag :mode, mode %><%= hidden_field_tag :idempotency_key, SecureRandom.uuid %>
+            <%= form.label :posting_date, mode == "simulate" ? "Through date" : "Posting date" %>
+            <%= form.date_field :posting_date, value: business_date, required: true %>
+            <%= form.submit mode == "simulate" ? "Simulate due revenue" : "Post due revenue",
+              class: mode == "simulate" ? "button button--quiet" : "button button--primary",
+              data: (mode == "post" ? { turbo_confirm: "Post every eligible revenue schedule line through this date?" } : {}) %>
+          <% end %>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
+
+  <% if @posting_runs.any? %>
+    <section class="panel panel--table">
+      <div class="panel__header"><div><p class="eyebrow">Run evidence</p><h2>Revenue posting history</h2></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Created</th><th>Mode</th><th>Through</th><th>Status</th><th>Revenue</th><th>Deferred / unbilled</th></tr></thead><tbody>
+        <% @posting_runs.each do |run| %><tr>
+          <td><%= run.created_at.to_fs(:long) %></td><td><%= run.mode.humanize %></td><td><%= run.posting_date.to_fs(:long) %></td>
+          <td><span class="<%= status_class(run.status) %>"><%= run.status.humanize %></span></td>
+          <td><%= money_amount(run.result.fetch("revenue_minor", 0), currency: @contract.currency) %></td>
+          <td><%= money_amount(run.result.fetch("contract_liability_minor", 0), currency: @contract.currency) %> / <%= money_amount(run.result.fetch("contract_asset_minor", 0), currency: @contract.currency) %></td>
+        </tr><% end %>
+      </tbody></table></div>
+    </section>
+  <% end %>
+
   <% if permitted?("contracts.approve") %>
     <section class="panel form-panel">
       <div class="panel__header"><div><p class="eyebrow">Governed lifecycle</p><h2>Next transition</h2></div></div>

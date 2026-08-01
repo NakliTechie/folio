@@ -10,6 +10,7 @@ class Document < ApplicationRecord
   belongs_to :document_type
   belongs_to :party, optional: true
   belongs_to :tax_registration, optional: true
+  belongs_to :contract, optional: true
   belongs_to :credit_note_for, class_name: "Document", foreign_key: :credit_note_for_document_id, optional: true
   belongs_to :debit_note_for, class_name: "Document", foreign_key: :debit_note_for_document_id, optional: true
   belongs_to :reverses, class_name: "Document", foreign_key: :reverses_document_id, optional: true
@@ -28,6 +29,7 @@ class Document < ApplicationRecord
   validates :state, inclusion: { in: STATES }
   validate :document_type_matches_document
   validate :invoice_totals_are_consistent
+  validate :contract_scope_is_valid
 
   def posted? = state == "posted"
   def postable? = %w[draft parked].include?(state)
@@ -71,5 +73,15 @@ class Document < ApplicationRecord
     return if subtotal_minor.to_i.positive? && tax_minor.to_i >= 0 && total_minor == subtotal_minor + tax_minor
 
     errors.add(:total_minor, "must equal the positive subtotal plus tax")
+  end
+
+  def contract_scope_is_valid
+    return unless contract
+
+    unless contract.tenant_id == tenant_id && contract.entity_id == entity_id &&
+        contract.office_id == office_id && contract.party_id == party_id
+      errors.add(:contract, "must belong to the same company, office, and customer")
+    end
+    errors.add(:contract, "must use the document currency") if currency && contract.currency != currency
   end
 end

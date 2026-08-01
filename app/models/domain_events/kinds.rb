@@ -24,6 +24,11 @@ module DomainEvents
       "contract.activated"  => "A signed contract became active (obligations begin).",
       "contract.amended"    => "An active contract was amended.",
       "contract.closed"     => "A contract reached the end of its lifecycle.",
+      "contract.performance_obligation_added" => "A performance obligation was identified.",
+      "contract.milestone_added" => "A recognition or billing milestone was identified.",
+      "contract.milestone_achieved" => "A governed contract milestone was achieved.",
+      "contract.transaction_price_allocated" => "The transaction price was allocated to obligations.",
+      "contract.revenue_schedule_generated" => "A versioned revenue schedule was generated.",
 
       # --- procurement / vendor management (Batch 9) ---
       "purchase_order.raised"   => "A purchase order was raised.",
