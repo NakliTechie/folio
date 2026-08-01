@@ -49,7 +49,10 @@ Rails.application.routes.draw do
     post :create_warehouse
   end
   resources :fixed_assets, path: "fixed-assets", only: %i[index create] do
-    member { post :acquire }
+    member do
+      post :acquire
+      post :retire
+    end
     collection do
       post :create_class
       post :run_depreciation

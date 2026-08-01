@@ -5,15 +5,23 @@ module Contracts
     module_function
 
     def call(contract:, actor:, effective_date:, trigger: "initial")
+      unless trigger.to_s == "initial"
+        raise InvalidContract, "contract modifications are not supported in this release"
+      end
+
       Contract.transaction do
         contract.lock!
+        if contract.contract_allocation_runs.exists?
+          raise InvalidContract,
+            "transaction price is already allocated; contract modifications are not supported in this release"
+        end
         obligations = contract.contract_performance_obligations.in_number_order.lock.to_a
         raise InvalidContract, "add at least one performance obligation before allocating" if obligations.empty?
 
         total_ssp = obligations.sum(&:standalone_selling_price_minor)
         raise InvalidContract, "the total standalone selling price must be greater than zero" unless total_ssp.positive?
 
-        version = contract.contract_allocation_runs.maximum(:version).to_i + 1
+        version = 1
         allocations = allocate_exactly(contract.total_contract_value_minor, obligations, total_ssp)
         event = DomainEvents::Record.call(
           tenant_id: contract.tenant_id, office_id: contract.office_id,

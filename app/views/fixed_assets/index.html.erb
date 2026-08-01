@@ -83,6 +83,18 @@
                 <%= form.submit "Capitalize", class: "button button--quiet" %>
               <% end %>
             </td></tr>
+          <% elsif asset.status == "active" && permitted?("assets.post") %>
+            <tr><td colspan="8">
+              <%= form_with scope: :retirement, url: retire_fixed_asset_path(asset, tenant_route_options), method: :post, class: "inline-form" do |form| %>
+                <%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %>
+                <%= form.label :retirement_date %><%= form.date_field :retirement_date, value: business_date, required: true %>
+                <%= form.label :proceeds %><%= form.number_field :proceeds, min: 0, step: 0.01, value: 0, required: true %>
+                <%= form.label :proceeds_account_code, "Proceeds account" %><%= form.select :proceeds_account_code, @asset_accounts.map { |account| ["#{account.code} · #{account.name}", account.code] }, include_blank: "None for zero proceeds" %>
+                <%= form.label :reason %><%= form.text_field :reason, required: true, maxlength: 200 %>
+                <%= form.submit "Retire component", class: "button button--quiet", data: { turbo_confirm: "Retire this complete component and clear its carrying amount?" } %>
+              <% end %>
+              <small>Run depreciation through the retirement date first. Partial retirements require a separate component.</small>
+            </td></tr>
           <% end %>
         <% end %>
       </tbody></table></div>

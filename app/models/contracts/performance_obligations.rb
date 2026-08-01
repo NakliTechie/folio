@@ -14,6 +14,10 @@ module Contracts
       Contract.transaction do
         contract.lock!
         raise InvalidContract, "performance obligations can only be added to a draft contract" unless contract.status == "draft"
+        if contract.contract_allocation_runs.exists?
+          raise InvalidContract,
+            "allocated performance obligations are frozen; create a replacement contract for changed promises"
+        end
 
         obligation = contract.contract_performance_obligations.create!(
           attributes.to_h.symbolize_keys.slice(*ATTRIBUTES).merge(

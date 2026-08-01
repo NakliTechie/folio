@@ -121,7 +121,7 @@ class ContractsController < BrowserController
     run = Contracts::AllocateTransactionPrice.call(
       contract: @contract, actor: Current.user,
       effective_date: params[:effective_date].presence || business_date,
-      trigger: @contract.contract_allocation_runs.exists? ? "modification" : "initial"
+      trigger: "initial"
     )
     redirect_to contract_path(@contract, tenant_route_options),
       notice: "Transaction price allocated in version #{run.version}."

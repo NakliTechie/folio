@@ -308,7 +308,7 @@ CREATE TABLE public.access_review_attestations (
     notes text NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT access_review_attestations_outcome_valid CHECK (((outcome)::text = ANY ((ARRAY['approved'::character varying, 'remediation_required'::character varying])::text[])))
+    CONSTRAINT access_review_attestations_outcome_valid CHECK (((outcome)::text = ANY (ARRAY[('approved'::character varying)::text, ('remediation_required'::character varying)::text])))
 );
 
 
@@ -541,8 +541,8 @@ CREATE TABLE public.allocation_runs (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT allocation_runs_amount_nonnegative CHECK ((allocated_amount_minor >= 0)),
     CONSTRAINT allocation_runs_dates_valid CHECK ((through_date >= period_start)),
-    CONSTRAINT allocation_runs_mode_valid CHECK (((mode)::text = ANY ((ARRAY['simulate'::character varying, 'post'::character varying])::text[]))),
-    CONSTRAINT allocation_runs_status_valid CHECK (((status)::text = ANY ((ARRAY['simulated'::character varying, 'posted'::character varying])::text[])))
+    CONSTRAINT allocation_runs_mode_valid CHECK (((mode)::text = ANY (ARRAY[('simulate'::character varying)::text, ('post'::character varying)::text]))),
+    CONSTRAINT allocation_runs_status_valid CHECK (((status)::text = ANY (ARRAY[('simulated'::character varying)::text, ('posted'::character varying)::text])))
 );
 
 
@@ -640,8 +640,8 @@ CREATE TABLE public.asset_transactions (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT asset_transactions_amount_positive CHECK ((amount_minor > 0)),
-    CONSTRAINT asset_transactions_code_valid CHECK (((valuation_code)::text = ANY ((ARRAY['BOOK'::character varying, 'TAX_IT'::character varying])::text[]))),
-    CONSTRAINT asset_transactions_type_valid CHECK (((transaction_type)::text = ANY ((ARRAY['acquisition'::character varying, 'depreciation'::character varying])::text[])))
+    CONSTRAINT asset_transactions_code_valid CHECK (((valuation_code)::text = ANY (ARRAY[('BOOK'::character varying)::text, ('TAX_IT'::character varying)::text]))),
+    CONSTRAINT asset_transactions_type_valid CHECK (((transaction_type)::text = ANY ((ARRAY['acquisition'::character varying, 'depreciation'::character varying, 'retirement'::character varying])::text[])))
 );
 
 
@@ -684,7 +684,7 @@ CREATE TABLE public.asset_valuation_terms (
     valid_to date,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT asset_valuation_terms_code_valid CHECK (((valuation_code)::text = ANY ((ARRAY['BOOK'::character varying, 'TAX_IT'::character varying])::text[]))),
+    CONSTRAINT asset_valuation_terms_code_valid CHECK (((valuation_code)::text = ANY (ARRAY[('BOOK'::character varying)::text, ('TAX_IT'::character varying)::text]))),
     CONSTRAINT asset_valuation_terms_life_positive CHECK ((useful_life_months > 0)),
     CONSTRAINT asset_valuation_terms_method_valid CHECK (((depreciation_method)::text = 'straight_line'::text)),
     CONSTRAINT asset_valuation_terms_range_valid CHECK (((valid_to IS NULL) OR (valid_to >= valid_from))),
@@ -728,7 +728,7 @@ CREATE TABLE public.asset_valuations (
     lock_version bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT asset_valuations_code_valid CHECK (((valuation_code)::text = ANY ((ARRAY['BOOK'::character varying, 'TAX_IT'::character varying])::text[]))),
+    CONSTRAINT asset_valuations_code_valid CHECK (((valuation_code)::text = ANY (ARRAY[('BOOK'::character varying)::text, ('TAX_IT'::character varying)::text]))),
     CONSTRAINT asset_valuations_values_coherent CHECK (((gross_block_minor >= 0) AND (accumulated_depreciation_minor >= 0) AND (accumulated_depreciation_minor <= gross_block_minor)))
 );
 
@@ -780,7 +780,7 @@ CREATE TABLE public.bank_statement_imports (
     CONSTRAINT bank_statement_imports_period_valid CHECK ((statement_to >= statement_from)),
     CONSTRAINT bank_statement_imports_reconciliation_coherent CHECK (((((status)::text = 'imported'::text) AND (reconciled_domain_event_id IS NULL) AND (reconciled_at IS NULL)) OR (((status)::text = 'reconciled'::text) AND (reconciled_domain_event_id IS NOT NULL) AND (reconciled_at IS NOT NULL)))),
     CONSTRAINT bank_statement_imports_row_count_positive CHECK ((row_count > 0)),
-    CONSTRAINT bank_statement_imports_status_valid CHECK (((status)::text = ANY ((ARRAY['imported'::character varying, 'reconciled'::character varying])::text[])))
+    CONSTRAINT bank_statement_imports_status_valid CHECK (((status)::text = ANY (ARRAY[('imported'::character varying)::text, ('reconciled'::character varying)::text])))
 );
 
 
@@ -829,11 +829,11 @@ CREATE TABLE public.bank_statement_lines (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT bank_statement_lines_amount_nonzero CHECK ((amount_minor <> 0)),
-    CONSTRAINT bank_statement_lines_match_method_valid CHECK (((match_method IS NULL) OR ((match_method)::text = ANY ((ARRAY['exact'::character varying, 'manual'::character varying])::text[])))),
+    CONSTRAINT bank_statement_lines_match_method_valid CHECK (((match_method IS NULL) OR ((match_method)::text = ANY (ARRAY[('exact'::character varying)::text, ('manual'::character varying)::text])))),
     CONSTRAINT bank_statement_lines_matched_line_positive CHECK (((matched_entry_line_no IS NULL) OR (matched_entry_line_no > 0))),
     CONSTRAINT bank_statement_lines_number_positive CHECK ((line_no > 0)),
     CONSTRAINT bank_statement_lines_resolution_coherent CHECK (((((status)::text = 'unmatched'::text) AND (match_method IS NULL) AND (matched_ledger_event_id IS NULL) AND (matched_entry_line_no IS NULL) AND (matched_by_id IS NULL) AND (matched_at IS NULL) AND (ignore_reason IS NULL)) OR (((status)::text = 'matched'::text) AND (match_method IS NOT NULL) AND (matched_ledger_event_id IS NOT NULL) AND (matched_entry_line_no IS NOT NULL) AND (matched_by_id IS NOT NULL) AND (matched_at IS NOT NULL) AND (ignore_reason IS NULL)) OR (((status)::text = 'ignored'::text) AND (match_method IS NULL) AND (matched_ledger_event_id IS NULL) AND (matched_entry_line_no IS NULL) AND (matched_by_id IS NULL) AND (matched_at IS NULL) AND (ignore_reason IS NOT NULL)))),
-    CONSTRAINT bank_statement_lines_status_valid CHECK (((status)::text = ANY ((ARRAY['unmatched'::character varying, 'matched'::character varying, 'ignored'::character varying])::text[])))
+    CONSTRAINT bank_statement_lines_status_valid CHECK (((status)::text = ANY (ARRAY[('unmatched'::character varying)::text, ('matched'::character varying)::text, ('ignored'::character varying)::text])))
 );
 
 
@@ -1070,7 +1070,7 @@ CREATE TABLE public.contract_milestones (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT contract_milestones_amount_nonnegative CHECK ((recognition_amount_minor >= 0)),
     CONSTRAINT contract_milestones_number_positive CHECK ((milestone_no > 0)),
-    CONSTRAINT contract_milestones_status_valid CHECK (((status)::text = ANY ((ARRAY['planned'::character varying, 'achieved'::character varying, 'cancelled'::character varying])::text[])))
+    CONSTRAINT contract_milestones_status_valid CHECK (((status)::text = ANY (ARRAY[('planned'::character varying)::text, ('achieved'::character varying)::text, ('cancelled'::character varying)::text])))
 );
 
 
@@ -1154,7 +1154,7 @@ CREATE TABLE public.contract_performance_obligations (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT contract_obligations_number_positive CHECK ((obligation_no > 0)),
-    CONSTRAINT contract_obligations_satisfaction_valid CHECK (((satisfaction)::text = ANY ((ARRAY['point_in_time'::character varying, 'over_time'::character varying])::text[]))),
+    CONSTRAINT contract_obligations_satisfaction_valid CHECK (((satisfaction)::text = ANY (ARRAY[('point_in_time'::character varying)::text, ('over_time'::character varying)::text]))),
     CONSTRAINT contract_obligations_ssp_nonnegative CHECK ((standalone_selling_price_minor >= 0))
 );
 
@@ -1192,7 +1192,7 @@ CREATE TABLE public.contract_posting_run_items (
     error_message character varying,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT contract_posting_run_items_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'simulated'::character varying, 'posted'::character varying, 'skipped'::character varying, 'failed'::character varying])::text[])))
+    CONSTRAINT contract_posting_run_items_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('simulated'::character varying)::text, ('posted'::character varying)::text, ('skipped'::character varying)::text, ('failed'::character varying)::text])))
 );
 
 
@@ -1236,8 +1236,8 @@ CREATE TABLE public.contract_posting_runs (
     error_message character varying,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT contract_posting_runs_mode_valid CHECK (((mode)::text = ANY ((ARRAY['simulate'::character varying, 'post'::character varying])::text[]))),
-    CONSTRAINT contract_posting_runs_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'running'::character varying, 'simulated'::character varying, 'posted'::character varying, 'failed'::character varying])::text[]))),
+    CONSTRAINT contract_posting_runs_mode_valid CHECK (((mode)::text = ANY (ARRAY[('simulate'::character varying)::text, ('post'::character varying)::text]))),
+    CONSTRAINT contract_posting_runs_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('running'::character varying)::text, ('simulated'::character varying)::text, ('posted'::character varying)::text, ('failed'::character varying)::text]))),
     CONSTRAINT contract_posting_runs_type_valid CHECK (((run_type)::text = 'revenue_recognition'::text))
 );
 
@@ -1285,7 +1285,7 @@ CREATE TABLE public.contract_schedule_lines (
     CONSTRAINT contract_schedule_lines_amount_nonnegative CHECK ((amount_minor >= 0)),
     CONSTRAINT contract_schedule_lines_period_valid CHECK ((period_end >= period_start)),
     CONSTRAINT contract_schedule_lines_sequence_positive CHECK ((sequence > 0)),
-    CONSTRAINT contract_schedule_lines_status_valid CHECK (((status)::text = ANY ((ARRAY['planned'::character varying, 'posted'::character varying, 'superseded'::character varying])::text[])))
+    CONSTRAINT contract_schedule_lines_status_valid CHECK (((status)::text = ANY (ARRAY[('planned'::character varying)::text, ('posted'::character varying)::text, ('superseded'::character varying)::text])))
 );
 
 
@@ -1330,8 +1330,8 @@ CREATE TABLE public.contract_schedules (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT contract_schedules_kind_valid CHECK (((kind)::text = 'revenue'::text)),
-    CONSTRAINT contract_schedules_method_valid CHECK (((method)::text = ANY ((ARRAY['straight_line'::character varying, 'milestone'::character varying])::text[]))),
-    CONSTRAINT contract_schedules_status_valid CHECK (((status)::text = ANY ((ARRAY['current'::character varying, 'superseded'::character varying])::text[]))),
+    CONSTRAINT contract_schedules_method_valid CHECK (((method)::text = ANY (ARRAY[('straight_line'::character varying)::text, ('milestone'::character varying)::text]))),
+    CONSTRAINT contract_schedules_status_valid CHECK (((status)::text = ANY (ARRAY[('current'::character varying)::text, ('superseded'::character varying)::text]))),
     CONSTRAINT contract_schedules_version_positive CHECK ((version > 0))
 );
 
@@ -1405,15 +1405,15 @@ CREATE TABLE public.contracts (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT contracts_accounting_treatment_valid CHECK (((accounting_treatment)::text = ANY ((ARRAY['none'::character varying, 'revenue_115'::character varying, 'prepaid'::character varying, 'commitment'::character varying])::text[]))),
-    CONSTRAINT contracts_registration_status_valid CHECK (((registration_status)::text = ANY ((ARRAY['not_required'::character varying, 'pending'::character varying, 'registered'::character varying, 'overdue'::character varying])::text[]))),
+    CONSTRAINT contracts_accounting_treatment_valid CHECK (((accounting_treatment)::text = ANY (ARRAY[('none'::character varying)::text, ('revenue_115'::character varying)::text, ('prepaid'::character varying)::text, ('commitment'::character varying)::text]))),
+    CONSTRAINT contracts_registration_status_valid CHECK (((registration_status)::text = ANY (ARRAY[('not_required'::character varying)::text, ('pending'::character varying)::text, ('registered'::character varying)::text, ('overdue'::character varying)::text]))),
     CONSTRAINT contracts_renewal_notice_nonnegative CHECK (((renewal_notice_days IS NULL) OR (renewal_notice_days >= 0))),
-    CONSTRAINT contracts_side_valid CHECK (((side)::text = ANY ((ARRAY['sell'::character varying, 'buy'::character varying, 'mutual'::character varying, 'internal'::character varying])::text[]))),
-    CONSTRAINT contracts_signature_status_valid CHECK (((signature_status)::text = ANY ((ARRAY['unsigned'::character varying, 'partially_signed'::character varying, 'signed'::character varying])::text[]))),
+    CONSTRAINT contracts_side_valid CHECK (((side)::text = ANY (ARRAY[('sell'::character varying)::text, ('buy'::character varying)::text, ('mutual'::character varying)::text, ('internal'::character varying)::text]))),
+    CONSTRAINT contracts_signature_status_valid CHECK (((signature_status)::text = ANY (ARRAY[('unsigned'::character varying)::text, ('partially_signed'::character varying)::text, ('signed'::character varying)::text]))),
     CONSTRAINT contracts_stamp_amount_nonnegative CHECK (((stamp_amount_minor IS NULL) OR (stamp_amount_minor >= 0))),
-    CONSTRAINT contracts_stamp_status_valid CHECK (((stamp_status)::text = ANY ((ARRAY['not_applicable'::character varying, 'pending'::character varying, 'stamped'::character varying, 'under_stamped'::character varying])::text[]))),
-    CONSTRAINT contracts_status_valid CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'signed'::character varying, 'active'::character varying, 'closed'::character varying])::text[]))),
-    CONSTRAINT contracts_term_type_valid CHECK (((term_type)::text = ANY ((ARRAY['fixed'::character varying, 'evergreen'::character varying, 'auto_renew'::character varying, 'perpetual'::character varying, 'at_will'::character varying])::text[]))),
+    CONSTRAINT contracts_stamp_status_valid CHECK (((stamp_status)::text = ANY (ARRAY[('not_applicable'::character varying)::text, ('pending'::character varying)::text, ('stamped'::character varying)::text, ('under_stamped'::character varying)::text]))),
+    CONSTRAINT contracts_status_valid CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('signed'::character varying)::text, ('active'::character varying)::text, ('closed'::character varying)::text]))),
+    CONSTRAINT contracts_term_type_valid CHECK (((term_type)::text = ANY (ARRAY[('fixed'::character varying)::text, ('evergreen'::character varying)::text, ('auto_renew'::character varying)::text, ('perpetual'::character varying)::text, ('at_will'::character varying)::text]))),
     CONSTRAINT contracts_total_value_nonnegative CHECK ((total_contract_value_minor >= 0))
 );
 
@@ -1569,8 +1569,8 @@ CREATE TABLE public.depreciation_runs (
     result jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT depreciation_runs_mode_valid CHECK (((mode)::text = ANY ((ARRAY['simulate'::character varying, 'post'::character varying])::text[]))),
-    CONSTRAINT depreciation_runs_status_valid CHECK (((status)::text = ANY ((ARRAY['simulated'::character varying, 'posted'::character varying])::text[])))
+    CONSTRAINT depreciation_runs_mode_valid CHECK (((mode)::text = ANY (ARRAY[('simulate'::character varying)::text, ('post'::character varying)::text]))),
+    CONSTRAINT depreciation_runs_status_valid CHECK (((status)::text = ANY (ARRAY[('simulated'::character varying)::text, ('posted'::character varying)::text])))
 );
 
 
@@ -1652,7 +1652,7 @@ CREATE TABLE public.document_allocations (
     target_reset_event_id bigint,
     settlement_reset_event_id bigint,
     target_ledger_id bigint NOT NULL,
-    CONSTRAINT chk_document_allocations_mode CHECK (((clearing_mode)::text = ANY ((ARRAY['partial'::character varying, 'residual'::character varying])::text[]))),
+    CONSTRAINT chk_document_allocations_mode CHECK (((clearing_mode)::text = ANY (ARRAY[('partial'::character varying)::text, ('residual'::character varying)::text]))),
     CONSTRAINT chk_document_allocations_positive CHECK ((amount_minor > 0))
 );
 
@@ -1820,10 +1820,10 @@ CREATE TABLE public.documents (
     contract_id bigint,
     contract_snapshot jsonb,
     purchase_order_id bigint,
-    CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY ((ARRAY['value_reduction'::character varying, 'service_deficiency'::character varying, 'return'::character varying, 'other'::character varying, 'quantity_underbilling'::character varying])::text[])))),
+    CONSTRAINT chk_documents_adjustment_reason CHECK (((reason_code IS NULL) OR ((reason_code)::text = ANY (ARRAY[('value_reduction'::character varying)::text, ('service_deficiency'::character varying)::text, ('return'::character varying)::text, ('other'::character varying)::text, ('quantity_underbilling'::character varying)::text])))),
     CONSTRAINT chk_documents_invoice_totals CHECK (((subtotal_minor IS NULL) OR ((subtotal_minor > 0) AND (tax_minor >= 0) AND (total_minor = (subtotal_minor + tax_minor))))),
-    CONSTRAINT chk_documents_state CHECK (((state)::text = ANY ((ARRAY['draft'::character varying, 'parked'::character varying, 'posted'::character varying, 'reversed'::character varying])::text[]))),
-    CONSTRAINT chk_documents_supply_type CHECK (((supply_type IS NULL) OR ((supply_type)::text = ANY ((ARRAY['B2B'::character varying, 'B2C'::character varying])::text[])))),
+    CONSTRAINT chk_documents_state CHECK (((state)::text = ANY (ARRAY[('draft'::character varying)::text, ('parked'::character varying)::text, ('posted'::character varying)::text, ('reversed'::character varying)::text]))),
+    CONSTRAINT chk_documents_supply_type CHECK (((supply_type IS NULL) OR ((supply_type)::text = ANY (ARRAY[('B2B'::character varying)::text, ('B2C'::character varying)::text])))),
     CONSTRAINT chk_documents_tds_amounts_nonneg CHECK (((tds_rate_basis_points >= 0) AND (tds_taxable_minor >= 0) AND (tds_prior_taxable_minor >= 0) AND (tds_prior_deducted_base_minor >= 0) AND (tds_deductible_base_minor >= 0) AND (tds_minor >= 0))),
     CONSTRAINT chk_documents_tds_snapshot_complete CHECK ((((tds_section IS NULL) AND (tds_statutory_reference IS NULL) AND (tds_base_basis IS NULL) AND (tds_trigger_event IS NULL) AND (tds_rate_basis_points = 0) AND (tds_taxable_minor = 0) AND (tds_prior_taxable_minor = 0) AND (tds_prior_deducted_base_minor = 0) AND (tds_deductible_base_minor = 0) AND (tds_minor = 0)) OR ((tds_section IS NOT NULL) AND (tds_statutory_reference IS NOT NULL) AND (tds_base_basis IS NOT NULL) AND (tds_trigger_event IS NOT NULL) AND (tds_taxable_minor > 0) AND (tds_minor <= tds_deductible_base_minor))))
 );
@@ -1920,8 +1920,8 @@ CREATE TABLE public.einvoice_cancellations (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT einvoice_cancellations_attempt_count_nonnegative CHECK ((attempt_count >= 0)),
     CONSTRAINT einvoice_cancellations_evidence_complete CHECK ((((status)::text <> 'cancelled'::text) OR ((cancelled_at IS NOT NULL) AND (provider_response IS NOT NULL) AND (provider_response_sha256 IS NOT NULL)))),
-    CONSTRAINT einvoice_cancellations_reason_valid CHECK (((reason_code)::text = ANY ((ARRAY['1'::character varying, '2'::character varying])::text[]))),
-    CONSTRAINT einvoice_cancellations_status_valid CHECK (((status)::text = ANY ((ARRAY['prepared'::character varying, 'submitting'::character varying, 'cancelled'::character varying, 'rejected'::character varying, 'indeterminate'::character varying])::text[])))
+    CONSTRAINT einvoice_cancellations_reason_valid CHECK (((reason_code)::text = ANY (ARRAY[('1'::character varying)::text, ('2'::character varying)::text]))),
+    CONSTRAINT einvoice_cancellations_status_valid CHECK (((status)::text = ANY (ARRAY[('prepared'::character varying)::text, ('submitting'::character varying)::text, ('cancelled'::character varying)::text, ('rejected'::character varying)::text, ('indeterminate'::character varying)::text])))
 );
 
 
@@ -1976,8 +1976,8 @@ CREATE TABLE public.einvoice_submissions (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT einvoice_submissions_ack_evidence_complete CHECK ((((status)::text <> 'acknowledged'::text) OR ((irn IS NOT NULL) AND (ack_number IS NOT NULL) AND (acknowledged_at IS NOT NULL) AND (signed_invoice IS NOT NULL) AND (signed_qr_code IS NOT NULL) AND (provider_response IS NOT NULL) AND (provider_response_sha256 IS NOT NULL)))),
     CONSTRAINT einvoice_submissions_attempt_count_nonnegative CHECK ((attempt_count >= 0)),
-    CONSTRAINT einvoice_submissions_signature_status_valid CHECK (((signature_status)::text = ANY ((ARRAY['not_checked'::character varying, 'provider_verified'::character varying, 'locally_verified'::character varying, 'failed'::character varying])::text[]))),
-    CONSTRAINT einvoice_submissions_status_valid CHECK (((status)::text = ANY ((ARRAY['prepared'::character varying, 'submitting'::character varying, 'acknowledged'::character varying, 'rejected'::character varying, 'indeterminate'::character varying])::text[])))
+    CONSTRAINT einvoice_submissions_signature_status_valid CHECK (((signature_status)::text = ANY (ARRAY[('not_checked'::character varying)::text, ('provider_verified'::character varying)::text, ('locally_verified'::character varying)::text, ('failed'::character varying)::text]))),
+    CONSTRAINT einvoice_submissions_status_valid CHECK (((status)::text = ANY (ARRAY[('prepared'::character varying)::text, ('submitting'::character varying)::text, ('acknowledged'::character varying)::text, ('rejected'::character varying)::text, ('indeterminate'::character varying)::text])))
 );
 
 
@@ -2146,7 +2146,7 @@ CREATE TABLE public.entry_lines (
     fixed_asset_id bigint,
     asset_value_date date,
     account_name character varying,
-    CONSTRAINT chk_entry_lines_tax_component CHECK (((tax_component IS NULL) OR ((tax_component)::text = ANY ((ARRAY['cgst'::character varying, 'sgst'::character varying, 'utgst'::character varying, 'igst'::character varying, 'cess'::character varying])::text[]))))
+    CONSTRAINT chk_entry_lines_tax_component CHECK (((tax_component IS NULL) OR ((tax_component)::text = ANY (ARRAY[('cgst'::character varying)::text, ('sgst'::character varying)::text, ('utgst'::character varying)::text, ('igst'::character varying)::text, ('cess'::character varying)::text]))))
 );
 
 
@@ -2187,7 +2187,7 @@ CREATE TABLE public.exchange_rates (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT exchange_rates_distinct_currencies CHECK (((from_currency)::text <> (to_currency)::text)),
     CONSTRAINT exchange_rates_positive CHECK ((rate > (0)::numeric)),
-    CONSTRAINT exchange_rates_type_valid CHECK (((rate_type)::text = ANY ((ARRAY['spot'::character varying, 'closing'::character varying, 'average'::character varying])::text[])))
+    CONSTRAINT exchange_rates_type_valid CHECK (((rate_type)::text = ANY (ARRAY[('spot'::character varying)::text, ('closing'::character varying)::text, ('average'::character varying)::text])))
 );
 
 
@@ -2270,8 +2270,8 @@ CREATE TABLE public.exchange_revaluation_runs (
     error_message character varying,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT exchange_revaluation_runs_mode_valid CHECK (((mode)::text = ANY ((ARRAY['simulate'::character varying, 'post'::character varying])::text[]))),
-    CONSTRAINT exchange_revaluation_runs_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'simulated'::character varying, 'posted'::character varying, 'failed'::character varying])::text[])))
+    CONSTRAINT exchange_revaluation_runs_mode_valid CHECK (((mode)::text = ANY (ARRAY[('simulate'::character varying)::text, ('post'::character varying)::text]))),
+    CONSTRAINT exchange_revaluation_runs_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('simulated'::character varying)::text, ('posted'::character varying)::text, ('failed'::character varying)::text])))
 );
 
 
@@ -2380,8 +2380,8 @@ CREATE TABLE public.financial_statement_sections (
     sort_order integer NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT chk_statement_sections_normal_balance CHECK (((normal_balance)::text = ANY ((ARRAY['debit'::character varying, 'credit'::character varying])::text[]))),
-    CONSTRAINT chk_statement_sections_type CHECK (((statement_type)::text = ANY ((ARRAY['balance_sheet'::character varying, 'profit_and_loss'::character varying])::text[])))
+    CONSTRAINT chk_statement_sections_normal_balance CHECK (((normal_balance)::text = ANY (ARRAY[('debit'::character varying)::text, ('credit'::character varying)::text]))),
+    CONSTRAINT chk_statement_sections_type CHECK (((statement_type)::text = ANY (ARRAY[('balance_sheet'::character varying)::text, ('profit_and_loss'::character varying)::text])))
 );
 
 
@@ -2419,7 +2419,7 @@ CREATE TABLE public.financial_statement_versions (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT chk_statement_versions_dates CHECK (((effective_to IS NULL) OR (effective_to >= effective_from))),
-    CONSTRAINT chk_statement_versions_status CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'active'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT chk_statement_versions_status CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('active'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -2469,8 +2469,9 @@ CREATE TABLE public.fixed_assets (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    retired_on date,
     CONSTRAINT fixed_assets_quantity_positive CHECK ((quantity > (0)::numeric)),
-    CONSTRAINT fixed_assets_status_valid CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'active'::character varying, 'retired'::character varying])::text[])))
+    CONSTRAINT fixed_assets_status_valid CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('active'::character varying)::text, ('retired'::character varying)::text])))
 );
 
 
@@ -2683,9 +2684,9 @@ CREATE TABLE public.inventory_transactions (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT inventory_transactions_quantity_positive CHECK ((quantity > (0)::numeric)),
-    CONSTRAINT inventory_transactions_type_valid CHECK (((transaction_type)::text = ANY ((ARRAY['receipt'::character varying, 'issue'::character varying, 'transfer'::character varying, 'adjustment_in'::character varying, 'adjustment_out'::character varying])::text[]))),
+    CONSTRAINT inventory_transactions_type_valid CHECK (((transaction_type)::text = ANY (ARRAY[('receipt'::character varying)::text, ('issue'::character varying)::text, ('transfer'::character varying)::text, ('adjustment_in'::character varying)::text, ('adjustment_out'::character varying)::text]))),
     CONSTRAINT inventory_transactions_value_positive CHECK ((total_value_minor > 0)),
-    CONSTRAINT inventory_transactions_warehouse_coherent CHECK (((((transaction_type)::text = ANY ((ARRAY['issue'::character varying, 'adjustment_out'::character varying])::text[])) AND (source_warehouse_id IS NOT NULL) AND (destination_warehouse_id IS NULL) AND (offset_account_code IS NOT NULL)) OR (((transaction_type)::text = ANY ((ARRAY['receipt'::character varying, 'adjustment_in'::character varying])::text[])) AND (source_warehouse_id IS NULL) AND (destination_warehouse_id IS NOT NULL) AND (offset_account_code IS NOT NULL) AND (unit_cost_minor IS NOT NULL)) OR (((transaction_type)::text = 'transfer'::text) AND (source_warehouse_id IS NOT NULL) AND (destination_warehouse_id IS NOT NULL) AND (source_warehouse_id <> destination_warehouse_id) AND (offset_account_code IS NULL))))
+    CONSTRAINT inventory_transactions_warehouse_coherent CHECK (((((transaction_type)::text = ANY (ARRAY[('issue'::character varying)::text, ('adjustment_out'::character varying)::text])) AND (source_warehouse_id IS NOT NULL) AND (destination_warehouse_id IS NULL) AND (offset_account_code IS NOT NULL)) OR (((transaction_type)::text = ANY (ARRAY[('receipt'::character varying)::text, ('adjustment_in'::character varying)::text])) AND (source_warehouse_id IS NULL) AND (destination_warehouse_id IS NOT NULL) AND (offset_account_code IS NOT NULL) AND (unit_cost_minor IS NOT NULL)) OR (((transaction_type)::text = 'transfer'::text) AND (source_warehouse_id IS NOT NULL) AND (destination_warehouse_id IS NOT NULL) AND (source_warehouse_id <> destination_warehouse_id) AND (offset_account_code IS NULL))))
 );
 
 
@@ -2771,8 +2772,8 @@ CREATE TABLE public.items (
     inventory_account_code character varying,
     CONSTRAINT chk_items_cess_rate CHECK (((cess_rate_basis_points >= 0) AND (cess_rate_basis_points <= 10000))),
     CONSTRAINT chk_items_tax_rate CHECK (((tax_rate_basis_points >= 0) AND (tax_rate_basis_points <= 4000))),
-    CONSTRAINT chk_items_type CHECK (((item_type)::text = ANY ((ARRAY['service'::character varying, 'good'::character varying])::text[]))),
-    CONSTRAINT items_inventory_profile_coherent CHECK (((((item_type)::text = 'service'::text) AND (inventory_class IS NULL) AND (revision IS NULL) AND (valuation_method IS NULL) AND (inventory_account_code IS NULL)) OR (((item_type)::text = 'good'::text) AND ((inventory_class)::text = ANY ((ARRAY['raw_material'::character varying, 'wip'::character varying, 'finished_good'::character varying, 'trading'::character varying])::text[])) AND (revision IS NOT NULL) AND ((valuation_method)::text = 'moving_average'::text) AND (inventory_account_code IS NOT NULL))))
+    CONSTRAINT chk_items_type CHECK (((item_type)::text = ANY (ARRAY[('service'::character varying)::text, ('good'::character varying)::text]))),
+    CONSTRAINT items_inventory_profile_coherent CHECK (((((item_type)::text = 'service'::text) AND (inventory_class IS NULL) AND (revision IS NULL) AND (valuation_method IS NULL) AND (inventory_account_code IS NULL)) OR (((item_type)::text = 'good'::text) AND ((inventory_class)::text = ANY (ARRAY[('raw_material'::character varying)::text, ('wip'::character varying)::text, ('finished_good'::character varying)::text, ('trading'::character varying)::text])) AND (revision IS NOT NULL) AND ((valuation_method)::text = 'moving_average'::text) AND (inventory_account_code IS NOT NULL))))
 );
 
 
@@ -2895,7 +2896,7 @@ CREATE TABLE public.khata_import_uploads (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT khata_import_uploads_size_valid CHECK (((archive_bytes IS NULL) OR (octet_length(archive_bytes) <= 104857600))),
-    CONSTRAINT khata_import_uploads_status_valid CHECK (((status)::text = ANY ((ARRAY['queued'::character varying, 'processing'::character varying, 'succeeded'::character varying, 'failed'::character varying])::text[])))
+    CONSTRAINT khata_import_uploads_status_valid CHECK (((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('processing'::character varying)::text, ('succeeded'::character varying)::text, ('failed'::character varying)::text])))
 );
 
 
@@ -3389,7 +3390,7 @@ CREATE TABLE public.procurement_matches (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT procurement_matches_quantity_positive CHECK ((billed_quantity > (0)::numeric)),
-    CONSTRAINT procurement_matches_status_valid CHECK (((status)::text = ANY ((ARRAY['matched'::character varying, 'exception'::character varying])::text[])))
+    CONSTRAINT procurement_matches_status_valid CHECK (((status)::text = ANY (ARRAY[('matched'::character varying)::text, ('exception'::character varying)::text])))
 );
 
 
@@ -3472,7 +3473,7 @@ CREATE TABLE public.purchase_order_lines (
     item_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT purchase_order_lines_item_type_valid CHECK (((item_type)::text = ANY ((ARRAY['service'::character varying, 'good'::character varying])::text[]))),
+    CONSTRAINT purchase_order_lines_item_type_valid CHECK (((item_type)::text = ANY (ARRAY[('service'::character varying)::text, ('good'::character varying)::text]))),
     CONSTRAINT purchase_order_lines_quantity_positive CHECK ((ordered_quantity > (0)::numeric)),
     CONSTRAINT purchase_order_lines_received_coherent CHECK (((received_quantity >= (0)::numeric) AND (received_quantity <= ordered_quantity))),
     CONSTRAINT purchase_order_lines_value_valid CHECK (((unit_price_minor >= 0) AND (line_total_minor > 0)))
@@ -3560,7 +3561,7 @@ CREATE TABLE public.purchase_orders (
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT purchase_orders_status_valid CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'approved'::character varying, 'partially_received'::character varying, 'received'::character varying, 'closed'::character varying])::text[]))),
+    CONSTRAINT purchase_orders_status_valid CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('approved'::character varying)::text, ('partially_received'::character varying)::text, ('received'::character varying)::text, ('closed'::character varying)::text]))),
     CONSTRAINT purchase_orders_subtotal_positive CHECK ((subtotal_minor > 0))
 );
 
@@ -3712,7 +3713,7 @@ CREATE TABLE public.settlement_reallocations (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     target_ledger_id bigint NOT NULL,
-    CONSTRAINT chk_settlement_reallocations_mode CHECK (((clearing_mode)::text = ANY ((ARRAY['partial'::character varying, 'residual'::character varying])::text[]))),
+    CONSTRAINT chk_settlement_reallocations_mode CHECK (((clearing_mode)::text = ANY (ARRAY[('partial'::character varying)::text, ('residual'::character varying)::text]))),
     CONSTRAINT chk_settlement_reallocations_positive CHECK ((amount_minor > 0))
 );
 
@@ -3754,7 +3755,7 @@ CREATE TABLE public.sod_conflict_rules (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT sod_conflict_rules_capabilities_distinct CHECK (((capability_a)::text <> (capability_b)::text)),
-    CONSTRAINT sod_conflict_rules_severity_valid CHECK (((severity)::text = ANY ((ARRAY['critical'::character varying, 'high'::character varying, 'medium'::character varying, 'low'::character varying])::text[])))
+    CONSTRAINT sod_conflict_rules_severity_valid CHECK (((severity)::text = ANY (ARRAY[('critical'::character varying)::text, ('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text])))
 );
 
 
@@ -3887,7 +3888,7 @@ CREATE TABLE public.tds_deductions (
     reverses_tds_deduction_id bigint,
     CONSTRAINT tds_deductions_amounts_nonneg CHECK (((taxable_minor >= 0) AND (tds_minor >= 0))),
     CONSTRAINT tds_deductions_evidence_amounts_valid CHECK (((gross_minor >= 0) AND (gst_minor >= 0) AND (deductible_base_minor >= 0))),
-    CONSTRAINT tds_deductions_kind_valid CHECK (((kind)::text = ANY ((ARRAY['deduction'::character varying, 'reversal'::character varying])::text[]))),
+    CONSTRAINT tds_deductions_kind_valid CHECK (((kind)::text = ANY (ARRAY[('deduction'::character varying)::text, ('reversal'::character varying)::text]))),
     CONSTRAINT tds_deductions_quarter_valid CHECK (((quarter >= 1) AND (quarter <= 4))),
     CONSTRAINT tds_deductions_reversal_link_valid CHECK (((((kind)::text = 'deduction'::text) AND (reverses_tds_deduction_id IS NULL)) OR (((kind)::text = 'reversal'::text) AND (reverses_tds_deduction_id IS NOT NULL))))
 );
@@ -4078,7 +4079,7 @@ CREATE TABLE public.vendor_profiles (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT vendor_profiles_approval_coherent CHECK (((((status)::text = 'approved'::text) AND (spend_authorized = true) AND (approved_by_id IS NOT NULL) AND (approved_at IS NOT NULL)) OR (((status)::text <> 'approved'::text) AND (spend_authorized = false)))),
-    CONSTRAINT vendor_profiles_status_valid CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'suspended'::character varying])::text[]))),
+    CONSTRAINT vendor_profiles_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('approved'::character varying)::text, ('suspended'::character varying)::text]))),
     CONSTRAINT vendor_profiles_terms_nonnegative CHECK ((payment_terms_days >= 0))
 );
 
@@ -4117,7 +4118,7 @@ CREATE TABLE public.warehouses (
     active boolean DEFAULT true NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT warehouses_type_valid CHECK (((warehouse_type)::text = ANY ((ARRAY['general'::character varying, 'raw_material'::character varying, 'wip'::character varying, 'finished_goods'::character varying])::text[])))
+    CONSTRAINT warehouses_type_valid CHECK (((warehouse_type)::text = ANY (ARRAY[('general'::character varying)::text, ('raw_material'::character varying)::text, ('wip'::character varying)::text, ('finished_goods'::character varying)::text])))
 );
 
 
@@ -7219,7 +7220,7 @@ CREATE UNIQUE INDEX index_khata_import_runs_on_tenant_id_and_archive_sha256 ON p
 -- Name: index_khata_import_uploads_on_active_tenant; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX index_khata_import_uploads_on_active_tenant ON public.khata_import_uploads USING btree (tenant_id) WHERE ((status)::text = ANY ((ARRAY['queued'::character varying, 'processing'::character varying])::text[]));
+CREATE UNIQUE INDEX index_khata_import_uploads_on_active_tenant ON public.khata_import_uploads USING btree (tenant_id) WHERE ((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('processing'::character varying)::text]));
 
 
 --
@@ -9317,6 +9318,7 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260802020000'),
 ('20260802011000'),
 ('20260802010000'),
 ('20260801200000'),

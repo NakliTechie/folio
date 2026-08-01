@@ -33,6 +33,7 @@ module DomainEvents
       # --- fixed assets (Batch 9) ---
       "asset.created" => "A fixed-asset component and its valuation terms were created.",
       "asset.acquired" => "A fixed asset was capitalized into its book and tax valuations.",
+      "asset.retired" => "A fixed asset was retired and its carrying amounts were cleared.",
 
       # --- bank reconciliation (Batch 9) ---
       "bank_statement.imported" => "A bank statement was imported with a source fingerprint.",

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class AssetTransaction < ApplicationRecord
-  TYPES = %w[acquisition depreciation].freeze
+  TYPES = %w[acquisition depreciation retirement].freeze
 
   belongs_to :fixed_asset
   belongs_to :asset_valuation

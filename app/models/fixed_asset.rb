@@ -22,6 +22,7 @@ class FixedAsset < ApplicationRecord
   validates :quantity, numericality: { greater_than: 0 }
   validate :scope_matches
   validate :governed_master_stays_stable, on: :update
+  validate :retirement_is_coherent
 
   scope :in_identity_order, -> { order(:asset_number, :component_number) }
 
@@ -44,5 +45,18 @@ class FixedAsset < ApplicationRecord
     stable = %w[tenant_id entity_id office_id asset_class_id asset_number component_number capitalization_date]
     errors.add(:base, "posted asset identity and account determination cannot change") if
       stable.any? { |attribute| will_save_change_to_attribute?(attribute) }
+  end
+
+  def retirement_is_coherent
+    if status == "retired" && retired_on.blank?
+      errors.add(:retired_on, "is required for a retired asset")
+    elsif status != "retired" && retired_on.present?
+      errors.add(:retired_on, "is only allowed for a retired asset")
+    end
+    return unless status_in_database == "retired"
+
+    if will_save_change_to_status? || will_save_change_to_retired_on?
+      errors.add(:base, "asset retirement is immutable")
+    end
   end
 end

@@ -3,7 +3,7 @@
 class FixedAssetsController < BrowserController
   before_action -> { require_capability!("assets.read") }, only: :index
   before_action -> { require_capability!("assets.manage") }, only: %i[create create_class]
-  before_action -> { require_capability!("assets.post") }, only: %i[acquire run_depreciation]
+  before_action -> { require_capability!("assets.post") }, only: %i[acquire retire run_depreciation]
 
   def index
     load_index
@@ -49,6 +49,19 @@ class FixedAssetsController < BrowserController
       notice: "Depreciation #{run.status}: #{run.result.fetch('assetCount')} assets, " \
         "#{helpers.money_amount(run.result.fetch('ledgerAmountMinor'))} to the book ledger."
   rescue ActiveRecord::RecordInvalid, FixedAssets::InvalidAsset,
+         Posting::PeriodClosedError, Posting::PeriodRestrictedError => e
+    render_error(e)
+  end
+
+  def retire
+    asset = asset_scope.find(params[:id])
+    transaction = FixedAssets::Retire.call(
+      asset: asset, actor: Current.user, attributes: retirement_params
+    )
+    redirect_to fixed_assets_path(tenant_route_options),
+      notice: "#{asset.identity} retired; its book carrying amount was cleared. " \
+        "Event #{transaction.ledger_event_id}."
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, FixedAssets::InvalidAsset,
          Posting::PeriodClosedError, Posting::PeriodRestrictedError => e
     render_error(e)
   end
@@ -100,6 +113,13 @@ class FixedAssetsController < BrowserController
 
   def depreciation_params
     params.permit(:through_date, :posting_date, :mode, :idempotency_key)
+  end
+
+  def retirement_params
+    params.require(:retirement).permit(
+      :retirement_date, :proceeds, :proceeds_account_code,
+      :reason, :idempotency_key
+    )
   end
 
   def asset_class_params

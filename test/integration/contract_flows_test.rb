@@ -115,7 +115,7 @@ class ContractFlowsTest < ActionDispatch::IntegrationTest
       end
     end
     assert_equal "simulated", contract.contract_posting_runs.last.status
-    assert_equal 1_000_000, contract.contract_posting_runs.last.result.fetch("contract_asset_minor")
+    assert_equal 986_302, contract.contract_posting_runs.last.result.fetch("contract_asset_minor")
   end
 
   test "contract reads are tenant opaque" do

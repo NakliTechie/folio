@@ -13,6 +13,10 @@ module Contracts
       ContractMilestone.transaction do
         contract = obligation.contract.lock!
         raise InvalidContract, "milestones can only be added to a draft contract" unless contract.status == "draft"
+        if contract.contract_allocation_runs.exists?
+          raise InvalidContract,
+            "allocated recognition evidence is frozen; create a replacement contract for changed milestones"
+        end
         raise InvalidContract, "milestones belong to point-in-time obligations" unless obligation.satisfaction == "point_in_time"
 
         milestone = obligation.contract_milestones.create!(

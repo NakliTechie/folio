@@ -3,7 +3,9 @@
 class ContractPerformanceObligation < ApplicationRecord
   SATISFACTIONS = %w[point_in_time over_time].freeze
   SSP_METHODS = %w[observable adjusted_market residual cost_plus].freeze
-  PROGRESS_MEASURES = %w[time_elapsed output input].freeze
+  # Evidence-driven output/input methods are intentionally not offered until the product
+  # has governed measurement evidence. Time elapsed is implemented as exact day weighting.
+  PROGRESS_MEASURES = %w[time_elapsed].freeze
 
   belongs_to :contract
   has_many :contract_milestones, dependent: :restrict_with_exception

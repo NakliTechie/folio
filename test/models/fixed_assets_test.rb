@@ -91,6 +91,64 @@ class FixedAssetsTest < ActiveSupport::TestCase
         .pluck(:gross_block_minor, :accumulated_depreciation_minor)
   end
 
+  test "complete retirement clears book and tax carrying amounts and posts gain on proceeds" do
+    acquire
+    run_depreciation("post", key: "retirement-depreciation")
+
+    transaction = FixedAssets::Retire.call(
+      asset: @asset, actor: @org.user,
+      attributes: {
+        retirement_date: "2027-03-31", proceeds: "200.00",
+        proceeds_account_code: "1000", reason: "Component sold",
+        idempotency_key: "retire-1"
+      }
+    )
+
+    assert_equal transaction.id, FixedAssets::Retire.call(
+      asset: @asset, actor: @org.user,
+      attributes: {
+        retirement_date: "2027-03-31", proceeds: "200.00",
+        proceeds_account_code: "1000", reason: "Component sold",
+        idempotency_key: "retire-1"
+      }
+    ).id
+    assert_equal [ "retired", Date.new(2027, 3, 31) ], @asset.reload.values_at(:status, :retired_on)
+    assert_equal [ [ 0, 0 ], [ 0, 0 ] ], @asset.asset_valuations.order(:valuation_code)
+      .pluck(:gross_block_minor, :accumulated_depreciation_minor)
+    entry = Entry.find_by!(ledger_event_id: transaction.ledger_event_id)
+    assert_equal [ "1410", "1000", "1400", "4200" ], entry.entry_lines.order(:line_no).pluck(:account_code)
+    amounts = entry.entry_lines.order(:line_no).map do |line|
+      line.amounts.find_by!(slot_role: "transaction").amount_minor
+    end
+    assert_equal [ 108_000, 20_000, -120_000, -8_000 ], amounts
+    assert_equal 2, @asset.asset_transactions.where(transaction_type: "retirement").count
+    assert_equal "asset.retired", DomainEvent.for_tenant(@org.tenant.id).in_order.last.action
+    refute @asset.update(retired_on: Date.new(2027, 4, 1))
+    assert_includes @asset.errors.full_messages.to_sentence, "retirement is immutable"
+
+    @asset.asset_valuations.update_all(gross_block_minor: 1, accumulated_depreciation_minor: 0)
+    FixedAssets::RebuildValuations.call(tenant_id: @org.tenant.id)
+    assert_equal [ [ 0, 0 ], [ 0, 0 ] ], @asset.asset_valuations.order(:valuation_code)
+      .pluck(:gross_block_minor, :accumulated_depreciation_minor)
+  end
+
+  test "retirement requires depreciation through its value date" do
+    acquire
+
+    error = assert_raises(FixedAssets::InvalidAsset) do
+      FixedAssets::Retire.call(
+        asset: @asset, actor: @org.user,
+        attributes: {
+          retirement_date: "2027-03-31", proceeds: "0", reason: "Scrapped",
+          idempotency_key: "stale-retirement"
+        }
+      )
+    end
+
+    assert_match(/run depreciation through/, error.message)
+    assert_equal "active", @asset.reload.status
+  end
+
   test "depreciation cannot book a cumulative target into another accounting date" do
     acquire
 

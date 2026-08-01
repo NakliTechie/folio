@@ -11,10 +11,12 @@ module Contracts
 
         allocation = contract.contract_allocation_runs.in_version_order.last
         raise InvalidContract, "allocate the transaction price before generating schedules" unless allocation
+        assert_allocation_current!(contract, allocation)
 
         current = contract.contract_schedules.current.includes(:contract_schedule_lines).to_a
         if current.any? { |schedule| schedule.contract_schedule_lines.any?(&:posted_ledger_event_id?) }
-          raise InvalidContract, "posted schedules cannot be regenerated; record a contract modification"
+          raise InvalidContract,
+            "posted schedules cannot be regenerated; close this contract and create a replacement for changed terms"
         end
 
         current.each do |schedule|
@@ -34,7 +36,7 @@ module Contracts
       obligation = allocation_line.contract_performance_obligation
       version = obligation.contract_schedules.maximum(:version).to_i + 1
       line_specs = if obligation.over_time?
-        straight_line_specs(contract, obligation, allocation_line.allocated_price_minor)
+        time_elapsed_specs(contract, obligation, allocation_line.allocated_price_minor)
       else
         milestone_specs(contract, obligation, allocation_line.allocated_price_minor)
       end
@@ -68,7 +70,7 @@ module Contracts
       schedule
     end
 
-    def straight_line_specs(contract, obligation, amount)
+    def time_elapsed_specs(contract, obligation, amount)
       start_date = obligation.service_start_date || contract.effective_date
       end_date = obligation.service_end_date || contract.end_date
       raise InvalidContract, "over-time obligations need a service start and end date" unless start_date && end_date
@@ -81,7 +83,7 @@ module Contracts
         periods << [ cursor, period_end ]
         cursor = period_end + 1.day
       end
-      amounts = split_evenly(amount, periods.length)
+      amounts = allocate_by_days(amount, periods)
       periods.each_with_index.map do |(period_start, period_end), index|
         {
           period_start: period_start, period_end: period_end, due_date: period_end,
@@ -116,9 +118,33 @@ module Contracts
       end
     end
 
-    def split_evenly(amount, count)
-      quotient, remainder = amount.divmod(count)
-      Array.new(count) { |index| quotient + (index < remainder ? 1 : 0) }
+    def allocate_by_days(amount, periods)
+      total_days = periods.sum { |start_date, end_date| (end_date - start_date).to_i + 1 }
+      shares = periods.each_with_index.map do |(start_date, end_date), index|
+        days = (end_date - start_date).to_i + 1
+        numerator = amount * days
+        [ index, numerator.div(total_days), numerator % total_days ]
+      end
+      residual = amount - shares.sum { |(_, floor, _)| floor }
+      shares.sort_by { |index, _, remainder| [ -remainder, index ] }
+        .first(residual).each { |share| share[1] += 1 }
+      shares.sort_by(&:first).map { |(_, allocated, _)| allocated }
+    end
+
+    def assert_allocation_current!(contract, allocation)
+      obligations = contract.contract_performance_obligations.in_number_order.to_a
+      lines = allocation.contract_allocation_lines.to_a
+      current_ssp = obligations.sum(&:standalone_selling_price_minor)
+      valid = allocation.transaction_price_minor == contract.total_contract_value_minor &&
+        allocation.total_ssp_minor == current_ssp &&
+        lines.map(&:contract_performance_obligation_id).sort == obligations.map(&:id).sort &&
+        lines.all? do |line|
+          line.standalone_selling_price_minor ==
+            line.contract_performance_obligation.standalone_selling_price_minor
+        end
+      return if valid
+
+      raise InvalidContract, "the allocation no longer matches the contract terms and obligations"
     end
   end
 end

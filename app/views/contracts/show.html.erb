@@ -105,7 +105,7 @@
             <div class="field"><%= form.label :satisfaction %><%= form.select :satisfaction, [["Over time", "over_time"], ["Point in time", "point_in_time"]] %></div>
             <div class="field"><%= form.label :standalone_selling_price, "Standalone selling price" %><%= form.number_field :standalone_selling_price, min: 0, step: 0.01, required: true %></div>
             <div class="field"><%= form.label :ssp_method, "SSP evidence" %><%= form.select :ssp_method, [["Observable price", "observable"], ["Adjusted market", "adjusted_market"], ["Cost plus", "cost_plus"], ["Residual", "residual"]] %></div>
-            <div class="field"><%= form.label :progress_measure %><%= form.select :progress_measure, [["Time elapsed", "time_elapsed"], ["Output", "output"], ["Input", "input"]], include_blank: "For point-in-time promises" %></div>
+            <div class="field"><%= form.label :progress_measure %><%= form.select :progress_measure, [["Time elapsed (day weighted)", "time_elapsed"]], include_blank: "For point-in-time promises" %></div>
             <div class="field"><%= form.label :service_start_date %><%= form.date_field :service_start_date, value: @contract.effective_date %></div>
             <div class="field"><%= form.label :service_end_date %><%= form.date_field :service_end_date, value: @contract.end_date %></div>
           </div>
@@ -146,11 +146,13 @@
     <% else %>
       <p>No transaction-price allocation has been recorded.</p>
     <% end %>
-    <% if permitted?("contracts.approve") && @obligations.any? %>
+    <% if permitted?("contracts.approve") && @obligations.any? && @latest_allocation.nil? %>
       <%= form_with url: allocate_transaction_price_contract_path(@contract, tenant_route_options), method: :post, class: "inline-form" do |form| %>
         <%= form.label :effective_date, "Allocation date" %><%= form.date_field :effective_date, value: business_date, required: true %>
-        <%= form.submit @latest_allocation ? "Create new allocation version" : "Allocate transaction price", class: "button button--quiet" %>
+        <%= form.submit "Allocate transaction price", class: "button button--quiet" %>
       <% end %>
+    <% elsif @latest_allocation %>
+      <small>Allocated terms and promises are frozen. This release uses replacement contracts for modifications.</small>
     <% end %>
   </section>
 

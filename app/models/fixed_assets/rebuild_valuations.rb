@@ -11,9 +11,12 @@ module FixedAssets
           transactions = AssetTransaction.where(
             tenant_id: tenant_id, asset_valuation: valuation
           )
+          retired = transactions.where(transaction_type: "retirement").exists?
           valuation.update!(
-            gross_block_minor: transactions.where(transaction_type: "acquisition").sum(:amount_minor),
-            accumulated_depreciation_minor: transactions.where(transaction_type: "depreciation").sum(:amount_minor),
+            gross_block_minor: retired ? 0 :
+              transactions.where(transaction_type: "acquisition").sum(:amount_minor),
+            accumulated_depreciation_minor: retired ? 0 :
+              transactions.where(transaction_type: "depreciation").sum(:amount_minor),
             depreciation_posted_through: transactions.where(transaction_type: "depreciation")
               .maximum(:asset_value_date)
           )

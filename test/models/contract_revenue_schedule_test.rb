@@ -80,7 +80,7 @@ class ContractRevenueScheduleTest < ActiveSupport::TestCase
     assert_equal "straight_line", first.method
     assert_equal 12, first.contract_schedule_lines.count
     assert_equal 1_000_001, first.contract_schedule_lines.sum(:amount_minor)
-    assert_equal 83_334, first.contract_schedule_lines.in_order_of(:sequence, (1..12).to_a).first.amount_minor
+    assert_equal 82_192, first.contract_schedule_lines.in_order_of(:sequence, (1..12).to_a).first.amount_minor
     assert_equal Date.new(2026, 4, 30), first.contract_schedule_lines.order(:sequence).first.due_date
     assert_equal Date.new(2027, 3, 31), first.contract_schedule_lines.order(:sequence).last.due_date
 
@@ -91,6 +91,46 @@ class ContractRevenueScheduleTest < ActiveSupport::TestCase
     assert_equal [ "superseded" ], first.contract_schedule_lines.distinct.pluck(:status)
     assert_equal "current", second.status
     assert_equal obligation.id, second.contract_performance_obligation_id
+  end
+
+  test "allocation freezes draft economics and unsupported progress measures fail closed" do
+    add_obligation(
+      description: "Annual support", satisfaction: "over_time",
+      over_time_criterion: "customer simultaneously receives benefits", progress_measure: "time_elapsed",
+      standalone_selling_price_minor: 1_000_001, ssp_method: "observable",
+      service_start_date: Date.new(2026, 4, 1), service_end_date: Date.new(2027, 3, 31)
+    )
+    Contracts::AllocateTransactionPrice.call(
+      contract: @contract, actor: @org.user, effective_date: Date.new(2026, 4, 1)
+    )
+
+    update_error = assert_raises(Contracts::InvalidContract) do
+      Contracts::Update.call(
+        contract: @contract, attributes: { total_contract_value_minor: 2_000_000 }, actor: @org.user
+      )
+    end
+    assert_match(/terms are frozen/, update_error.message)
+    obligation_error = assert_raises(Contracts::InvalidContract) do
+      add_obligation(
+        description: "Late promise", satisfaction: "point_in_time",
+        standalone_selling_price_minor: 1, ssp_method: "observable"
+      )
+    end
+    assert_match(/performance obligations are frozen/, obligation_error.message)
+    assert_match(/already allocated/, assert_raises(Contracts::InvalidContract) {
+      Contracts::AllocateTransactionPrice.call(
+        contract: @contract, actor: @org.user, effective_date: Date.new(2026, 5, 1)
+      )
+    }.message)
+
+    unsupported = ContractPerformanceObligation.new(
+      contract: @contract, tenant_id: @org.tenant.id, obligation_no: 2,
+      description: "Output method", satisfaction: "over_time",
+      over_time_criterion: "output delivered", progress_measure: "output",
+      standalone_selling_price_minor: 100, ssp_method: "observable", revenue_account_code: "4000"
+    )
+    refute unsupported.valid?
+    assert_includes unsupported.errors[:progress_measure], "is not included in the list"
   end
 
   test "milestone schedules require exact allocation and achieved acceptance evidence" do

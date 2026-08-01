@@ -10,6 +10,10 @@ module Contracts
       Contract.transaction do
         contract.lock!
         raise InvalidContract, "only a draft contract can be edited" unless contract.status == "draft"
+        if contract.contract_allocation_runs.exists?
+          raise InvalidContract,
+            "allocated contract terms are frozen; create a replacement contract for changed terms"
+        end
 
         contract.assign_attributes(attributes.to_h.symbolize_keys.slice(*ATTRIBUTES))
         changes = contract.changes.transform_values { |before, after| { "from" => before, "to" => after } }
