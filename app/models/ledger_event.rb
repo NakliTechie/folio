@@ -8,16 +8,13 @@
 # .khata log can be replayed into Folio and back out again.
 class LedgerEvent < ApplicationRecord
   self.table_name = "ledger_events"
+  belongs_to :external_signing_key, optional: true
 
   # `hash` is Object#hash in Ruby; the column is hash_hex to avoid shadowing it.
   validates :tenant_id, :seq, :hash_hex, :ts, :actor, :action, :origin, :payload, presence: true
   validates :hash_hex, length: { is: 64 }
-  # prev_hash may legitimately be '' on a genesis row — .khata logs in the wild record
-  # genesis as '', NULL, or 64 zeros, and the stored value is what was hashed, so it
-  # must be preserved verbatim rather than normalised. But the column is NOT NULL, so
-  # nil is never legal: allow_blank alone let nil through validation and into a
-  # PG::NotNullViolation. '' is meaningful here; nil is not.
-  validates :prev_hash, exclusion: { in: [ nil ], message: "can be '' but not nil" }
+  # .khata logs in the wild record genesis as '', NULL, or 64 zeros. The stored value
+  # participates in the hash, so preserve it verbatim instead of normalising it.
   validates :prev_hash, length: { is: 64 }, allow_blank: true
 
   scope :for_tenant, ->(tenant_id) { where(tenant_id: tenant_id) }

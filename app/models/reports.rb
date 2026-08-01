@@ -29,10 +29,13 @@ module Reports
     CASE WHEN a.code ~ '^[0-9]+$' THEN a.code::numeric END,
     a.code
   SQL
+  FROZEN_ACCOUNT_NAME = "COALESCE(entry_lines.account_name, a.name)".freeze
 
   def trial_balance(tenant_id)
-    base(tenant_id).group("a.code, a.name, a.account_type").order(Arel.sql(ACCOUNT_CODE_ORDER))
-      .pluck(Arel.sql("a.code"), Arel.sql("a.name"), Arel.sql("a.account_type"), Arel.sql(DEBIT), Arel.sql(CREDIT))
+    base(tenant_id).group("a.code, #{FROZEN_ACCOUNT_NAME}, a.account_type")
+      .order(Arel.sql(ACCOUNT_CODE_ORDER))
+      .pluck(Arel.sql("a.code"), Arel.sql(FROZEN_ACCOUNT_NAME), Arel.sql("a.account_type"),
+        Arel.sql(DEBIT), Arel.sql(CREDIT))
       .map do |code, name, type, debit, credit|
         account_id = code.match?(/\A\d+\z/) ? code.to_i : code
         { "account_id" => account_id, "name" => name, "type" => type,

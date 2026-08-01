@@ -91,14 +91,14 @@ class LedgerEventTest < ActiveSupport::TestCase
     assert LedgerEvent.verify_chain(big)[:ok]
   end
 
-  # --- M5: nil prev_hash must not reach the NOT NULL column ---
+  # --- M5: preserve every genesis representation tolerated by .khata ---
 
-  test "prev_hash rejects nil at the model but still allows the genesis empty string" do
+  test "prev_hash allows NULL and empty-string legacy genesis values" do
     e = LedgerEvent.new(tenant_id: test_tenant_id(30), seq: 1, hash_hex: "0" * 64, ts: "t",
                         actor: "a", action: "x", origin: "o", payload: "{}")
     e.prev_hash = nil
-    assert_not e.valid?
-    assert_includes e.errors[:prev_hash].join, "not nil"
+    e.valid?
+    assert_empty e.errors[:prev_hash], "NULL is a legal legacy genesis prev_hash"
 
     e.prev_hash = ""
     e.valid?

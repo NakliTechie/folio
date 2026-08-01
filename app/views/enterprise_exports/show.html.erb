@@ -5,7 +5,7 @@
     <div>
       <p class="eyebrow">Migration</p>
       <h1>Enterprise exports</h1>
-      <p>Create a balanced, checksummed SAP Business One DTW package from verified books.</p>
+      <p>Move verified books without surrendering their accounting or audit evidence.</p>
     </div>
   </div>
 
@@ -43,4 +43,42 @@
       </div>
     <% end %>
   </section>
+
+  <section class="card">
+    <h2>Open .khata copy</h2>
+    <p class="muted">Download a standard `.khata` v1/schema 12 archive containing the chart, double-entry projection, and exact ledger chain. Export fails closed when the selected company uses Folio features that v1 cannot represent safely.</p>
+
+    <%= form_with url: khata_enterprise_export_path, method: :post, class: "form-grid" do |form| %>
+      <div class="form-group">
+        <%= form.label :entity_id, "Legal company" %>
+        <%= form.select :entity_id, @entities.map { |entity| ["#{entity.code} · #{entity.legal_name}", entity.id] }, required: true %>
+      </div>
+      <div class="form-actions">
+        <%= form.submit "Download .khata", class: "button" %>
+      </div>
+    <% end %>
+  </section>
+
+  <% if permitted?("khata.import") %>
+    <section class="card">
+      <h2>Import existing Bahi books</h2>
+      <% if @khata_import %>
+        <p class="notification notification--success">Imported <strong><%= @khata_import.source_filename %></strong> once. <%= @khata_import.source_audit_rows %> signed audit rows reproduce head <code><%= @khata_import.source_audit_head.first(12) %>…</code>; Tier F/C/R checks passed.</p>
+        <% @khata_import.conformance.dig("identity", "warnings").to_a.each do |warning| %>
+          <p class="notification notification--warning"><%= warning %></p>
+        <% end %>
+      <% else %>
+        <p class="muted">For a newly created, operationally empty company only. Folio verifies safe ZIP structure, the SQLite hash and invariants, every audit-chain link, declared signatures, and native report parity before committing anything. This is a one-time server-authoritative migration, not an offline merge.</p>
+        <%= form_with url: import_khata_enterprise_export_path, method: :post, multipart: true, class: "form-grid" do |form| %>
+          <div class="form-group">
+            <%= form.label :khata_file, ".khata file" %>
+            <%= form.file_field :khata_file, accept: ".khata,application/x-khata,application/zip", required: true %>
+          </div>
+          <div class="form-actions">
+            <%= form.submit "Verify and import", class: "button" %>
+          </div>
+        <% end %>
+      <% end %>
+    </section>
+  <% end %>
 </main>

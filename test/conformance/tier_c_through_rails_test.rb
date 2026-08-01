@@ -53,7 +53,7 @@ class TierCThroughRailsTest < ActiveSupport::TestCase
     tenant_id = 9_001
 
     # Replaying an existing chain preserves its hashes verbatim; append! is for NEW
-    # events. This is the shape the M4 .khata import bridge will take.
+    # events. The product bridge now uses this same byte-preserving path after archive verification.
     now = Time.now.utc
     LedgerEvent.insert_all!(
       rows.each_with_index.map do |r, i|

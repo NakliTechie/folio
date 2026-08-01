@@ -54,6 +54,10 @@ module DomainEvents
       "access_review.captured" => "An immutable access and SoD review snapshot was captured.",
       "access_review.attested" => "An owner attested a captured access review.",
 
+      # --- open .khata interoperability (Batch 9) ---
+      "khata.imported" => "A verified .khata chain and ledger projection were imported.",
+      "khata.exported" => "A portable .khata copy was exported.",
+
       # --- India e-invoice lifecycle (statutory, non-financial) ---
       "einvoice.prepared"      => "An immutable INV-01 request was prepared.",
       "einvoice.acknowledged"  => "An IRP acknowledged a document and returned an IRN.",

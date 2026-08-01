@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "base64"
 
 # The single posting entry point (spec §1 balance, §9 fat events, §11 provenance,
 # §13 authority; decisions D1, D11, D13). Two paths that share one projection builder:
@@ -89,6 +90,7 @@ module Posting
       raise UnbalancedError, offenders unless offenders.empty?
       lines = DocumentSplitting.apply(lines)
       assert_period_open!(draft, lines)
+      lines = freeze_account_names(draft.fetch(:tenant_id), lines)
 
       ActiveRecord::Base.transaction do
         payload_str = Folio::KhataHash.canonical_payload(build_payload(draft, lines))
@@ -135,7 +137,8 @@ module Posting
       data["lines"].each do |l|
         line = EntryLine.create!(
           tenant_id: event.tenant_id, entry_id: entry.id, source_event_id: event.id,
-          line_no: l["lineNo"], account_code: l["accountCode"], ledger_id: l["ledgerId"],
+          line_no: l["lineNo"], account_code: l["accountCode"], account_name: l["accountName"],
+          ledger_id: l["ledgerId"],
           entity_id: l["entityId"], office_id: l["officeId"], tax_registration_id: l["taxRegistrationId"],
           cost_object_type: l["costObjectType"], cost_object_id: l["costObjectId"],
           profit_center_id: l["profitCenterId"], segment_id: l["segmentId"],
@@ -177,20 +180,38 @@ module Posting
     # Store an existing chain verbatim (preserving each row's own prev_hash/hash so the
     # chain reproduces byte-for-byte), then replay! any fat events into projections.
     # `rows` are .khata audit_log rows (column names as in the corpus).
-    def self.ingest_verbatim!(tenant_id:, rows:)
+    def self.ingest_verbatim!(tenant_id:, rows:, replay: true, external_signing_key_id: nil)
       now = Time.now.utc
       LedgerEvent.insert_all!(
-        rows.each_with_index.map do |r, i|
+        rows.map do |r|
           {
-            tenant_id: tenant_id, seq: i + 1,
-            prev_hash: r["prev_hash"].to_s, hash_hex: r["hash"],
-            hash_version: r["hash_version"] || Folio::KhataHash::HASH_VERSION,
+            tenant_id: tenant_id, seq: Integer(r.fetch("id")),
+            prev_hash: r["prev_hash"], hash_hex: r["hash"],
+            hash_version: r["hash_version"] || 1,
             ts: r["ts"], actor: r["actor"], action: r["action"],
-            ref: r["ref"], origin: r["origin"], payload: r["payload"], recorded_at: now
+            ref: r["ref"], origin: r["origin"], payload: r["payload"],
+            signature: decode_source_signature(r["signature"]),
+            external_signing_key_id: external_signing_key_id, recorded_at: now
           }
         end
       )
-      LedgerEvent.for_tenant(tenant_id).in_order.each { |ev| replay!(ev) }
+      LedgerEvent.for_tenant(tenant_id).in_order.each { |ev| replay!(ev) } if replay
+    end
+
+    def self.decode_source_signature(value)
+      return if value.blank?
+
+      Base64.strict_decode64(value)
+    rescue ArgumentError
+      raise ArgumentError, "source audit signature is not valid base64"
+    end
+
+    def self.freeze_account_names(tenant_id, lines)
+      names = Account.where(tenant_id: tenant_id, code: lines.pluck(:account_code))
+        .pluck(:code, :name).to_h
+      lines.map do |line|
+        line.merge(account_name: line[:account_name].presence || names[line[:account_code]] || line[:account_code])
+      end
     end
 
     # ---- pure payload builders (no DB) -----------------------------------------------
@@ -232,6 +253,7 @@ module Posting
     def self.line_payload(l)
       {
         "lineNo" => l.fetch(:line_no), "accountCode" => l.fetch(:account_code),
+        "accountName" => l[:account_name],
         "ledgerId" => l.fetch(:ledger_id), "entityId" => l.fetch(:entity_id),
         "officeId" => l.fetch(:office_id), "taxRegistrationId" => l[:tax_registration_id],
         "costObjectType" => l[:cost_object_type], "costObjectId" => l[:cost_object_id],

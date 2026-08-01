@@ -3,6 +3,8 @@
 # An organisation — the boundary every ledger row is scoped to via tenant_id. A user reaches
 # a tenant ONLY through a membership; that is what makes cross-tenant isolation enforceable.
 class Tenant < ApplicationRecord
+  attr_readonly :khata_workspace_id
+
   has_many :memberships, dependent: :destroy
   has_many :users, through: :memberships
 

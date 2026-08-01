@@ -6,12 +6,14 @@
 The current product operates one primary office per company with tenant-wide role assignments. It
 supports governed masters, sales and purchase documents, receipts/payments, open-item settlement,
 credit-event TDS, filing JSON for GSTR-1/GSTR-3B/CMP-08, offline INV-01 e-invoice preparation,
-period controls, and append-only hash-chained financial and lifecycle event logs.
+period controls, contract revenue accounting, procurement, bank reconciliation, inventory, fixed
+assets, controlling, same-currency consolidation, governed migration exports, and signed append-only
+financial and lifecycle event logs.
 
 Folio shares accounting semantics and a conformance corpus with
 [Bahi](https://bahi.naklitechie.com/), which remains single-office, local-first, and single-file by
-design. Multi-office operation, more jurisdictions, signed user events, and the full `.khata` bridge
-are roadmap work—not current product claims.
+design. Multi-office operation, a customer-selected second jurisdiction, live statutory-provider
+activation, and external chain anchoring remain roadmap work—not current product claims.
 
 *(Name provisional — chosen Latin/English for global reach; a "folio" is the numbered ledger page an
 account is posted to, pairing with Bahi the bound book. Alt candidates: Abacus, Comptoir / Counting
@@ -25,9 +27,9 @@ House, Ledgerline. Rename = `gh repo rename` + folder move.)*
   file-on-disk app (E2EE relay, CRDT merge, MLS keying) was high-complexity and fought the model.
 - **An authoritative server DB makes multi-user _trivial_** — real auth, row locks, transactions.
   All the exotic sync machinery evaporates. So: split the products, don't compromise either.
-- **Planned local→server upgrade without lock-in:** the target is a full `.khata` event import and
-  export bridge. Today Folio has a projection-only, test/conformance importer; it is not yet a product
-  migration or export surface.
+- **Local→server upgrade without lock-in:** owners can import a Bahi `.khata` once into a genuinely
+  empty company after format, chain, declared-signature, and native-report verification. Folio can
+  export a deterministic standard `.khata` copy when the books fit the v1 contract.
 
 ## 2. The load-bearing principle: a shared CONFORMANCE CONTRACT, not forked code
 Folio does **not** fork Bahi's HTML. The shared asset is the **engine semantics + `.khata` format**,
@@ -53,8 +55,9 @@ made concrete as a contract Folio's Rails engine is tested against:
 Bahi is already event-sourced: its append-only audit log is the source of truth and its SQLite
 ledger is a projection. Folio keeps that shape, server-side:
 - **`ledger_events`** (append-only, per-tenant) — the authoritative Postgres event store. Events are
-  hash-chained and carry actor/origin labels. Per-user cryptographic signatures and non-repudiation
-  are not implemented yet; the signature field is reserved for that future key lifecycle.
+  hash-chained, carry actor/origin labels, and are signed by the acting user's encrypted P-256 key.
+  This proves the enrolled key signed the stored hash; trusted timestamps/external anchoring remain
+  necessary before making a broad non-repudiation claim against an operator.
 - **Projection tables** — governed accounts/documents plus `entries`, `entry_lines`, and signed
   integer-minor-unit amounts materialized from events. Party, item, tax, and document snapshots freeze
   the historical basis needed for ordinary replay.
@@ -76,8 +79,10 @@ ledger is a projection. Folio keeps that shape, server-side:
   tests. PostgreSQL RLS is **not implemented yet**; it remains pre-production defense-in-depth work.
 - **Auth today** — email/password sessions, invitations, password recovery, and active-session
   revocation. TOTP and Google/Microsoft SSO are planned pre-launch identity work.
-- **Signing later** — per-user signing-key enrollment, verification, rotation, and recovery must ship
-  together before Folio can claim cryptographic attribution or non-repudiation.
+- **Signing today** — signup provisions an encrypted per-user P-256 key and financial/lifecycle
+  events carry independently verifiable actor signatures. Imported `.khata` events retain their
+  declared external JWK identity. Key rotation/recovery, trusted head timestamps, and external
+  anchoring still precede any broad non-repudiation claim.
 
 ## 6. RBAC today
 
@@ -94,7 +99,7 @@ cannot enter the product until selected-office context and complete read/write i
 | **Viewer** | read-only reports, ledgers, accounts, and master data |
 
 Capability checks run server-side. Posted entries freeze the resolved role/limit authority; the event
-log is hash-chained but not yet cryptographically signed by the user.
+log is hash-chained and cryptographically signed by the acting user.
 
 ## 7. Planned multi-office / multi-entity
 
@@ -117,22 +122,30 @@ Cross-ref: `bahi/plan/2026-07-16-accounting-standards-multi-jurisdiction.md`.
 
 ## 9. Interop bridge (Bahi ↔ Folio)
 
-Today, a thin test adapter imports `.khata` projection tables to prove account-report compatibility
-against the vendored corpus. It does not import the authoritative chain, expose a UI/API, resolve
-conflicts, or export files. The roadmap bridge will add idempotent event import plus `.khata` export
-and round-trip verification.
+The product bridge inspects archives without extracting paths, verifies the manifest/books hash,
+SQLite invariants, exact audit chain, and declared P-256 signatures before one transactional import.
+It preserves the source head and event signatures, freezes historical account names, links imported
+journals to source events, and requires native trial-balance/account-type parity before commit. The
+same archive is idempotent; a different file or an operational company is rejected because the
+server is authoritative, not an offline merge target.
 
-## 10. Planned SAP B1 (HANA) export
-The DTW export (COA crosswalk + `oJournalEntries`/documents) specced for Bahi
-(`bahi/plan/2026-07-16-sap-b1-hana-mapping-spec.md`) is naturally an enterprise feature → shared
-engine logic, surfaced in Folio per-office / consolidated. Build once in the shared engine layer.
+Export writes deterministic `.khata` v1/schema 12 files and proves round-trip chain/report parity.
+It deliberately fails closed for multi-entity, non-INR, extension-ledger, layered/statistical, or
+value-dated books that v1 cannot represent; the proposed v1.1 fields remain unimplemented pending
+agreement with Bahi. The unchanged four-query C/R/F corpus remains the cross-engine release gate.
+
+## 10. SAP Business One migration export
+The enterprise surface produces verified, balanced SAP Business One DTW ZIP packages for an entity,
+office, or same-currency consolidated group: OACT/OCRD/OJDT/JDT1 templates, Folio crosswalks, source
+event hashes, and a SHA-256 manifest. Operators must still validate the files against templates
+generated by the exact target SAP B1 version before import.
 
 ## 11. Non-goals
 - Not a Bahi replacement — Bahi stays local-first, standalone, India-first.
 - Not RANE (risk-intel SaaS — different domain); reuse its multi-tenant/auth substrate patterns,
   don't rebuild, and don't fold accounting into it.
-- No CRDT / E2EE-relay / offline-merge machinery — the server is authoritative. Planned `.khata`
-  exports will provide portable offline copies without making them a merge substrate.
+- No CRDT / E2EE-relay / offline-merge machinery — the server is authoritative. `.khata` exports
+  provide portable offline copies without making them a merge substrate.
 
 ## 12. Performance baseline
 
@@ -166,9 +179,10 @@ cancellation/reconciliation boundary have a persistent provider seam. Live IRP/G
 deliberately disabled until a provider, credentials, and sandbox certification are approved; an
 offline export is never presented as an IRN. The launch image, shared cache, readiness checks,
 backup verifier, and Cloudflare Tunnel topology are prepared. Real host/mail/provider values and a
-trusted deployed-origin acceptance run remain operator activation gates. The subsequent sequence is
-contract management, full-suite accounting, multi-office/multi-country depth, and the complete
-`.khata` bridge.
+trusted deployed-origin acceptance run remain operator activation gates. Contract management and
+the buildable Batch 9 enterprise/full-suite scope are complete. The next jurisdiction remains blocked
+on Netcore's actual country list and the approved cross-currency consolidation policy; no profile is
+guessed to make the roadmap look complete.
 
 ## 14. Open questions
 1. Final **name** (Folio vs Abacus / Comptoir / Ledgerline).

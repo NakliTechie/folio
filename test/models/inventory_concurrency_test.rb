@@ -41,12 +41,28 @@ class InventoryConcurrencyTest < ActiveSupport::TestCase
 
   teardown do
     # This test deliberately commits work from multiple connections. Each parallel test
-    # worker has its own database, so truncate the test-owned immutable rows without
-    # weakening the production evidence triggers or leaking warehouse foreign keys.
-    ActiveRecord::Base.connection.execute(<<~SQL)
+    # worker has its own database. Temporarily disable only the new statement-level
+    # TRUNCATE guards (row UPDATE/DELETE immutability stays active), clean test-owned rows,
+    # and restore the guards even if cleanup fails.
+    connection = ActiveRecord::Base.connection
+    guarded = connection.select_rows(<<~SQL)
+      SELECT quote_ident(class.relname), quote_ident(trigger.tgname)
+      FROM pg_trigger trigger
+      JOIN pg_class class ON class.oid = trigger.tgrelid
+      JOIN pg_proc function ON function.oid = trigger.tgfoid
+      WHERE function.proname = 'folio_immutable_evidence_no_truncate'
+    SQL
+    guarded.each do |table, trigger|
+      connection.execute("ALTER TABLE #{table} DISABLE TRIGGER #{trigger}")
+    end
+    connection.execute(<<~SQL)
       TRUNCATE TABLE inventory_movements, inventory_transactions, stock_balances, warehouses
       RESTART IDENTITY CASCADE
     SQL
+  ensure
+    guarded&.each do |table, trigger|
+      connection&.execute("ALTER TABLE #{table} ENABLE TRIGGER #{trigger}")
+    end
   end
 
   test "competing issues serialize and cannot overdraw the valuation layer" do

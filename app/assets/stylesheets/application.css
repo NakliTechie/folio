@@ -558,6 +558,12 @@ input[type="submit"] {
   color: #18583d;
 }
 
+.notification--warning {
+  border-color: #dfc78e;
+  background: var(--warning-soft);
+  color: #694a14;
+}
+
 .button,
 button,
 input[type="submit"] {

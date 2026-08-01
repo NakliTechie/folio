@@ -105,10 +105,36 @@ $$;
 
 
 --
+-- Name: folio_immutable_evidence_no_truncate(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_immutable_evidence_no_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: TRUNCATE rejected', TG_TABLE_NAME;
+END;
+$$;
+
+
+--
 -- Name: folio_inventory_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.folio_inventory_evidence_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable: % on row id=% rejected', TG_TABLE_NAME, TG_OP, OLD.id;
+END;
+$$;
+
+
+--
+-- Name: folio_khata_evidence_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_khata_evidence_immutable() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
@@ -201,6 +227,22 @@ BEGIN
   END IF;
 
   RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+
+--
+-- Name: folio_tenant_khata_workspace_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.folio_tenant_khata_workspace_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.khata_workspace_id IS DISTINCT FROM OLD.khata_workspace_id THEN
+    RAISE EXCEPTION 'tenant khata_workspace_id is immutable';
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -2060,6 +2102,7 @@ CREATE TABLE public.entry_lines (
     taxable_amount_minor bigint,
     fixed_asset_id bigint,
     asset_value_date date,
+    account_name character varying,
     CONSTRAINT chk_entry_lines_tax_component CHECK (((tax_component IS NULL) OR ((tax_component)::text = ANY ((ARRAY['cgst'::character varying, 'sgst'::character varying, 'utgst'::character varying, 'igst'::character varying, 'cess'::character varying])::text[]))))
 );
 
@@ -2206,6 +2249,42 @@ CREATE SEQUENCE public.exchange_revaluation_runs_id_seq
 --
 
 ALTER SEQUENCE public.exchange_revaluation_runs_id_seq OWNED BY public.exchange_revaluation_runs.id;
+
+
+--
+-- Name: external_signing_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.external_signing_keys (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    source_workspace_id uuid NOT NULL,
+    algorithm character varying DEFAULT 'ecdsa-p256-sha256'::character varying NOT NULL,
+    public_key_jwk jsonb NOT NULL,
+    fingerprint character varying(64) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT external_signing_keys_algorithm_valid CHECK (((algorithm)::text = 'ecdsa-p256-sha256'::text))
+);
+
+
+--
+-- Name: external_signing_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.external_signing_keys_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: external_signing_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.external_signing_keys_id_seq OWNED BY public.external_signing_keys.id;
 
 
 --
@@ -2714,6 +2793,49 @@ ALTER SEQUENCE public.journal_entry_line_amounts_id_seq OWNED BY public.journal_
 
 
 --
+-- Name: khata_import_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.khata_import_runs (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    imported_by_id bigint NOT NULL,
+    external_signing_key_id bigint,
+    domain_event_id bigint NOT NULL,
+    source_workspace_id uuid NOT NULL,
+    source_filename character varying NOT NULL,
+    archive_sha256 character varying(64) NOT NULL,
+    books_sha256 character varying(64) NOT NULL,
+    source_audit_head character varying(64) NOT NULL,
+    source_audit_rows integer NOT NULL,
+    source_manifest jsonb NOT NULL,
+    import_counts jsonb NOT NULL,
+    conformance jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: khata_import_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.khata_import_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: khata_import_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.khata_import_runs_id_seq OWNED BY public.khata_import_runs.id;
+
+
+--
 -- Name: ledger_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2725,7 +2847,7 @@ CREATE TABLE public.ledger_events (
     actor_user_id bigint,
     signature bytea,
     recorded_at timestamp(6) without time zone DEFAULT clock_timestamp() NOT NULL,
-    prev_hash character varying(64) NOT NULL,
+    prev_hash character varying(64),
     hash_hex character varying(64) NOT NULL,
     hash_version integer DEFAULT 2 NOT NULL,
     ts character varying NOT NULL,
@@ -2736,6 +2858,7 @@ CREATE TABLE public.ledger_events (
     payload text NOT NULL,
     schema_version integer DEFAULT 1 NOT NULL,
     signing_key_id bigint,
+    external_signing_key_id bigint,
     CONSTRAINT ledger_events_seq_positive CHECK ((seq > 0))
 );
 
@@ -3680,7 +3803,8 @@ CREATE TABLE public.tenants (
     functional_currency character varying(3) DEFAULT 'INR'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    time_zone character varying DEFAULT 'UTC'::character varying NOT NULL
+    time_zone character varying DEFAULT 'UTC'::character varying NOT NULL,
+    khata_workspace_id uuid DEFAULT gen_random_uuid() NOT NULL
 );
 
 
@@ -4205,6 +4329,13 @@ ALTER TABLE ONLY public.exchange_revaluation_runs ALTER COLUMN id SET DEFAULT ne
 
 
 --
+-- Name: external_signing_keys id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_signing_keys ALTER COLUMN id SET DEFAULT nextval('public.external_signing_keys_id_seq'::regclass);
+
+
+--
 -- Name: financial_statement_assignments id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4286,6 +4417,13 @@ ALTER TABLE ONLY public.items ALTER COLUMN id SET DEFAULT nextval('public.items_
 --
 
 ALTER TABLE ONLY public.journal_entry_line_amounts ALTER COLUMN id SET DEFAULT nextval('public.journal_entry_line_amounts_id_seq'::regclass);
+
+
+--
+-- Name: khata_import_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_runs ALTER COLUMN id SET DEFAULT nextval('public.khata_import_runs_id_seq'::regclass);
 
 
 --
@@ -4859,6 +4997,14 @@ ALTER TABLE ONLY public.exchange_revaluation_runs
 
 
 --
+-- Name: external_signing_keys external_signing_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_signing_keys
+    ADD CONSTRAINT external_signing_keys_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: financial_statement_assignments financial_statement_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4952,6 +5098,14 @@ ALTER TABLE ONLY public.items
 
 ALTER TABLE ONLY public.journal_entry_line_amounts
     ADD CONSTRAINT journal_entry_line_amounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: khata_import_runs khata_import_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_runs
+    ADD CONSTRAINT khata_import_runs_pkey PRIMARY KEY (id);
 
 
 --
@@ -6590,6 +6744,20 @@ CREATE INDEX index_exchange_revaluation_runs_on_office_id ON public.exchange_rev
 
 
 --
+-- Name: index_external_signing_keys_on_source_identity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_external_signing_keys_on_source_identity ON public.external_signing_keys USING btree (tenant_id, source_workspace_id, fingerprint);
+
+
+--
+-- Name: index_external_signing_keys_on_tenant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_external_signing_keys_on_tenant_id ON public.external_signing_keys USING btree (tenant_id);
+
+
+--
 -- Name: index_financial_statement_assignments_on_account_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6867,6 +7035,41 @@ CREATE UNIQUE INDEX index_jela_on_line_and_slot ON public.journal_entry_line_amo
 --
 
 CREATE INDEX index_journal_entry_line_amounts_on_entry_line_id ON public.journal_entry_line_amounts USING btree (entry_line_id);
+
+
+--
+-- Name: index_khata_import_runs_on_external_signing_key_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_khata_import_runs_on_external_signing_key_id ON public.khata_import_runs USING btree (external_signing_key_id);
+
+
+--
+-- Name: index_khata_import_runs_on_imported_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_khata_import_runs_on_imported_by_id ON public.khata_import_runs USING btree (imported_by_id);
+
+
+--
+-- Name: index_khata_import_runs_on_tenant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_khata_import_runs_on_tenant_id ON public.khata_import_runs USING btree (tenant_id);
+
+
+--
+-- Name: index_khata_import_runs_on_tenant_id_and_archive_sha256; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_khata_import_runs_on_tenant_id_and_archive_sha256 ON public.khata_import_runs USING btree (tenant_id, archive_sha256);
+
+
+--
+-- Name: index_ledger_events_on_external_signing_key_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_ledger_events_on_external_signing_key_id ON public.ledger_events USING btree (external_signing_key_id);
 
 
 --
@@ -7290,6 +7493,13 @@ CREATE UNIQUE INDEX index_tds_deductions_on_tenant_id_and_source_document_id ON 
 
 
 --
+-- Name: index_tenants_on_khata_workspace_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_tenants_on_khata_workspace_id ON public.tenants USING btree (khata_workspace_id);
+
+
+--
 -- Name: index_tenants_on_slug; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7416,10 +7626,24 @@ CREATE TRIGGER access_review_attestations_immutable BEFORE DELETE OR UPDATE ON p
 
 
 --
+-- Name: access_review_attestations access_review_attestations_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER access_review_attestations_no_truncate BEFORE TRUNCATE ON public.access_review_attestations FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: access_review_runs access_review_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER access_review_runs_immutable BEFORE DELETE OR UPDATE ON public.access_review_runs FOR EACH ROW EXECUTE FUNCTION public.folio_access_review_evidence_immutable();
+
+
+--
+-- Name: access_review_runs access_review_runs_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER access_review_runs_no_truncate BEFORE TRUNCATE ON public.access_review_runs FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
 
 
 --
@@ -7430,10 +7654,24 @@ CREATE TRIGGER allocation_run_items_immutable BEFORE DELETE OR UPDATE ON public.
 
 
 --
+-- Name: allocation_run_items allocation_run_items_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER allocation_run_items_no_truncate BEFORE TRUNCATE ON public.allocation_run_items FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: allocation_runs allocation_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER allocation_runs_immutable BEFORE DELETE OR UPDATE ON public.allocation_runs FOR EACH ROW EXECUTE FUNCTION public.folio_controlling_evidence_immutable();
+
+
+--
+-- Name: allocation_runs allocation_runs_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER allocation_runs_no_truncate BEFORE TRUNCATE ON public.allocation_runs FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
 
 
 --
@@ -7444,10 +7682,24 @@ CREATE TRIGGER asset_transactions_immutable BEFORE DELETE OR UPDATE ON public.as
 
 
 --
+-- Name: asset_transactions asset_transactions_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER asset_transactions_no_truncate BEFORE TRUNCATE ON public.asset_transactions FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: consolidation_elimination_runs consolidation_elimination_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER consolidation_elimination_runs_immutable BEFORE DELETE OR UPDATE ON public.consolidation_elimination_runs FOR EACH ROW EXECUTE FUNCTION public.folio_consolidation_evidence_immutable();
+
+
+--
+-- Name: consolidation_elimination_runs consolidation_elimination_runs_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER consolidation_elimination_runs_no_truncate BEFORE TRUNCATE ON public.consolidation_elimination_runs FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
 
 
 --
@@ -7458,10 +7710,24 @@ CREATE TRIGGER contract_allocation_lines_immutable BEFORE DELETE OR UPDATE ON pu
 
 
 --
+-- Name: contract_allocation_lines contract_allocation_lines_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER contract_allocation_lines_no_truncate BEFORE TRUNCATE ON public.contract_allocation_lines FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: contract_allocation_runs contract_allocation_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER contract_allocation_runs_immutable BEFORE DELETE OR UPDATE ON public.contract_allocation_runs FOR EACH ROW EXECUTE FUNCTION public.folio_contract_allocations_immutable();
+
+
+--
+-- Name: contract_allocation_runs contract_allocation_runs_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER contract_allocation_runs_no_truncate BEFORE TRUNCATE ON public.contract_allocation_runs FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
 
 
 --
@@ -7486,10 +7752,31 @@ CREATE TRIGGER domain_events_no_update BEFORE UPDATE ON public.domain_events FOR
 
 
 --
+-- Name: external_signing_keys external_signing_keys_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER external_signing_keys_immutable BEFORE DELETE OR UPDATE ON public.external_signing_keys FOR EACH ROW EXECUTE FUNCTION public.folio_khata_evidence_immutable();
+
+
+--
+-- Name: external_signing_keys external_signing_keys_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER external_signing_keys_no_truncate BEFORE TRUNCATE ON public.external_signing_keys FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: goods_receipt_lines goods_receipt_lines_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER goods_receipt_lines_immutable BEFORE DELETE OR UPDATE ON public.goods_receipt_lines FOR EACH ROW EXECUTE FUNCTION public.folio_procurement_evidence_immutable();
+
+
+--
+-- Name: goods_receipt_lines goods_receipt_lines_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER goods_receipt_lines_no_truncate BEFORE TRUNCATE ON public.goods_receipt_lines FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
 
 
 --
@@ -7500,10 +7787,24 @@ CREATE TRIGGER goods_receipts_immutable BEFORE DELETE OR UPDATE ON public.goods_
 
 
 --
+-- Name: goods_receipts goods_receipts_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER goods_receipts_no_truncate BEFORE TRUNCATE ON public.goods_receipts FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: intercompany_transactions intercompany_transactions_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER intercompany_transactions_immutable BEFORE DELETE OR UPDATE ON public.intercompany_transactions FOR EACH ROW EXECUTE FUNCTION public.folio_consolidation_evidence_immutable();
+
+
+--
+-- Name: intercompany_transactions intercompany_transactions_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER intercompany_transactions_no_truncate BEFORE TRUNCATE ON public.intercompany_transactions FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
 
 
 --
@@ -7514,10 +7815,38 @@ CREATE TRIGGER inventory_movements_immutable BEFORE DELETE OR UPDATE ON public.i
 
 
 --
+-- Name: inventory_movements inventory_movements_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER inventory_movements_no_truncate BEFORE TRUNCATE ON public.inventory_movements FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
 -- Name: inventory_transactions inventory_transactions_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER inventory_transactions_immutable BEFORE DELETE OR UPDATE ON public.inventory_transactions FOR EACH ROW EXECUTE FUNCTION public.folio_inventory_evidence_immutable();
+
+
+--
+-- Name: inventory_transactions inventory_transactions_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER inventory_transactions_no_truncate BEFORE TRUNCATE ON public.inventory_transactions FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
+
+
+--
+-- Name: khata_import_runs khata_import_runs_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER khata_import_runs_immutable BEFORE DELETE OR UPDATE ON public.khata_import_runs FOR EACH ROW EXECUTE FUNCTION public.folio_khata_evidence_immutable();
+
+
+--
+-- Name: khata_import_runs khata_import_runs_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER khata_import_runs_no_truncate BEFORE TRUNCATE ON public.khata_import_runs FOR EACH STATEMENT EXECUTE FUNCTION public.folio_immutable_evidence_no_truncate();
 
 
 --
@@ -7546,6 +7875,13 @@ CREATE TRIGGER ledger_events_no_update BEFORE UPDATE ON public.ledger_events FOR
 --
 
 CREATE TRIGGER protect_last_tenant_owner BEFORE DELETE OR UPDATE ON public.user_office_roles FOR EACH ROW EXECUTE FUNCTION public.folio_protect_last_tenant_owner();
+
+
+--
+-- Name: tenants tenants_khata_workspace_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER tenants_khata_workspace_immutable BEFORE UPDATE ON public.tenants FOR EACH ROW EXECUTE FUNCTION public.folio_tenant_khata_workspace_immutable();
 
 
 --
@@ -7813,6 +8149,14 @@ ALTER TABLE ONLY public.allocation_cycles
 
 
 --
+-- Name: khata_import_runs fk_rails_3772684d78; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_runs
+    ADD CONSTRAINT fk_rails_3772684d78 FOREIGN KEY (imported_by_id) REFERENCES public.users(id);
+
+
+--
 -- Name: exchange_rates fk_rails_3908165cb0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8018,6 +8362,14 @@ ALTER TABLE ONLY public.inventory_transactions
 
 ALTER TABLE ONLY public.asset_valuations
     ADD CONSTRAINT fk_rails_68c92c7954 FOREIGN KEY (asset_valuation_term_id) REFERENCES public.asset_valuation_terms(id);
+
+
+--
+-- Name: khata_import_runs fk_rails_6d28f6c8cb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_runs
+    ADD CONSTRAINT fk_rails_6d28f6c8cb FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 
 --
@@ -8261,6 +8613,14 @@ ALTER TABLE ONLY public.intercompany_transactions
 
 
 --
+-- Name: external_signing_keys fk_rails_925a2c8db3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_signing_keys
+    ADD CONSTRAINT fk_rails_925a2c8db3 FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
 -- Name: intercompany_transactions fk_rails_93bfddda2e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8466,6 +8826,14 @@ ALTER TABLE ONLY public.contract_schedules
 
 ALTER TABLE ONLY public.contract_allocation_lines
     ADD CONSTRAINT fk_rails_bd66244221 FOREIGN KEY (contract_allocation_run_id) REFERENCES public.contract_allocation_runs(id);
+
+
+--
+-- Name: khata_import_runs fk_rails_bd6f2b3950; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.khata_import_runs
+    ADD CONSTRAINT fk_rails_bd6f2b3950 FOREIGN KEY (external_signing_key_id) REFERENCES public.external_signing_keys(id);
 
 
 --
@@ -8675,6 +9043,8 @@ ALTER TABLE ONLY public.user_office_roles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260801200000'),
+('20260801195000'),
 ('20260801194000'),
 ('20260801193000'),
 ('20260801192000'),

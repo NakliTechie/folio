@@ -69,6 +69,23 @@ class Posting::PostEntryTest < ActiveSupport::TestCase
     assert result[:ok], "chain broke at seq=#{result[:broken_at]} (#{result[:reason]})"
   end
 
+  test "post! freezes account names in the event and projection" do
+    Account.create!(tenant_id: @tenant_id, code: "100100", name: "Bank", account_type: "asset")
+    revenue = Account.create!(
+      tenant_id: @tenant_id, code: "400000", name: "Consulting revenue", account_type: "income"
+    )
+
+    entry = Posting::PostEntry.post!(draft)
+    line = entry.entry_lines.find_by!(account_code: "400000")
+    assert_equal "Consulting revenue", line.account_name
+    payload = JSON.parse(LedgerEvent.find(entry.ledger_event_id).payload)
+    assert_equal "Consulting revenue",
+      payload.fetch("lines").find { |item| item.fetch("accountCode") == "400000" }.fetch("accountName")
+
+    revenue.update!(name: "Advisory revenue")
+    assert_equal "Consulting revenue", line.reload.account_name
+  end
+
   test "post! raises UnbalancedError and writes nothing when a slice does not balance" do
     bad = draft
     bad[:lines][1][:amounts][0][:amount_minor] = -99_999 # off by one paise

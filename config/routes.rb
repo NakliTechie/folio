@@ -79,6 +79,8 @@ Rails.application.routes.draw do
   end
   resource :enterprise_export, path: "enterprise-exports", only: :show do
     get :sap_b1_dtw, path: "sap-business-one-dtw"
+    post :khata, path: "khata"
+    post :import_khata, path: "khata/import"
   end
   resource :access_review, path: "access-reviews", only: %i[show create] do
     post :attest

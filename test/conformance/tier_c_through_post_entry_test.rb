@@ -6,7 +6,7 @@ require "tempfile"
 require "json"
 
 # Tier C, run through Posting::PostEntry.ingest_verbatim! — the replay-INGESTION path that
-# the M4 .khata bridge will use. This proves the new posting engine's own entry point
+# the product .khata bridge uses. This proves the new posting engine's own entry point
 # stores an existing chain verbatim and reproduces the pinned auditHead for ALL three
 # corpus files, not just via the standalone adapter (which the harness already covers) and
 # not just via a raw insert (tier_c_through_rails_test covers that).

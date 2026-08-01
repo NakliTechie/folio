@@ -15,6 +15,14 @@ module EventSigning
   end
 
   def verify(event)
+    if event.respond_to?(:external_signing_key_id) && event.external_signing_key_id
+      key = ExternalSigningKey.find_by(id: event.external_signing_key_id, tenant_id: event.tenant_id)
+      return false unless key
+
+      return Khata::Signatures.verify(
+        hash_hex: event.hash_hex, signature: event.signature, jwk: key.public_key_jwk
+      )
+    end
     return false if event.signature.blank? || event.signing_key_id.blank?
 
     key_record = UserSigningKey.find_by(id: event.signing_key_id, user_id: event.actor_user_id)
