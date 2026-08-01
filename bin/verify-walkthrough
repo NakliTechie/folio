@@ -9,6 +9,8 @@ FAST_TESTS = %w[
   test/integration/authentication_flow_test.rb
   test/integration/onboarding_flow_test.rb
   test/integration/browser_product_flow_test.rb
+  test/integration/purchase_bill_flows_test.rb
+  test/integration/sales_invoice_flows_test.rb
   test/integration/api/v1/documents_api_test.rb
   test/integration/api/v1/tenant_isolation_test.rb
   test/jobs/onboarding_delivery_jobs_test.rb
@@ -18,6 +20,7 @@ FAST_TESTS = %w[
   test/models/settlement_test.rb
   test/models/open_item_reports_test.rb
   test/models/posting/period_control_test.rb
+  test/models/financial_statements_report_test.rb
 ].freeze
 
 Dir.chdir(APP_ROOT)
