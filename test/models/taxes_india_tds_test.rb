@@ -179,6 +179,63 @@ class TaxesIndiaTdsTest < ActiveSupport::TestCase
     end
   end
 
+  # --- 194A interest (added from the Bahi reconciliation) ---
+
+  test "194A withholds 10% on interest once the annual threshold is crossed" do
+    r = Deduction.compute(section: "194A", on: Date.new(2025, 6, 1),
+                          amount_minor: rs(50_000), pan: "ABCCD1234E")
+    assert r.applied
+    assert_equal 1_000, r.rate_basis_points
+    assert_equal rs(5_000), r.tds_minor          # 10% of ₹50,000
+    assert_equal rs(50_000), r.deductible_base_minor
+  end
+
+  # --- 194Q purchase of goods: excess-over-threshold base + 5% no-PAN (added, reconciled) ---
+
+  test "194Q withholds 0.1% only on the value EXCEEDING the ₹50L annual threshold" do
+    # prior ₹48L + this ₹5L = ₹53L aggregate → ₹3L over the ₹50L threshold.
+    r = Deduction.compute(section: "194Q", on: Date.new(2025, 6, 1),
+                          amount_minor: rs(5_00_000), pan: "ABCCD1234E",
+                          fy_paid_to_date_minor: rs(48_00_000))
+    assert r.applied
+    assert_equal 10, r.rate_basis_points                 # 0.1%
+    assert_equal rs(3_00_000), r.deductible_base_minor    # only the ₹3L excess
+    assert_equal rs(300), r.tds_minor                     # 0.1% of ₹3L = ₹300
+  end
+
+  test "194Q withholds on the whole payment once the aggregate is already over the threshold" do
+    r = Deduction.compute(section: "194Q", on: Date.new(2025, 6, 1),
+                          amount_minor: rs(5_00_000), pan: "ABCCD1234E",
+                          fy_paid_to_date_minor: rs(60_00_000))
+    assert_equal rs(5_00_000), r.deductible_base_minor    # whole payment is excess
+    assert_equal rs(500), r.tds_minor                     # 0.1% of ₹5L
+  end
+
+  test "194Q withholds nothing while the aggregate stays under ₹50L" do
+    r = Deduction.compute(section: "194Q", on: Date.new(2025, 6, 1),
+                          amount_minor: rs(5_00_000), pan: "ABCCD1234E",
+                          fy_paid_to_date_minor: rs(40_00_000))
+    refute r.applied
+    assert_equal 0, r.deductible_base_minor
+    assert_equal 0, r.tds_minor
+  end
+
+  test "194Q uses its special 5% no-PAN rate, not the general 20% floor" do
+    r = Deduction.compute(section: "194Q", on: Date.new(2025, 6, 1),
+                          amount_minor: rs(5_00_000), pan: nil,
+                          fy_paid_to_date_minor: rs(48_00_000))
+    refute r.pan_available
+    assert_equal 500, r.rate_basis_points                 # §206AA for 194Q = 5%, not 2000 bps
+    assert_equal rs(15_000), r.tds_minor                  # 5% of the ₹3L excess
+  end
+
+  test "194Q did not exist before 2021-07-01" do
+    assert_raises(Taxes::India::Tds::UnknownSection) do
+      Deduction.compute(section: "194Q", on: Date.new(2021, 6, 30),
+                        amount_minor: rs(60_00_000), pan: "ABCCD1234E")
+    end
+  end
+
   # --- input guards ---
 
   test "a negative amount is rejected" do
