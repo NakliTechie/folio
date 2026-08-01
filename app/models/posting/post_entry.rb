@@ -87,6 +87,7 @@ module Posting
       assert_meaningful!(lines)
       offenders = balance_offenders(lines)
       raise UnbalancedError, offenders unless offenders.empty?
+      lines = DocumentSplitting.apply(lines)
       assert_period_open!(draft, lines)
 
       ActiveRecord::Base.transaction do
@@ -140,7 +141,11 @@ module Posting
           profit_center_id: l["profitCenterId"], segment_id: l["segmentId"],
           functional_area_id: l["functionalAreaId"],
           line_class: l["lineClass"] || "real", posting_layer: l["postingLayer"] || "00",
-          partner_entity_id: l["partnerEntityId"], intercompany_transaction_id: l["intercompanyTransactionId"],
+          partner_entity_id: l["partnerEntityId"], partner_profit_center_id: l["partnerProfitCenterId"],
+          partner_segment_id: l["partnerSegmentId"],
+          partner_cost_object_type: l["partnerCostObjectType"],
+          partner_cost_object_id: l["partnerCostObjectId"],
+          intercompany_transaction_id: l["intercompanyTransactionId"],
           party_id: l["partyId"], party_role: l["partyRole"],
           item_id: l["itemId"], warehouse_id: l["warehouseId"],
           fixed_asset_id: l["fixedAssetId"], asset_value_date: l["assetValueDate"],
@@ -150,6 +155,8 @@ module Posting
           taxable_amount_minor: l["taxableAmountMinor"],
           movement_type: l["movementType"], valuation_view: l["valuationView"],
           value_date: l["valueDate"],
+          split_source_line_id: l["splitSourceLineId"], split_kind: l["splitKind"],
+          liquidity_item_id: l["liquidityItemId"], cost_component_split: l["costComponentSplit"],
           open_item: l["openItem"] || false, item_class: l["itemClass"],
           assignment: l["assignment"], baseline_date: l["baselineDate"], due_date: l["dueDate"],
           is_negative_posting: l["isNegativePosting"] || false, extra: l["extra"]
@@ -231,7 +238,12 @@ module Posting
         "profitCenterId" => l[:profit_center_id], "segmentId" => l[:segment_id],
         "functionalAreaId" => l[:functional_area_id],
         "lineClass" => l[:line_class], "postingLayer" => l[:posting_layer],
-        "partnerEntityId" => l[:partner_entity_id], "intercompanyTransactionId" => l[:intercompany_transaction_id],
+        "partnerEntityId" => l[:partner_entity_id],
+        "partnerProfitCenterId" => l[:partner_profit_center_id],
+        "partnerSegmentId" => l[:partner_segment_id],
+        "partnerCostObjectType" => l[:partner_cost_object_type],
+        "partnerCostObjectId" => l[:partner_cost_object_id],
+        "intercompanyTransactionId" => l[:intercompany_transaction_id],
         "partyId" => l[:party_id], "partyRole" => l[:party_role],
         "itemId" => l[:item_id], "warehouseId" => l[:warehouse_id],
         "fixedAssetId" => l[:fixed_asset_id], "assetValueDate" => l[:asset_value_date]&.to_s,
@@ -241,6 +253,8 @@ module Posting
         "taxableAmountMinor" => l[:taxable_amount_minor],
         "movementType" => l[:movement_type], "valuationView" => l[:valuation_view],
         "valueDate" => l[:value_date]&.to_s,
+        "splitSourceLineId" => l[:split_source_line_id], "splitKind" => l[:split_kind],
+        "liquidityItemId" => l[:liquidity_item_id], "costComponentSplit" => l[:cost_component_split],
         # booleans: present only in their non-default (true) state, so replay defaults false.
         "openItem" => (true if l[:open_item]), "isNegativePosting" => (true if l[:is_negative_posting]),
         "itemClass" => l[:item_class], "assignment" => l[:assignment],

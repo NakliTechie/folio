@@ -9,6 +9,7 @@ module Onboarding
       [ "1190", "Contract Assets (Unbilled Revenue)", "asset" ], [ "1210", "GST Input Credit", "asset" ],
       [ "2000", "Sundry Creditors", "liability" ], [ "2100", "GST Payable", "liability" ],
       [ "2050", "Goods Received Not Invoiced", "liability" ],
+      [ "2990", "Document Splitting Clearing", "liability" ],
       [ "2110", "TDS Payable", "liability" ], [ "2200", "Contract Liabilities (Deferred Revenue)", "liability" ],
       [ "3000", "Capital", "equity" ],
       [ "4000", "Sales", "income" ], [ "4100", "Foreign Exchange Gains", "income" ],

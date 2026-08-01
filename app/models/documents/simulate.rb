@@ -8,7 +8,7 @@ module Documents
     module_function
 
     def call(document)
-      lines = Documents.rule_for(document).entry_lines(document)
+      lines = Posting::DocumentSplitting.apply(Documents.rule_for(document).entry_lines(document))
       offenders = Posting::PostEntry.balance_offenders(lines)
       { lines: lines, balanced: offenders.empty?, offenders: offenders }
     end
