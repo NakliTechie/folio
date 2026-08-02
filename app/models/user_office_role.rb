@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Assigns a user a role, optionally scoped to ONE office (README §6: roles are per-office;
-# office_id nil = tenant-wide). Carries the posting limit in force for that assignment.
+# The v1 operating contract permits one tenant-wide role per user/company (`office_id = nil`).
+# The nullable office column is reserved for a future selected-office isolation contract.
 class UserOfficeRole < ApplicationRecord
   belongs_to :user
   belongs_to :office, optional: true

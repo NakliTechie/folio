@@ -4,6 +4,7 @@ module Api
   module V1
     class SettlementsController < BaseController
       KINDS = ::SettlementsController::KINDS.freeze
+      DOCUMENT_KINDS = ::SettlementsController::DOCUMENT_KINDS.freeze
 
       before_action -> { require_capability!("reports.read") }, only: %i[index show]
       before_action -> { require_capability!("payments.create") }, only: %i[create post reset reallocate]
@@ -75,7 +76,7 @@ module Api
       end
 
       def document_scope
-        Document.where(tenant_id: Current.tenant.id, doc_type: KINDS.values)
+        Document.where(tenant_id: Current.tenant.id, doc_type: DOCUMENT_KINDS.values)
       end
 
       def allocations_params
@@ -94,7 +95,7 @@ module Api
       def document_json(document)
         {
           id: document.id,
-          kind: KINDS.key(document.doc_type),
+          kind: DOCUMENT_KINDS.key(document.doc_type),
           state: document.state,
           document_number: document.document_number,
           document_date: document.document_date,

@@ -209,6 +209,13 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     )
     sign_in_as(org.user)
 
+    get root_path
+    assert_response :success
+    assert_select "a[href='#email-verification']", "Verify email before recording"
+    assert_select ".metric-card__hint", "Required before company changes"
+    assert_select ".checklist__item:nth-child(3)", text: /Verify your email.*Required before changing company data/m
+    assert_select ".checklist__item:nth-child(4)", text: /Record a business event/m
+
     get api_v1_accounts_path
     assert_response :success
 

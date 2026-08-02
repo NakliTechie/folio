@@ -8,9 +8,8 @@
 # minor units, not a debit/credit pair — spec §4): a positive amount is a debit, a negative
 # a credit. Exact because every source line is debit-XOR-credit (verified across the corpus).
 #
-# Only the two ACCOUNT-based reports live here. gst-outward-summary reads Bahi's `invoices`
-# and stock-on-hand reads `stock_movements` — domain projections that are Batch 6 (GST) and
-# inventory, not the account model. They stay on the adapter until those batches land.
+# The account-based legal reports live here. GST filing reports and inventory valuation use their
+# own Folio projections and services; the `.khata` adapter remains only a conformance boundary.
 #
 # Built with the AR query interface: tenant_id is a bound parameter (.where); the joins and
 # the debit/credit aggregates are frozen literals. No user input is ever interpolated into SQL.

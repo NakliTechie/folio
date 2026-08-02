@@ -1,6 +1,7 @@
 \if :{?runtime_role}
 \else
-  \error 'pass -v runtime_role=ROLE'
+  \echo 'pass -v runtime_role=ROLE'
+  \quit 3
 \endif
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;

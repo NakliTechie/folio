@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG RUBY_VERSION=3.4.10
-FROM ruby:${RUBY_VERSION}-slim AS base
+FROM ruby:3.4.10-slim@sha256:614edae6a80eb2a7cf1984f03a6d814f523a48355e8f96deb5ddd25faa86353e AS base
 
 WORKDIR /rails
 
@@ -50,7 +49,7 @@ RUN groupadd --system --gid 1000 rails && \
 USER 1000:1000
 
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
-EXPOSE 3000
+EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD curl --fail --silent --show-error http://127.0.0.1:3000/up || exit 1
+  CMD curl --fail --silent --show-error http://127.0.0.1:80/up || exit 1
 CMD ["bin/thrust", "bin/rails", "server"]

@@ -62,6 +62,19 @@ class OpenItemCreditFlowsTest < ActionDispatch::IntegrationTest
     assert_equal 3_000, body.fetch("amount_minor")
     assert_equal 2_000, Posting::Clearing.open_amount(credit.reload)
     assert LedgerEvent.verify_chain(@org.tenant.id)[:ok]
+
+    refund = Document.find(body.fetch("id"))
+    get settlement_path(refund)
+    assert_response :success
+    assert_select "h1", "RF/1"
+
+    get "/api/v1/settlements/#{refund.id}"
+    assert_response :success
+    assert_equal "refund", JSON.parse(response.body).dig("settlement", "kind")
+
+    get root_path
+    assert_response :success
+    assert_select "a[href^='#{settlement_path(refund)}']", text: /RF\/1/
   end
 
   private

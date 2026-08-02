@@ -2,8 +2,7 @@
 
 # Seed a synthetic demo book through Folio's real engine.
 #
-#   bin/rails sample_books:seed                      # consulting, default demo email
-#   bin/rails "sample_books:seed[consulting,owner@demo.test,secret123]"
+#   bin/rails "sample_books:seed[consulting,owner@demo.test,a-long-demo-password]"
 #   bin/rails sample_books:list
 #
 # Each run creates a FRESH tenant; re-running with the same email raises. Feeds
@@ -20,16 +19,19 @@ namespace :sample_books do
 
   desc "Seed a sample book: sample_books:seed[scenario,email,password]"
   task :seed, %i[scenario email password] => :environment do |_t, args|
+    abort "sample-book seeding is disabled in production" if Rails.env.production?
+
     scenario = args[:scenario].presence || "consulting"
     email = args[:email].presence || "owner@#{scenario}-demo.folio.invalid"
-    password = args[:password].presence || "sample-books-2026"
+    password = args[:password].presence
+    abort "pass an explicit password: sample_books:seed[scenario,email,password]" unless password
 
     result = Folio::SampleBooks.seed!(scenario: scenario, email: email, password: password)
 
     rupees = ->(minor) { format("₹%.2f", minor / 100.0) }
     puts "Seeded #{result.org_name} (scenario: #{result.scenario_code})"
     puts "  tenant_id : #{result.tenant_id}"
-    puts "  login     : #{result.email} / #{result.password}"
+    puts "  login     : #{result.email} (use the password supplied to the task)"
     puts "  masters   : #{result.counts[:customers]} customers, #{result.counts[:vendors]} vendors, " \
          "#{result.counts[:services]} services"
     puts "  documents : #{result.counts[:sales]} invoices, #{result.counts[:purchases]} bills, " \

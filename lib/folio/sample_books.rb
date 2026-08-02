@@ -185,7 +185,9 @@ module Folio
     module_function
 
     # Seed a scenario into a fresh tenant. Returns Generator::Result.
-    def seed!(scenario: "consulting", email:, password: "sample-books-2026")
+    def seed!(scenario: "consulting", email:, password:)
+      raise Error, "sample books are disabled in production" if Rails.env.production?
+
       scen = scenario.is_a?(Scenario) ? scenario : SCENARIOS.fetch(scenario) do
         raise Error, "unknown scenario #{scenario.inspect} — known: #{SCENARIOS.keys.join(', ')}"
       end

@@ -2,6 +2,7 @@
 
 class SettlementsController < BrowserController
   KINDS = { "receipt" => "RC", "payment" => "PY" }.freeze
+  DOCUMENT_KINDS = KINDS.merge("refund" => "RF").freeze
 
   before_action -> { require_capability!("reports.read") }, only: %i[index show]
   before_action -> { require_capability!("payments.create") },
@@ -93,7 +94,7 @@ class SettlementsController < BrowserController
   end
 
   def document_scope
-    Document.where(tenant_id: Current.tenant.id, doc_type: [ *KINDS.values, "RF" ])
+    Document.where(tenant_id: Current.tenant.id, doc_type: DOCUMENT_KINDS.values)
   end
 
   def load_form(kind)

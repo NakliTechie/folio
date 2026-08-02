@@ -5,7 +5,7 @@ credentials-file: /run/secrets/cloudflared-credentials.json
 
 ingress:
   - hostname: books.your-real-domain.tld
-    service: http://127.0.0.1:3000
+    service: http://127.0.0.1:80
     originRequest:
       connectTimeout: 10s
   - service: http_status:404

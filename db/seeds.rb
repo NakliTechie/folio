@@ -8,5 +8,5 @@
 #     MovieGenre.find_or_create_by!(name: genre_name)
 #   end
 
-# Every tenant needs the PRIMARY standard ledger. Seeded per-tenant at provisioning;
-# here we register the shape. (Tenant provisioning is M2; this documents the intent.)
+# Tenant provisioning is performed transactionally by Onboarding::SignUp. There is no global seed:
+# production configuration and company-owned masters must never be inferred from shared rows here.

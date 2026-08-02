@@ -2,7 +2,8 @@
 
 # M2.3 — RBAC as a MATRIX, not a role enum (spec §11 / D13, README §6). A role_template is a
 # named role; role_permissions is the (role → capability) matrix; user_office_roles assigns a
-# user a role, optionally scoped to one office (README §6: roles are per-office). A
+# user a role. The v1 operating contract uses tenant-wide assignments; the nullable office
+# reference is reserved for a future selected-office isolation contract. A
 # posting_limit is an amount threshold the authority may post up to. Retrofitting an enum to a
 # matrix would rewrite every authorization call site — so it is a matrix from M2.
 class CreateRbacMatrix < ActiveRecord::Migration[8.1]

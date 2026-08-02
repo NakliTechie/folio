@@ -1,4 +1,7 @@
 <% content_for :title, "Overview · #{Current.tenant.name} · Folio" %>
+<% verification_required = Rails.application.config.x.email_verification_required %>
+<% verification_blocks_changes = verification_required && !Current.user.verified? %>
+<% completed_setup_steps = 2 + (Current.user.verified? ? 1 : 0) + (@journal_posted_count.positive? ? 1 : 0) %>
 
 <main id="main-content" class="page-shell">
   <section class="overview-hero">
@@ -7,7 +10,9 @@
       <h1>Your books, at a glance</h1>
       <p class="lede">Signed in as <%= Current.user.email_address %>. Keep the setup moving or pick up where your team left off.</p>
       <div class="action-row">
-        <% if permitted?("documents.post") %>
+        <% if permitted?("documents.post") && verification_blocks_changes %>
+          <%= link_to "Verify email before recording", "#email-verification", class: "button button--primary" %>
+        <% elsif permitted?("documents.post") %>
           <%= link_to @journal_posted_count.zero? ? "Choose your first business event" : "Record a business event",
             new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
         <% end %>
@@ -37,7 +42,13 @@
     <article class="metric-card">
       <span class="metric-card__label">Email</span>
       <strong><%= Current.user.verified? ? "Verified" : delivery_state_label(Current.user.verification_delivery_state) %></strong>
-      <span class="metric-card__hint"><%= Current.user.verified? ? "Account recovery is ready" : "Verification remains optional" %></span>
+      <span class="metric-card__hint"><%= if Current.user.verified?
+        verification_required ? "Required identity step complete" : "Account recovery is ready"
+      elsif verification_required
+        "Required before company changes"
+      else
+        "Optional; enables dependable recovery"
+      end %></span>
     </article>
   </section>
 
@@ -48,7 +59,7 @@
           <p class="eyebrow">First run</p>
           <h2>Setup checklist</h2>
         </div>
-        <span class="progress-count"><%= @journal_posted_count.positive? && Current.user.verified? ? "4" : @journal_posted_count.positive? || Current.user.verified? ? "3" : "2" %>/4</span>
+        <span class="progress-count"><%= completed_setup_steps %>/4</span>
       </div>
       <ol class="checklist">
         <li class="checklist__item checklist__item--done">
@@ -61,16 +72,19 @@
             <strong>Starter chart created</strong><small><%= @accounts_count %> accounts grouped below for review</small>
           </div>
         </li>
+        <li class="checklist__item <%= "checklist__item--done" if Current.user.verified? %>">
+          <span aria-hidden="true"><%= Current.user.verified? ? "✓" : "3" %></span>
+          <div>
+            <strong>Verify your email</strong>
+            <small><%= verification_required ? "Required before changing company data" : "Keep account recovery dependable" %></small>
+          </div>
+        </li>
         <li class="checklist__item <%= "checklist__item--done" if @journal_posted_count.positive? %>">
-          <span aria-hidden="true"><%= @journal_posted_count.positive? ? "✓" : "3" %></span>
+          <span aria-hidden="true"><%= @journal_posted_count.positive? ? "✓" : "4" %></span>
           <div>
             <strong>Record a business event</strong>
             <small><%= @journal_posted_count.positive? ? "Your ledger is active" : "Owner deposit is the recommended first step" %></small>
           </div>
-        </li>
-        <li class="checklist__item <%= "checklist__item--done" if Current.user.verified? %>">
-          <span aria-hidden="true"><%= Current.user.verified? ? "✓" : "4" %></span>
-          <div><strong>Verify your email</strong><small>Keep account recovery dependable</small></div>
         </li>
       </ol>
       <details class="starter-chart">
@@ -118,20 +132,20 @@
   </div>
 
   <% unless Current.user.verified? %>
-    <section class="panel verification-panel">
+    <section id="email-verification" class="panel verification-panel">
       <div>
-        <p class="eyebrow">Account recovery</p>
+        <p class="eyebrow"><%= verification_required ? "Required identity step" : "Account recovery" %></p>
         <h2>Verify <%= Current.user.email_address %></h2>
         <p>
           <% case Current.user.verification_delivery_state %>
           <% when "failed" %>
-            Delivery failed. Check the address and try again; you can continue using Folio meanwhile.
+            Delivery failed. Check the address and try again.<%= verification_required ? " You can review existing books, but company changes remain locked until verification." : " You can continue using Folio meanwhile." %>
           <% when "queued", "sending" %>
-            The verification email is queued. This page will show when delivery succeeds or fails.
+            The verification email is queued. This page will show when delivery succeeds or fails.<%= " Company changes remain locked until you confirm it." if verification_required %>
           <% when "sent" %>
-            The verification email was sent. Open its link within two days.
+            The verification email was sent. Open its link within two days.<%= " Company changes remain locked until then." if verification_required %>
           <% else %>
-            Send a verification email so password recovery stays dependable.
+            <%= verification_required ? "Send and confirm a verification email before changing company data." : "Send a verification email so password recovery stays dependable." %>
           <% end %>
         </p>
       </div>

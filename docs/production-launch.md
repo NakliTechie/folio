@@ -59,8 +59,9 @@ the README. Never place values in the image, repository, Tunnel YAML, or process
    exact release image.
 6. Start at least one separate worker with `bin/jobs` (or set `SOLID_QUEUE_IN_PUMA=1` only for a
    single-server installation).
-7. Route the Tunnel to port 3000. Use `/up` for process liveness and `/ready` for schema-aware
-   primary/queue/cache readiness.
+7. Route the Tunnel to Thruster on container port 80. Puma remains Thruster's internal target on
+   port 3000; do not expose or route around the caching/compression proxy. Use `/up` for process
+   liveness and `/ready` for schema-aware primary/queue/cache readiness.
 8. Exercise signup, verification confirmation, MFA enrollment/login, invitation acceptance,
    password reset, a safe draft,
    and a worker restart. Confirm the reverse proxy redacts token query values.

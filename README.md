@@ -204,10 +204,13 @@ is not accepted. Configure these environment variables through the deployment se
 
 - One Rails signing strategy: `RAILS_MASTER_KEY` for encrypted credentials containing
   `secret_key_base`, or a generated `SECRET_KEY_BASE`. Never reuse development/test values.
-- Database topology: either all of `DATABASE_URL`, `QUEUE_DATABASE_URL`, and `CACHE_DATABASE_URL`
-  naming three distinct PostgreSQL databases, or `FOLIO_DATABASE_PASSWORD` with the configured
-  `folio_production`, `folio_production_queue`, and `folio_production_cache` databases/users. The web
-  and worker processes need the same signing secret.
+- Runtime database topology: either all of `DATABASE_URL`, `QUEUE_DATABASE_URL`, and
+  `CACHE_DATABASE_URL` naming three distinct PostgreSQL databases with explicit TLS policy, or
+  `FOLIO_DATABASE_PASSWORD` with the conventional local databases. The runtime role must be a
+  non-owner without schema-creation privileges. A release task separately receives the three
+  `FOLIO_RELEASE_*_DATABASE_URL` credentials; backup tasks use the three read-all
+  `FOLIO_BACKUP_*_DATABASE_URL` credentials. Never expose release or backup credentials to web and
+  worker processes. They all need the same Rails signing secret.
 - `FOLIO_APP_HOST` — public hostname only, without a scheme.
 - `FOLIO_MAIL_FROM` — verified sender address.
 - `FOLIO_SMTP_ADDRESS`, `FOLIO_SMTP_USERNAME`, `FOLIO_SMTP_PASSWORD` — provider connection.
@@ -224,18 +227,23 @@ Folio does not currently ship an attachment surface. Production uses Solid Cache
 PostgreSQL database; signup, verification, invitation, and recovery throttles therefore remain
 consistent across web processes.
 
-Prepare and smoke-test all databases before booting the web or worker processes:
+Prepare all databases with the one-shot release role, apply runtime grants, then smoke-test using
+only the runtime role before booting web or worker processes:
 
 ```sh
-RAILS_ENV=production bin/rails db:prepare
+RAILS_ENV=production bin/release
+# As the release owner, in each database:
+# psql -v runtime_role=folio_runtime -f db/runtime-privileges.sql
 RAILS_ENV=production bin/production-check
 ```
 
 Configure the reverse proxy/access logger to omit query strings or redact the `token` parameter.
 Rails filters token query parameters, and verification/invitation/reset tokens are deliberately no
-longer embedded in path segments, but an upstream proxy must apply the same rule. Start the web
-process only after `db:prepare`; start `bin/jobs`, then exercise `/up`, signup, invitation, password
-reset, and one worker restart against the deployed mail provider.
+longer embedded in path segments, but an upstream proxy must apply the same rule. Route the origin
+to Thruster on container port 80, not its internal Puma target on port 3000. Start the web process
+only after `bin/release` and the runtime grants; start `bin/jobs`, then exercise `/up`, signup,
+verification, MFA, invitation, password reset, and one worker restart against the deployed mail
+provider.
 
 The full topology, deploy order, backup/restore policy, monitoring signals, and activation gates are
 in [`docs/production-launch.md`](docs/production-launch.md). The disabled-by-default IRP/GSP contract
