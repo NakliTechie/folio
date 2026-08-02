@@ -69,6 +69,9 @@ module DomainEvents
       "einvoice.cancellation_rejected" => "An IRP rejected an IRN cancellation request.",
       "einvoice.cancellation_indeterminate" => "An IRN cancellation ended without a conclusive response.",
       "einvoice.cancellation_reconciled_active" => "IRP reconciliation confirmed that an IRN remains active.",
+      # --- India e-way bill lifecycle through the IRN boundary ---
+      "eway_bill.prepared" => "An immutable EWB transport request was included for IRN generation.",
+      "eway_bill.generated" => "An IRP returned a governed e-way bill number and validity window.",
 
       # --- tenant / membership lifecycle (non-financial governance) ---
       "member.invited"  => "A user was invited to join a tenant with a role.",

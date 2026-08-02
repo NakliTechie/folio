@@ -7,13 +7,16 @@
 #
 # Each run creates a FRESH tenant; re-running with the same email raises. Feeds
 # /demo-nt, /walkthrough-nt, and manual exploration.
+require Rails.root.join("demo/seed/sample_books")
+
 namespace :sample_books do
   desc "List available sample-book scenarios"
   task list: :environment do
     puts "Available scenarios:"
-    Folio::SampleBooks::SCENARIOS.each_value do |s|
+    Folio::DemoSeed.scenarios.each do |code, metadata|
+      s = Folio::SampleBooks::SCENARIOS.fetch(code)
       puts format("  %-12s  %s (%d customers, %d sales)",
-                  s.code, s.org_name, s.customers.size, s.sales.size)
+                  s.code, metadata.fetch("label"), s.customers.size, s.sales.size)
     end
   end
 
@@ -21,12 +24,12 @@ namespace :sample_books do
   task :seed, %i[scenario email password] => :environment do |_t, args|
     abort "sample-book seeding is disabled in production" if Rails.env.production?
 
-    scenario = args[:scenario].presence || "consulting"
+    scenario = args[:scenario].presence || Folio::DemoSeed.default_scenario
     email = args[:email].presence || "owner@#{scenario}-demo.folio.invalid"
     password = args[:password].presence
     abort "pass an explicit password: sample_books:seed[scenario,email,password]" unless password
 
-    result = Folio::SampleBooks.seed!(scenario: scenario, email: email, password: password)
+    result = Folio::DemoSeed.load!(scenario: scenario, email: email, password: password)
 
     rupees = ->(minor) { format("₹%.2f", minor / 100.0) }
     puts "Seeded #{result.org_name} (scenario: #{result.scenario_code})"

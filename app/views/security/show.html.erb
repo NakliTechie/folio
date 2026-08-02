@@ -21,7 +21,7 @@
         <% end %>
       </div>
       <% unless Current.user.mfa_enabled? %>
-        <%= button_to "Set up authenticator", mfa_setup_security_path(tenant_route_options),
+        <%= link_to "Set up authenticator", mfa_setup_security_path(tenant_route_options),
           class: "button button--primary" %>
       <% end %>
     </div>

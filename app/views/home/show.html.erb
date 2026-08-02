@@ -1,7 +1,11 @@
 <% content_for :title, "Overview · #{Current.tenant.name} · Folio" %>
 <% verification_required = Rails.application.config.x.email_verification_required %>
 <% verification_blocks_changes = verification_required && !Current.user.verified? %>
-<% completed_setup_steps = 2 + (Current.user.verified? ? 1 : 0) + (@journal_posted_count.positive? ? 1 : 0) %>
+<% mfa_required = Rails.application.config.x.mfa_required %>
+<% mfa_blocks_changes = mfa_required && !Current.user.mfa_enabled? %>
+<% total_setup_steps = mfa_required ? 5 : 4 %>
+<% completed_setup_steps = 2 + (Current.user.verified? ? 1 : 0) +
+  (mfa_required && Current.user.mfa_enabled? ? 1 : 0) + (@journal_posted_count.positive? ? 1 : 0) %>
 
 <main id="main-content" class="page-shell">
   <section class="overview-hero">
@@ -12,6 +16,10 @@
       <div class="action-row">
         <% if permitted?("documents.post") && verification_blocks_changes %>
           <%= link_to "Verify email before recording", "#email-verification", class: "button button--primary" %>
+        <% elsif permitted?("documents.post") && mfa_blocks_changes %>
+          <%= link_to "Set up MFA before recording",
+            mfa_setup_security_path(tenant_route_options.merge(return_to: new_journal_voucher_path(tenant_route_options))),
+            class: "button button--primary" %>
         <% elsif permitted?("documents.post") %>
           <%= link_to @journal_posted_count.zero? ? "Choose your first business event" : "Record a business event",
             new_journal_voucher_path(tenant_route_options), class: "button button--primary" %>
@@ -59,7 +67,7 @@
           <p class="eyebrow">First run</p>
           <h2>Setup checklist</h2>
         </div>
-        <span class="progress-count"><%= completed_setup_steps %>/4</span>
+        <span class="progress-count"><%= completed_setup_steps %>/<%= total_setup_steps %></span>
       </div>
       <ol class="checklist">
         <li class="checklist__item checklist__item--done">
@@ -79,8 +87,17 @@
             <small><%= verification_required ? "Required before changing company data" : "Keep account recovery dependable" %></small>
           </div>
         </li>
+        <% if mfa_required %>
+          <li class="checklist__item <%= "checklist__item--done" if Current.user.mfa_enabled? %>">
+            <span aria-hidden="true"><%= Current.user.mfa_enabled? ? "✓" : "4" %></span>
+            <div>
+              <strong>Protect your account</strong>
+              <small><%= Current.user.mfa_enabled? ? "Authenticator and recovery codes are ready" : "Required before changing company data" %></small>
+            </div>
+          </li>
+        <% end %>
         <li class="checklist__item <%= "checklist__item--done" if @journal_posted_count.positive? %>">
-          <span aria-hidden="true"><%= @journal_posted_count.positive? ? "✓" : "4" %></span>
+          <span aria-hidden="true"><%= @journal_posted_count.positive? ? "✓" : total_setup_steps %></span>
           <div>
             <strong>Record a business event</strong>
             <small><%= @journal_posted_count.positive? ? "Your ledger is active" : "Owner deposit is the recommended first step" %></small>

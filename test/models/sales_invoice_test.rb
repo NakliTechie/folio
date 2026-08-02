@@ -95,6 +95,17 @@ class SalesInvoiceTest < ActiveSupport::TestCase
       },
       actor: @org.user
     )
+    @good = Items::Manage.create!(
+      tenant: @org.tenant,
+      attributes: {
+        code: "MACHINE", name: "Machine component", item_type: "good",
+        hsn_sac_code: "848790", unit_of_measure: "NOS", tax_rate_basis_points: 1800,
+        cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000",
+        inventory_class: "finished_good", revision: "A",
+        valuation_method: "moving_average", inventory_account_code: "1300"
+      },
+      actor: @org.user
+    )
   end
 
   test "an intra-state service invoice freezes tax inputs and posts typed GST lines" do
@@ -373,6 +384,100 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     assert_raises(Taxes::India::Gst::EInvoice::InvalidPayload) do
       Taxes::India::Gst::EInvoice::Validator.validate!(mutated)
     end
+  end
+
+  test "goods invoice freezes EWB transport details into INV-01 and records provider evidence" do
+    invoice = build_invoice(item: @good, quantity: "1", unit_price: "60000.00")
+    Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+
+    assert invoice.eway_bill_required?
+    error = assert_raises(Taxes::India::Gst::EInvoice::NotReady) do
+      Taxes::India::Gst::EInvoice::Prepare.call(
+        document: invoice, actor: "test", actor_user_id: @org.user.id
+      )
+    end
+    assert_match(/e-way transport details/, error.message)
+
+    assert_difference [ "EwayBillSubmission.count", "DomainEvent.count" ], 1 do
+      Taxes::India::Gst::EwayBill::Prepare.call(
+        document: invoice,
+        attributes: {
+          transport_mode: "1", distance_km: "0", vehicle_number: "MH-12-AB-1234",
+          vehicle_type: "R", transporter_id: "27AAPFU0939F1ZV",
+          transporter_name: "Fast Freight"
+        },
+        actor: "u:#{@org.user.id}", actor_user_id: @org.user.id
+      )
+    end
+    eway_bill = invoice.reload.eway_bill_submission
+    assert_equal "MH12AB1234", eway_bill.payload.fetch("VehNo")
+    assert_equal 0, eway_bill.payload.fetch("Distance")
+    assert_equal "1", eway_bill.payload.fetch("TransMode")
+    assert_equal Taxes::India::Gst::EwayBill.canonical_digest(eway_bill.payload),
+      eway_bill.payload_sha256
+
+    submission = Taxes::India::Gst::EInvoice::Prepare.call(
+      document: invoice, actor: "u:#{@org.user.id}", actor_user_id: @org.user.id
+    )
+    assert_equal eway_bill.payload, submission.payload.fetch("EwbDtls")
+    assert Taxes::India::Gst::EInvoice::Validator.validate!(submission.payload)
+
+    evidence = Taxes::India::Gst::EInvoice::Provider::EwayBillEvidence.new(
+      eway_bill_number: "271234567890",
+      generated_at: Time.zone.parse("2026-07-31 12:00:00"),
+      valid_until: Time.zone.parse("2026-08-01 23:59:00")
+    )
+    provider = FakeIrpProvider.new(generate_result: irp_acknowledgement(eway_bill: evidence))
+    assert_difference -> { DomainEvent.where(action: "eway_bill.generated").count }, 1 do
+      Taxes::India::Gst::EInvoice::Submit.call(
+        submission: submission,
+        actor: "u:#{@org.user.id}", actor_user_id: @org.user.id,
+        provider: provider
+      )
+    end
+    eway_bill.reload
+    assert eway_bill.generated?
+    assert_equal "271234567890", eway_bill.eway_bill_number
+    assert_equal evidence.valid_until, eway_bill.valid_until
+  end
+
+  test "EWB transport validation rejects service-only and incomplete non-road requests" do
+    service_invoice = build_invoice
+    Documents::Post.call(service_invoice, actor: "u:#{@org.user.id}")
+    assert_raises(Taxes::India::Gst::EwayBill::NotReady) do
+      Taxes::India::Gst::EwayBill.build(
+        service_invoice, transport_mode: "1", distance_km: 10, vehicle_number: "MH12AB1234"
+      )
+    end
+
+    goods_invoice = build_invoice(item: @good, quantity: "1", unit_price: "1000.00")
+    Documents::Post.call(goods_invoice, actor: "u:#{@org.user.id}")
+    error = assert_raises(Taxes::India::Gst::EwayBill::InvalidPayload) do
+      Taxes::India::Gst::EwayBill.build(goods_invoice, transport_mode: "2", distance_km: 100)
+    end
+    assert_match(/transport document number and date/, error.message)
+  end
+
+  test "EWB transport validation rejects invoices outside the portal generation window" do
+    @seller_registration.update!(valid_from: Date.new(2026, 1, 1))
+    @customer.party_tax_registrations.first.update!(valid_from: Date.new(2026, 1, 1))
+    invoice = build_invoice(
+      item: @good,
+      document_date: Date.new(2026, 2, 1),
+      due_date: Date.new(2026, 3, 3),
+      quantity: "1",
+      unit_price: "60000.00"
+    )
+    Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+
+    error = travel_to(Date.new(2026, 8, 2)) do
+      assert_raises(Taxes::India::Gst::EwayBill::NotReady) do
+        Taxes::India::Gst::EwayBill.build(
+          invoice, transport_mode: "1", distance_km: 10, vehicle_number: "MH12AB1234"
+        )
+      end
+    end
+    assert_match(/older than.*180-day/, error.message)
   end
 
   test "provider seam stores complete IRP acknowledgement artifacts exactly once" do
@@ -703,23 +808,25 @@ class SalesInvoiceTest < ActiveSupport::TestCase
     )
   end
 
-  def build_invoice(place_of_supply_state_code: "27", override_evidence: true)
+  def build_invoice(place_of_supply_state_code: "27", override_evidence: true,
+                    item: @service, quantity: "2", unit_price: "50.00",
+                    document_date: INVOICE_DATE, due_date: document_date + 30)
     override = place_of_supply_state_code != @customer.state_code && override_evidence
     SalesInvoices::BuildDraft.call(
       tenant: @org.tenant,
       party_id: @customer.id,
       tax_registration_id: @seller_registration.id,
-      document_date: INVOICE_DATE,
-      due_date: INVOICE_DATE + 30,
+      document_date: document_date,
+      due_date: due_date,
       place_of_supply_state_code: place_of_supply_state_code,
       place_of_supply_override_reason: override ? "Contract identifies Karnataka as the place of supply" : nil,
       actor: override ? @org.user : nil,
       narration: "July consulting",
-      lines: [ { item_id: @service.id, quantity: "2", unit_price: "50.00" } ]
+      lines: [ { item_id: item.id, quantity: quantity, unit_price: unit_price } ]
     )
   end
 
-  def irp_acknowledgement
+  def irp_acknowledgement(eway_bill: nil)
     payload = EinvoiceSubmission.order(:id).last&.payload || {
       "SellerDtls" => { "Gstin" => @seller_registration.identifier },
       "DocDtls" => { "Typ" => "INV", "No" => "SI/26-27/00001", "Dt" => INVOICE_DATE.strftime("%d/%m/%Y") }
@@ -736,7 +843,8 @@ class SalesInvoiceTest < ActiveSupport::TestCase
         "Data" => { "Irn" => "a" * 64, "AckNo" => "112026000000001" }
       },
       signature_status: "provider_verified",
-      document_identity: provider.document_identity(payload)
+      document_identity: provider.document_identity(payload),
+      eway_bill: eway_bill
     )
   end
 

@@ -83,21 +83,33 @@ module Taxes
             ack = Provider.validate_acknowledgement!(acknowledgement)
             Provider.bind_acknowledgement!(ack, submission.payload)
             response_digest = EInvoice.canonical_digest(ack.raw_response)
-            submission.with_lock do
-              submission.update!(
-                status: "acknowledged",
-                irn: ack.irn.downcase,
-                ack_number: ack.ack_number.to_s,
-                acknowledged_at: ack.acknowledged_at,
-                signed_invoice: ack.signed_invoice,
-                signed_qr_code: ack.signed_qr_code,
-                signature_status: ack.signature_status,
-                provider_response: ack.raw_response,
-                provider_response_sha256: response_digest,
-                error_code: nil,
-                error_message: nil
-              )
-              record_conclusion!(submission, "einvoice.acknowledged", actor, actor_user_id)
+            EinvoiceSubmission.transaction do
+              submission.with_lock do
+                submission.update!(
+                  status: "acknowledged",
+                  irn: ack.irn.downcase,
+                  ack_number: ack.ack_number.to_s,
+                  acknowledged_at: ack.acknowledged_at,
+                  signed_invoice: ack.signed_invoice,
+                  signed_qr_code: ack.signed_qr_code,
+                  signature_status: ack.signature_status,
+                  provider_response: ack.raw_response,
+                  provider_response_sha256: response_digest,
+                  error_code: nil,
+                  error_message: nil
+                )
+                record_conclusion!(submission, "einvoice.acknowledged", actor, actor_user_id)
+              end
+              if (eway_bill = submission.document.eway_bill_submission)
+                Taxes::India::Gst::EwayBill::Acknowledge.call(
+                  submission: eway_bill,
+                  evidence: ack.eway_bill,
+                  provider: submission.provider,
+                  raw_response: ack.raw_response,
+                  actor: actor,
+                  actor_user_id: actor_user_id
+                )
+              end
             end
             submission
           rescue ActiveRecord::RecordNotUnique

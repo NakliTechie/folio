@@ -24,6 +24,7 @@ class Document < ApplicationRecord
   has_many :debit_notes, class_name: "Document", foreign_key: :debit_note_for_document_id,
     dependent: :restrict_with_exception
   has_one :einvoice_submission, dependent: :restrict_with_exception
+  has_one :eway_bill_submission, dependent: :restrict_with_exception
   has_many :procurement_matches, dependent: :destroy
 
   validates :tenant_id, :entity_id, :office_id, :doc_type, :fiscal_year,
@@ -38,7 +39,7 @@ class Document < ApplicationRecord
   def postable? = %w[draft parked].include?(state)
   def reversible?
     posted? && reversed_by_document_id.nil? && !%w[CN PC PD RC PY RF].include?(doc_type) &&
-      (!einvoice_submission || einvoice_submission.cancelled?) &&
+      (!einvoice_submission || einvoice_submission.cancelled?) && !eway_bill_submission &&
       !settlement_activity? &&
       !credit_notes.where(state: %w[posted reversed]).exists? &&
       !debit_notes.where(state: %w[posted reversed]).exists?
@@ -59,6 +60,14 @@ class Document < ApplicationRecord
     customer_fields = %w[name addressLine1 city postalCode stateCode countryCode gstin]
     seller_fields.all? { |field| tax_registration_snapshot&.fetch(field, nil).present? } &&
       customer_fields.all? { |field| party_snapshot&.fetch(field, nil).present? }
+  end
+
+  def contains_goods?
+    document_lines.any? { |line| line.item_snapshot&.fetch("itemType", nil) == "good" }
+  end
+
+  def eway_bill_required?
+    contains_goods? && total_minor.to_i > Taxes::India::Gst::EwayBill::MANDATORY_THRESHOLD_MINOR
   end
 
   private

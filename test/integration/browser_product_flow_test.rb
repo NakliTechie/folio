@@ -16,6 +16,7 @@ class BrowserProductFlowTest < ActionDispatch::IntegrationTest
     assert_select "h1", "Your books, at a glance"
     assert_select "a", "Choose your first business event"
     assert_select "a", "Chart of accounts"
+    assert_select "details.mobile-user-menu a", "Security"
     assert_select "details.mobile-user-menu button", "Sign out"
 
     assert_difference "Document.count", 1 do

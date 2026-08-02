@@ -5,6 +5,53 @@ require "application_system_test_case"
 class WalkthroughTest < ApplicationSystemTestCase
   PASSWORD = "walkthrough-password-2026"
 
+  test "production onboarding enrolls MFA through Turbo and returns to the first event" do
+    previous_email_gate = Rails.application.config.x.email_verification_required
+    previous_mfa_gate = Rails.application.config.x.mfa_required
+    Rails.application.config.x.email_verification_required = true
+    Rails.application.config.x.mfa_required = true
+
+    visit new_registration_path
+    fill_in "Company name", with: "Protected First Value"
+    fill_in "Email", with: "protected-first-value@folio.invalid"
+    fill_in "Password", with: PASSWORD
+    click_button "Create company books"
+    assert_current_path root_path, wait: 15
+
+    user = User.find_by!(email_address: "protected-first-value@folio.invalid")
+    user.update!(verified_at: Time.current)
+    visit root_path
+
+    assert_link "Set up MFA before recording"
+    assert_selector ".progress-count", text: "3/5"
+    click_link "Set up MFA before recording"
+
+    assert_selector "h1", text: "Set up your authenticator"
+    secret = find(".account-code").text.delete(" ")
+    fill_in "Current password", with: PASSWORD
+    fill_in "Six-digit authenticator code", with: Mfa::Totp.code(secret)
+    click_button "Enable multi-factor authentication"
+
+    assert_selector "h1", text: "Multi-factor authentication enabled"
+    assert_selector ".recovery-code-list li", count: 10
+    click_link "I saved these codes"
+
+    assert_current_path new_journal_voucher_path, ignore_query: true
+    assert_selector "h1", text: "What happened?"
+    assert user.reload.mfa_enabled?
+  ensure
+    Rails.application.config.x.email_verification_required = previous_email_gate
+    Rails.application.config.x.mfa_required = previous_mfa_gate
+  end
+
+  test "skip navigation moves keyboard focus into main content" do
+    visit new_registration_path
+    page.execute_script("document.querySelector('[data-skip-link]').click()")
+
+    assert_equal "main-content", page.evaluate_script("document.activeElement.id")
+    assert_equal "#main-content", page.evaluate_script("window.location.hash")
+  end
+
   test "anonymous signup and duplicate-email recovery" do
     visit root_path
     assert_current_path new_session_path
@@ -145,7 +192,7 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Email", with: org.user.email_address
     fill_in "Password", with: PASSWORD
     click_button "Sign in"
-    open_primary_nav "Settings"
+    open_primary_nav "Administration"
     click_link "Company details"
     fill_in "Address line 1", with: "1 Ledger Lane"
     fill_in "City", with: "Mumbai"
@@ -364,8 +411,8 @@ class WalkthroughTest < ApplicationSystemTestCase
     fill_in "Email", with: setup.fetch(:org).user.email_address
     fill_in "Password", with: PASSWORD
     click_button "Sign in"
-    open_primary_nav "Accounting"
-    click_link "Cash"
+    open_primary_nav "Cash & banking"
+    click_link "Receipts & payments"
     click_link "Record receipt"
     set_date_field "Settlement date", "2026-08-15"
     select "1010 · Bank", from: "Cash or bank account"
@@ -460,7 +507,7 @@ class WalkthroughTest < ApplicationSystemTestCase
 
       case role_code
       when "owner"
-        open_primary_nav "Settings"
+        open_primary_nav "Administration"
         assert_link "Team"
         assert_link "Tax registrations"
         click_link "Team"
@@ -475,7 +522,7 @@ class WalkthroughTest < ApplicationSystemTestCase
         assert_text "role-invited@folio.invalid"
         assert_equal invitation_count + 1, Invitation.where(tenant_id: org.tenant.id).count
       when "accountant"
-        open_primary_nav "Settings"
+        open_primary_nav "Administration"
         assert_no_link "Team"
         assert_link "Tax registrations"
         open_primary_nav "Accounting"
@@ -493,7 +540,7 @@ class WalkthroughTest < ApplicationSystemTestCase
         assert_selector "h1", text: "Period close"
         assert_no_button "Restrict to close team"
       when "operator"
-        open_primary_nav "Settings"
+        open_primary_nav "Administration"
         assert_no_link "Team"
         assert_link "Tax registrations"
         assert_no_link "Choose your first business event"
@@ -520,7 +567,7 @@ class WalkthroughTest < ApplicationSystemTestCase
         assert_selector "[role=alert]", text: /do not have permission/i
         assert_equal account_count, Account.where(tenant_id: org.tenant.id).count
       when "ca_auditor"
-        open_primary_nav "Settings"
+        open_primary_nav "Administration"
         assert_no_link "Team"
         assert_link "Tax registrations"
         assert_link "Choose your first business event"
@@ -536,7 +583,7 @@ class WalkthroughTest < ApplicationSystemTestCase
         assert_selector "[role=alert]", text: /do not have permission/i
         assert_equal party_count, Party.where(tenant_id: org.tenant.id).count
       when "viewer"
-        open_primary_nav "Settings"
+        open_primary_nav "Administration"
         assert_no_link "Team"
         assert_link "Tax registrations"
         assert_no_link "Choose your first business event"

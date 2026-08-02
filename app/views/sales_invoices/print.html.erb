@@ -33,6 +33,10 @@
             <div><dt>IRN status</dt><dd><strong>Cancelled</strong> · <%= @einvoice_cancellation.cancelled_at.to_fs(:long) %></dd></div>
           <% end %>
         <% end %>
+        <% if @eway_bill_submission&.generated? %>
+          <div><dt>E-way bill</dt><dd><strong><%= @eway_bill_submission.eway_bill_number %></strong></dd></div>
+          <div><dt>E-way bill validity</dt><dd><%= @eway_bill_submission.generated_at.to_fs(:long) %> – <%= @eway_bill_submission.valid_until.to_fs(:long) %></dd></div>
+        <% end %>
       </dl>
     </header>
 
@@ -101,6 +105,9 @@
     <footer class="invoice-document__footer">
       <% if @einvoice_submission && !@einvoice_submission.acknowledged? %>
         <div><strong>E-invoice status</strong><p>IRN not generated. The prepared JSON is not an IRP acknowledgement.</p></div>
+      <% end %>
+      <% if @eway_bill_submission && !@eway_bill_submission.generated? %>
+        <div><strong>E-way bill status</strong><p>E-way bill number not generated. The prepared transport JSON is not a portal acknowledgement.</p></div>
       <% end %>
       <div><strong>Notes</strong><p><%= @document.narration.presence || "Thank you for your business." %></p></div>
       <div class="invoice-document__signature"><span>For <%= seller.fetch("legalName") %></span><strong>Authorised signatory</strong></div>

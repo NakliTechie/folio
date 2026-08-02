@@ -1,4 +1,5 @@
 <% content_for :title, "#{@document.document_number || "Draft invoice"} · #{Current.tenant.name} · Folio" %>
+<% goods_invoice = @document.contains_goods? %>
 
 <main id="main-content" class="page-shell">
   <%= link_to "← Back to sales invoices", sales_invoices_path(tenant_route_options), class: "back-link" %>
@@ -63,9 +64,13 @@
           elsif @einvoice_cancellation
             "IRN cancellation #{@einvoice_cancellation.status.humanize.downcase}"
           elsif @einvoice_submission&.acknowledged?
-            "IRN acknowledged"
+            @eway_bill_submission&.generated? ? "IRN and e-way bill acknowledged" : "IRN acknowledged"
+          elsif @eway_bill_submission
+            "Combined JSON prepared — no IRN or EWB generated"
           elsif @einvoice_submission
             "JSON prepared — IRN not generated"
+          elsif goods_invoice
+            "Prepare the IRN and e-way bill request"
           else
             "Prepare the IRP request"
           end
@@ -76,22 +81,80 @@
           <p>Reason <%= @einvoice_cancellation.reason_code %> · <%= @einvoice_cancellation.remarks %>. Do not retry an indeterminate request until the provider is reconciled by IRN.</p>
         <% elsif @einvoice_submission&.acknowledged? %>
           <p>IRN <strong><%= @einvoice_submission.irn %></strong> · acknowledgement <%= @einvoice_submission.ack_number %>. Signature status: <%= @einvoice_submission.signature_status.humanize.downcase %>.</p>
+          <% if @eway_bill_submission&.generated? %>
+            <p>E-way bill <strong><%= @eway_bill_submission.eway_bill_number %></strong> is valid until <%= @eway_bill_submission.valid_until.to_fs(:long) %>.</p>
+          <% end %>
+        <% elsif @eway_bill_submission %>
+          <p>The immutable INV-01 request includes EWB transport details for combined IRN generation. Folio has not contacted an IRP, generated an IRN, or generated an e-way bill number.</p>
         <% elsif @einvoice_submission %>
           <p>This immutable request is ready for offline upload or a future reviewed provider adapter. Folio has not contacted an IRP, generated an IRN, or verified a signature.</p>
+        <% elsif goods_invoice %>
+          <p>For an e-invoice-enabled B2B tax invoice, NIC requires the e-way bill to be generated with or by reference to the IRN. Folio freezes both requests together and does not claim a number before provider acknowledgement.</p>
         <% else %>
           <p>Preparation validates the posted invoice against Folio’s domestic B2B INV-01 profile and freezes an idempotent JSON request. It does not contact an IRP.</p>
         <% end %>
       </div>
-      <div class="action-row">
-        <% if @einvoice_submission %>
+      <% if @einvoice_submission %>
+        <div class="action-row">
           <%= link_to "Download INV-01 JSON", einvoice_json_sales_invoice_path(@document, tenant_route_options),
             class: "button button--secondary" %>
-        <% elsif @document.state == "posted" && permitted?("invoices.create") %>
+        </div>
+      <% elsif goods_invoice && @document.state == "posted" && permitted?("invoices.create") %>
+        <%= form_with scope: :eway_bill,
+          url: prepare_einvoice_with_eway_sales_invoice_path(@document, tenant_route_options),
+          class: "stacked-form" do |form| %>
+          <div class="form-grid form-grid--two">
+            <div class="form-group">
+              <%= form.label :transport_mode, "Transport mode" %>
+              <%= form.select :transport_mode,
+                Taxes::India::Gst::EwayBill::TRANSPORT_MODES.map { |code, label| [label, code] },
+                { selected: "1" }, required: true %>
+            </div>
+            <div class="form-group">
+              <%= form.label :distance_km, "Distance (km)" %>
+              <%= form.number_field :distance_km, value: 0, min: 0,
+                max: Taxes::India::Gst::EwayBill::MAX_DISTANCE_KM, required: true %>
+              <small>Use 0 to request the portal’s PIN-to-PIN distance.</small>
+            </div>
+            <div class="form-group">
+              <%= form.label :vehicle_number, "Vehicle number" %>
+              <%= form.text_field :vehicle_number, maxlength: 20,
+                placeholder: "For road transport, e.g. MH12AB1234" %>
+            </div>
+            <div class="form-group">
+              <%= form.label :vehicle_type, "Vehicle type" %>
+              <%= form.select :vehicle_type,
+                Taxes::India::Gst::EwayBill::VEHICLE_TYPES.map { |code, label| [label, code] },
+                { selected: "R" }, required: true %>
+            </div>
+            <div class="form-group">
+              <%= form.label :transporter_id, "Transporter GSTIN or TRANSIN (optional)" %>
+              <%= form.text_field :transporter_id, maxlength: 15, autocomplete: "off" %>
+            </div>
+            <div class="form-group">
+              <%= form.label :transporter_name, "Transporter name (optional)" %>
+              <%= form.text_field :transporter_name, maxlength: 100 %>
+            </div>
+            <div class="form-group">
+              <%= form.label :transport_document_number, "Transport document number" %>
+              <%= form.text_field :transport_document_number, maxlength: 15 %>
+              <small>Required for rail, air, or ship; optional for road.</small>
+            </div>
+            <div class="form-group">
+              <%= form.label :transport_document_date, "Transport document date" %>
+              <%= form.date_field :transport_document_date %>
+            </div>
+          </div>
+          <%= form.submit "Prepare combined IRN + e-way bill JSON", class: "button button--secondary",
+            data: { turbo_confirm: "Freeze these INV-01 and e-way transport details together?" } %>
+        <% end %>
+      <% elsif @document.state == "posted" && permitted?("invoices.create") %>
+        <div class="action-row">
           <%= button_to "Prepare e-invoice JSON", prepare_einvoice_sales_invoice_path(@document, tenant_route_options),
             method: :post, class: "button button--secondary",
             form: { data: { turbo_confirm: "Freeze this invoice’s INV-01 request? Reversal will be blocked afterward to avoid IRP ambiguity." } } %>
-        <% end %>
-      </div>
+        </div>
+      <% end %>
     </section>
   <% end %>
 

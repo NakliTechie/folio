@@ -11,6 +11,6 @@
       <% @recovery_codes.each do |code| %><li><code><%= code %></code></li><% end %>
     </ul>
     <p class="table-note">Each code works once. Store them separately from your password and authenticator device.</p>
-    <%= link_to "I saved these codes", security_path(tenant_route_options), class: "button button--primary" %>
+    <%= link_to "I saved these codes", @continue_path, class: "button button--primary" %>
   </section>
 </main>

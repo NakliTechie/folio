@@ -1,0 +1,15 @@
+version: 1
+default: consulting
+scenarios:
+  consulting:
+    label: Services and receivables
+    description: Maharashtra consulting book with intra- and inter-state GST, TDS, partial receipts, and residual clearing.
+    start_path: /
+  manufacturing:
+    label: Manufacturing and inventory
+    description: Gujarat goods book with inventory, intra- and inter-state GST, high-value purchases, and TDS under sections 194C and 194Q.
+    start_path: /inventory
+  pharma:
+    label: Distribution and compliance
+    description: Maharashtra pharma distribution book with 12% GST goods, interstate sales, receipts, and TDS under sections 194H and 194Q.
+    start_path: /reports/gst-summary

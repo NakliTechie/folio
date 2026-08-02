@@ -2267,6 +2267,55 @@ ALTER SEQUENCE public.entry_lines_id_seq OWNED BY public.entry_lines.id;
 
 
 --
+-- Name: eway_bill_submissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.eway_bill_submissions (
+    id bigint NOT NULL,
+    tenant_id bigint NOT NULL,
+    document_id bigint NOT NULL,
+    requested_by_id bigint NOT NULL,
+    provider character varying DEFAULT 'offline_export'::character varying NOT NULL,
+    status character varying DEFAULT 'prepared'::character varying NOT NULL,
+    schema_version character varying DEFAULT 'INV-01-EWB-1.1'::character varying NOT NULL,
+    request_id character varying NOT NULL,
+    payload jsonb NOT NULL,
+    payload_sha256 character varying(64) NOT NULL,
+    eway_bill_number character varying(12),
+    generated_at timestamp(6) without time zone,
+    valid_until timestamp(6) without time zone,
+    provider_response jsonb,
+    provider_response_sha256 character varying(64),
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT eway_bill_submissions_generation_complete CHECK ((((status)::text <> 'generated'::text) OR ((eway_bill_number IS NOT NULL) AND (generated_at IS NOT NULL) AND (valid_until IS NOT NULL) AND (provider_response IS NOT NULL) AND (provider_response_sha256 IS NOT NULL)))),
+    CONSTRAINT eway_bill_submissions_status_valid CHECK (((status)::text = ANY ((ARRAY['prepared'::character varying, 'generated'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.eway_bill_submissions FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: eway_bill_submissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.eway_bill_submissions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: eway_bill_submissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.eway_bill_submissions_id_seq OWNED BY public.eway_bill_submissions.id;
+
+
+--
 -- Name: exchange_rates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4605,6 +4654,13 @@ ALTER TABLE ONLY public.entry_lines ALTER COLUMN id SET DEFAULT nextval('public.
 
 
 --
+-- Name: eway_bill_submissions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.eway_bill_submissions ALTER COLUMN id SET DEFAULT nextval('public.eway_bill_submissions_id_seq'::regclass);
+
+
+--
 -- Name: exchange_rates id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -5281,6 +5337,14 @@ ALTER TABLE ONLY public.entries
 
 ALTER TABLE ONLY public.entry_lines
     ADD CONSTRAINT entry_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: eway_bill_submissions eway_bill_submissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.eway_bill_submissions
+    ADD CONSTRAINT eway_bill_submissions_pkey PRIMARY KEY (id);
 
 
 --
@@ -7008,6 +7072,48 @@ CREATE INDEX index_entry_lines_on_tenant_id_and_account_code ON public.entry_lin
 
 
 --
+-- Name: index_eway_bill_submissions_on_document; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_eway_bill_submissions_on_document ON public.eway_bill_submissions USING btree (tenant_id, document_id);
+
+
+--
+-- Name: index_eway_bill_submissions_on_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_eway_bill_submissions_on_document_id ON public.eway_bill_submissions USING btree (document_id);
+
+
+--
+-- Name: index_eway_bill_submissions_on_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_eway_bill_submissions_on_number ON public.eway_bill_submissions USING btree (tenant_id, eway_bill_number) WHERE (eway_bill_number IS NOT NULL);
+
+
+--
+-- Name: index_eway_bill_submissions_on_request; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_eway_bill_submissions_on_request ON public.eway_bill_submissions USING btree (tenant_id, request_id);
+
+
+--
+-- Name: index_eway_bill_submissions_on_requested_by_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_eway_bill_submissions_on_requested_by_id ON public.eway_bill_submissions USING btree (requested_by_id);
+
+
+--
+-- Name: index_eway_bill_submissions_on_tenant_id_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_eway_bill_submissions_on_tenant_id_and_status ON public.eway_bill_submissions USING btree (tenant_id, status);
+
+
+--
 -- Name: index_exchange_rates_on_created_by_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -8525,6 +8631,14 @@ ALTER TABLE ONLY public.financial_statement_assignments
 
 
 --
+-- Name: eway_bill_submissions fk_rails_2999b8bff0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.eway_bill_submissions
+    ADD CONSTRAINT fk_rails_2999b8bff0 FOREIGN KEY (document_id) REFERENCES public.documents(id);
+
+
+--
 -- Name: contract_schedules fk_rails_29fd715d70; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8874,6 +8988,14 @@ ALTER TABLE ONLY public.contract_milestones
 
 ALTER TABLE ONLY public.inventory_transactions
     ADD CONSTRAINT fk_rails_735685831f FOREIGN KEY (item_id) REFERENCES public.items(id);
+
+
+--
+-- Name: eway_bill_submissions fk_rails_743623a734; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.eway_bill_submissions
+    ADD CONSTRAINT fk_rails_743623a734 FOREIGN KEY (requested_by_id) REFERENCES public.users(id);
 
 
 --
@@ -9755,6 +9877,12 @@ ALTER TABLE public.entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.entry_lines ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: eway_bill_submissions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.eway_bill_submissions ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: exchange_rates; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10087,6 +10215,13 @@ CREATE POLICY folio_tenant_isolation ON public.entries USING ((tenant_id = (NULL
 --
 
 CREATE POLICY folio_tenant_isolation ON public.entry_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: eway_bill_submissions folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.eway_bill_submissions USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
 
 
 --
@@ -10516,6 +10651,7 @@ ALTER TABLE public.warehouses ENABLE ROW LEVEL SECURITY;
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260802034000'),
 ('20260802033000'),
 ('20260802032000'),
 ('20260802031000'),

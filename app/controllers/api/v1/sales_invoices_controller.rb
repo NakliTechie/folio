@@ -4,9 +4,10 @@ module Api
   module V1
     class SalesInvoicesController < BaseController
       before_action -> { require_capability!("reports.read") }, only: %i[index show]
-      before_action -> { require_capability!("invoices.create") }, only: %i[create post prepare_einvoice]
+      before_action -> { require_capability!("invoices.create") },
+        only: %i[create post prepare_einvoice prepare_einvoice_with_eway]
       before_action -> { require_capability!("documents.reverse") }, only: :reverse
-      before_action :set_document, only: %i[show prepare_einvoice post reverse]
+      before_action :set_document, only: %i[show prepare_einvoice prepare_einvoice_with_eway post reverse]
 
       def index
         documents = document_scope.order(document_date: :desc, created_at: :desc)
@@ -55,6 +56,35 @@ module Api
         render json: { einvoice_submission: submission_json(submission, include_payload: true) },
           status: created ? :created : :ok
       rescue Taxes::India::Gst::EInvoice::NotReady,
+             Taxes::India::Gst::EInvoice::InvalidPayload,
+             ActiveRecord::RecordInvalid => e
+        render_error(e.message, :unprocessable_entity)
+      end
+
+      def prepare_einvoice_with_eway
+        created = @document.eway_bill_submission.nil?
+        eway_bill = nil
+        submission = nil
+        ApplicationRecord.transaction do
+          eway_bill = Taxes::India::Gst::EwayBill::Prepare.call(
+            document: @document,
+            attributes: eway_bill_params,
+            actor: "u:#{current_user.id}",
+            actor_user_id: current_user.id
+          )
+          submission = Taxes::India::Gst::EInvoice::Prepare.call(
+            document: @document,
+            actor: "u:#{current_user.id}",
+            actor_user_id: current_user.id
+          )
+        end
+        render json: {
+          einvoice_submission: submission_json(submission, include_payload: true),
+          eway_bill_submission: eway_bill_json(eway_bill, include_payload: true)
+        }, status: created ? :created : :ok
+      rescue Taxes::India::Gst::EwayBill::NotReady,
+             Taxes::India::Gst::EwayBill::InvalidPayload,
+             Taxes::India::Gst::EInvoice::NotReady,
              Taxes::India::Gst::EInvoice::InvalidPayload,
              ActiveRecord::RecordInvalid => e
         render_error(e.message, :unprocessable_entity)
@@ -110,6 +140,7 @@ module Api
           contract: document.contract_snapshot,
           tax_breakdown: document.tax_breakdown,
           einvoice_submission: submission_json(document.einvoice_submission),
+          eway_bill_submission: eway_bill_json(document.eway_bill_submission),
           party: document.party_snapshot,
           seller_registration: document.tax_registration_snapshot,
           lines: document.document_lines.map do |line|
@@ -168,6 +199,39 @@ module Api
             error_message: cancellation.error_message
           }
         end
+        result[:payload] = submission.payload if include_payload
+        result
+      end
+
+      def eway_bill_params
+        raw = params.require(:eway_bill)
+        raw.permit(
+          :transporter_id,
+          :transporter_name,
+          :transport_mode,
+          :distance_km,
+          :transport_document_number,
+          :transport_document_date,
+          :vehicle_number,
+          :vehicle_type
+        )
+      end
+
+      def eway_bill_json(submission, include_payload: false)
+        return unless submission
+
+        result = {
+          id: submission.id,
+          status: submission.status,
+          provider: submission.provider,
+          schema_version: submission.schema_version,
+          schema_reference: Taxes::India::Gst::EwayBill::SCHEMA_REFERENCE,
+          request_id: submission.request_id,
+          payload_sha256: submission.payload_sha256,
+          eway_bill_number: submission.eway_bill_number,
+          generated_at: submission.generated_at,
+          valid_until: submission.valid_until
+        }
         result[:payload] = submission.payload if include_payload
         result
       end

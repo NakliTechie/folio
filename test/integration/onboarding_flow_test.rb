@@ -46,7 +46,7 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_select "input[autofocus]", count: 0
     assert_select "a.brand[aria-label]", count: 0
     assert_select "a.brand", text: /Folio/
-    assert_select ".mini-steps", text: /Twenty-four accounts, ready to use/
+    assert_select ".mini-steps", text: /Twenty-four accounts, ready to review/
   end
 
   test "self-service signup presents only the supported India launch profile" do

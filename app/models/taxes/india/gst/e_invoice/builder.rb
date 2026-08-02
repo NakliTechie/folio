@@ -30,6 +30,8 @@ module Taxes
               "ItemList" => document.document_lines.sort_by(&:line_no).map { |line| item(line) },
               "ValDtls" => value_details(document)
             }
+            eway_bill = document.eway_bill_submission
+            payload["EwbDtls"] = eway_bill.payload.deep_dup if eway_bill
             Validator.validate!(payload)
             deep_freeze(payload)
           end
@@ -45,6 +47,10 @@ module Taxes
             end
             if document.document_lines.size > 1_000
               raise NotReady, "INV-01 permits at most 1,000 item lines"
+            end
+            if document.eway_bill_required? && !document.eway_bill_submission
+              raise NotReady,
+                "goods consignments over INR 50,000 require e-way transport details before INV-01 preparation"
             end
           end
 

@@ -46,6 +46,17 @@ class SalesInvoiceFlowsTest < ActionDispatch::IntegrationTest
       },
       actor: @org.user
     )
+    @good = Items::Manage.create!(
+      tenant: @org.tenant,
+      attributes: {
+        code: "MACHINE", name: "Machine component", item_type: "good",
+        hsn_sac_code: "848790", unit_of_measure: "NOS", tax_rate_basis_points: 1800,
+        cess_rate_basis_points: 0, income_account_code: "4000", expense_account_code: "5000",
+        inventory_class: "finished_good", revision: "A",
+        valuation_method: "moving_average", inventory_account_code: "1300"
+      },
+      actor: @org.user
+    )
     sign_in_as(@org.user)
   end
 
@@ -210,6 +221,55 @@ class SalesInvoiceFlowsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "dt", "IRN"
     assert_select ".einvoice-proof svg", count: 1
+  end
+
+  test "goods invoice prepares one combined IRN and e-way bill request in browser and API" do
+    attributes = builder_attributes.merge(
+      lines: [ { item_id: @good.id, quantity: "1", unit_price: "60000.00" } ]
+    )
+    invoice = SalesInvoices::BuildDraft.call(**attributes)
+    Documents::Post.call(invoice, actor: "u:#{@org.user.id}")
+    transport = {
+      transport_mode: "1",
+      distance_km: "0",
+      vehicle_number: "MH-12-AB-1234",
+      vehicle_type: "R",
+      transporter_id: "27AAPFU0939F1ZV",
+      transporter_name: "Fast Freight"
+    }
+
+    get sales_invoice_path(invoice)
+    assert_response :success
+    assert_select "h2", "Prepare the IRN and e-way bill request"
+    assert_select "form[action^='#{prepare_einvoice_with_eway_sales_invoice_path(invoice)}']"
+    assert_select "input[type=submit][value='Prepare combined IRN + e-way bill JSON']"
+
+    assert_difference [ "EwayBillSubmission.count", "EinvoiceSubmission.count" ], 1 do
+      assert_difference -> { DomainEvent.count }, 2 do
+        post prepare_einvoice_with_eway_sales_invoice_path(invoice), params: { eway_bill: transport }
+      end
+    end
+    assert_redirected_to sales_invoice_path(invoice, tenant_id: @org.tenant.id)
+    follow_redirect!
+    assert_select "h2", "Combined JSON prepared — no IRN or EWB generated"
+    assert_select "p", text: /has not contacted an IRP.*generated an e-way bill number/m
+
+    get einvoice_json_sales_invoice_path(invoice)
+    payload = JSON.parse(response.body)
+    assert_equal "MH12AB1234", payload.dig("EwbDtls", "VehNo")
+    assert_equal 0, payload.dig("EwbDtls", "Distance")
+    assert_equal "N", payload.dig("ItemList", 0, "IsServc")
+
+    assert_no_difference [ "EwayBillSubmission.count", "EinvoiceSubmission.count", "DomainEvent.count" ] do
+      post "/api/v1/sales_invoices/#{invoice.id}/prepare_einvoice_with_eway",
+        params: { eway_bill: transport }, as: :json
+    end
+    assert_response :success
+    json = JSON.parse(response.body)
+    assert_equal "prepared", json.dig("eway_bill_submission", "status")
+    assert_equal "MH12AB1234", json.dig("eway_bill_submission", "payload", "VehNo")
+    assert_equal json.dig("eway_bill_submission", "payload"),
+      json.dig("einvoice_submission", "payload", "EwbDtls")
   end
 
   private

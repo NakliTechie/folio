@@ -13,7 +13,7 @@ class MfaFlowTest < ActionDispatch::IntegrationTest
 
   test "an authenticated user enrolls TOTP and receives recovery codes once" do
     sign_in_as(@org.user)
-    post mfa_setup_security_path, params: { tenant_id: @org.tenant.id }
+    get mfa_setup_security_path, params: { tenant_id: @org.tenant.id }
     assert_response :success
     secret = css_select(".account-code").first.text.delete(" ")
     code = Mfa::Totp.code(secret)
@@ -22,6 +22,8 @@ class MfaFlowTest < ActionDispatch::IntegrationTest
       tenant_id: @org.tenant.id, password: PASSWORD, code: code
     }
 
+    assert_redirected_to mfa_recovery_codes_security_path(tenant_id: @org.tenant.id)
+    follow_redirect!
     assert_response :success
     assert_select "h1", "Multi-factor authentication enabled"
     assert_select ".recovery-code-list li", 10
@@ -29,6 +31,24 @@ class MfaFlowTest < ActionDispatch::IntegrationTest
     refute_equal secret, @org.user.mfa_secret_ciphertext
     assert_equal secret, @org.user.mfa_secret
     assert Current.session.reload.mfa_verified_at
+
+    get mfa_recovery_codes_security_path, params: { tenant_id: @org.tenant.id }
+    assert_redirected_to security_path(tenant_id: @org.tenant.id)
+  end
+
+  test "an invalid authenticator code keeps the pending setup stable" do
+    sign_in_as(@org.user)
+    get mfa_setup_security_path, params: { tenant_id: @org.tenant.id }
+    secret = css_select(".account-code").first.text.delete(" ")
+
+    post enable_mfa_security_path, params: {
+      tenant_id: @org.tenant.id, password: PASSWORD, code: "not-a-code"
+    }
+    assert_redirected_to mfa_setup_security_path(tenant_id: @org.tenant.id)
+    follow_redirect!
+
+    assert_equal secret, css_select(".account-code").first.text.delete(" ")
+    refute @org.user.reload.mfa_enabled?
   end
 
   test "an enrolled user completes password plus TOTP login" do
@@ -74,7 +94,7 @@ class MfaFlowTest < ActionDispatch::IntegrationTest
       assert_redirected_to security_path(tenant_id: @org.tenant.id)
       assert_equal 0, Invitation.where(tenant_id: @org.tenant.id).count
 
-      post mfa_setup_security_path, params: { tenant_id: @org.tenant.id }
+      get mfa_setup_security_path, params: { tenant_id: @org.tenant.id }
       assert_response :success
     ensure
       Rails.application.config.x.mfa_required = previous

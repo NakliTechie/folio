@@ -21,8 +21,9 @@ module Taxes
           )
           Acknowledgement = Data.define(
             :irn, :ack_number, :acknowledged_at, :signed_invoice, :signed_qr_code,
-            :raw_response, :signature_status, :document_identity
+            :raw_response, :signature_status, :document_identity, :eway_bill
           )
+          EwayBillEvidence = Data.define(:eway_bill_number, :generated_at, :valid_until)
           CancellationAcknowledgement = Data.define(:irn, :cancelled_at, :raw_response)
           IrnStatus = Data.define(:irn, :status, :cancelled_at, :raw_response)
 
@@ -95,7 +96,21 @@ module Taxes
             validate_signed_artifact!(acknowledgement.signed_invoice, "signed invoice")
             validate_signed_artifact!(acknowledgement.signed_qr_code, "signed QR code")
             validate_raw_response!(acknowledgement.raw_response)
+            validate_eway_bill_evidence!(acknowledgement)
             acknowledgement
+          end
+
+          def validate_eway_bill_evidence!(acknowledgement)
+            evidence = acknowledgement.eway_bill
+            return if evidence.nil?
+
+            unless evidence.is_a?(EwayBillEvidence) &&
+                   evidence.eway_bill_number.to_s.match?(/\A\d{12}\z/) &&
+                   evidence.generated_at.respond_to?(:iso8601) &&
+                   evidence.valid_until.respond_to?(:iso8601) &&
+                   evidence.valid_until > evidence.generated_at
+              raise InvalidPayload, "IRP adapter returned invalid e-way bill evidence"
+            end
           end
 
           def bind_acknowledgement!(acknowledgement, payload)
@@ -108,6 +123,12 @@ module Taxes
             end
             unless acknowledgement.irn.casecmp?(expected_irn(payload))
               raise InvalidPayload, "IRP acknowledgement IRN does not match the submitted document"
+            end
+            if payload.key?("EwbDtls") && acknowledgement.eway_bill.nil?
+              raise InvalidPayload, "IRP acknowledgement omitted the requested e-way bill evidence"
+            end
+            if !payload.key?("EwbDtls") && acknowledgement.eway_bill
+              raise InvalidPayload, "IRP acknowledgement returned an unrequested e-way bill"
             end
             acknowledgement
           end

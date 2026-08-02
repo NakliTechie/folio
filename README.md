@@ -6,13 +6,13 @@
 The current product operates one primary office per company with tenant-wide role assignments. It
 supports governed masters, sales and purchase documents, receipts/payments, open-item settlement,
 credit-event TDS, filing JSON for GSTR-1/GSTR-3B/CMP-08, offline INV-01 e-invoice preparation,
-period controls, contract revenue accounting, procurement, bank reconciliation, inventory, fixed
-assets, controlling, same-currency consolidation, governed migration exports, and signed append-only
-financial and lifecycle event logs.
+combined e-way transport preparation/evidence for goods invoices, period controls, contract revenue
+accounting, procurement, bank reconciliation, inventory, fixed assets, controlling, same-currency
+consolidation, governed migration exports, and signed append-only financial and lifecycle event logs.
 
 Folio shares accounting semantics and a conformance corpus with
 [Bahi](https://bahi.naklitechie.com/), which remains single-office, local-first, and single-file by
-design. Multi-office operation, a customer-selected second jurisdiction, live statutory-provider
+design. Multi-office operation, non-India statutory implementations, live statutory-provider
 activation, and external chain anchoring remain roadmap work—not current product claims.
 
 *(Name provisional — chosen Latin/English for global reach; a "folio" is the numbered ledger page an
@@ -118,11 +118,12 @@ The schema has entity and office dimensions, but the operating product provision
   feeds the SAP export. Cross-jurisdiction consolidation needs a reporting-currency policy (later).
 
 ## 8. Planned jurisdiction profiles / accounting standards
-The `JurisdictionProfile` work (COA template + statement presentation + terminology + tax adapter +
-currency + FY convention) is more an enterprise/multi-entity concern → **lands primarily in Folio**
-(Bahi can stay India-first). Profiles: IN-IGAAP, IN-INDAS, UK-FRS102, MY-MPERS, SG-SFRS, US-GAAP,
-NG-IFRS. Tax-adapter abstraction (GST↔VAT↔SST↔sales-tax) is the deep refactor and is server-side.
-Cross-ref: `bahi/plan/2026-07-16-accounting-standards-multi-jurisdiction.md`.
+The runtime registry preserves country, currency, fiscal-year, and tax-adapter seams, but only India
+has a statutory tax implementation today. Netcore rollout is **India first → US → UK → Malaysia**;
+each later profile needs reviewed COA/statement presentation, terminology, tax, filing, and retention
+requirements before it is labelled production-ready. Germany remains an architectural/reference
+profile rather than a Netcore rollout priority. Tax-adapter abstraction
+(GST↔VAT↔SST↔sales-tax) remains server-side; non-India tax calculation fails closed.
 
 ## 9. Interop bridge (Bahi ↔ Folio)
 
@@ -178,15 +179,15 @@ DATABASE_URL=postgresql:///folio_release_baseline_YYYYMMDD \
 The current checkpoint includes the governed ledger, India B2B sales/purchases and linked
 adjustments, cash settlement/correction, current-state ageing and party ledgers, GST day book and
 filing JSON, credit-event/GST-exclusive TDS, period controls, tenant-wide RBAC, replay recovery, and
-browser/API flows. INV-01 v1.1 requests, IRP acknowledgement artifacts, and the governed IRN
-cancellation/reconciliation boundary have a persistent provider seam. Live IRP/GSP calls remain
-deliberately disabled until a provider, credentials, and sandbox certification are approved; an
-offline export is never presented as an IRN. The launch image, shared cache, readiness checks,
-backup verifier, and Cloudflare Tunnel topology are prepared. Real host/mail/provider values and a
-trusted deployed-origin acceptance run remain operator activation gates. Contract management and
-the buildable Batch 9 enterprise/full-suite scope are complete. The next jurisdiction remains blocked
-on Netcore's actual country list and the approved cross-currency consolidation policy; no profile is
-guessed to make the roadmap look complete.
+browser/API flows. INV-01 v1.1 requests, combined e-way transport details, IRP/e-way acknowledgement
+artifacts, and the governed IRN cancellation/reconciliation boundary have persistent provider seams.
+Live IRP/GSP and e-way portal operations remain deliberately disabled until a provider, credentials,
+and sandbox certification are approved; an offline export is never presented as an IRN or issued
+e-way bill. The launch image, shared cache, readiness checks, backup verifier, and Cloudflare Tunnel
+topology are prepared. Real host/mail/provider values and a trusted deployed-origin acceptance run
+remain operator activation gates. Contract management and the buildable Batch 9 enterprise/full-suite
+scope are complete. India → US → UK → Malaysia is the decided jurisdiction order; each non-India
+statutory scope and the cross-currency consolidation policy still require explicit review.
 
 ## 14. Open questions
 1. Final **name** (Folio vs Abacus / Comptoir / Ledgerline).

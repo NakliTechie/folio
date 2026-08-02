@@ -112,6 +112,7 @@ Rails.application.routes.draw do
       get :print
       get :einvoice_json
       post :prepare_einvoice
+      post :prepare_einvoice_with_eway
       post :post
       post :reverse
     end
@@ -192,6 +193,7 @@ Rails.application.routes.draw do
       resources :sales_invoices, only: %i[index show create] do
         member do
           post :prepare_einvoice
+          post :prepare_einvoice_with_eway
           post :post
           post :reverse
         end
@@ -230,8 +232,9 @@ Rails.application.routes.draw do
   get "invitations/accept", to: "invitations#accept", as: :accept_invitation
   post "invitations/accept", to: "invitations#do_accept"
   resource :security, only: :show, controller: :security do
-    post "mfa/setup", action: :mfa_setup, as: :mfa_setup
+    get "mfa/setup", action: :mfa_setup, as: :mfa_setup
     post "mfa/enable", action: :enable_mfa, as: :enable_mfa
+    get "mfa/recovery-codes", action: :mfa_recovery_codes, as: :mfa_recovery_codes
     delete "mfa", action: :disable_mfa, as: :disable_mfa
   end
   resource :mfa_session, path: "session/mfa", only: %i[new create]

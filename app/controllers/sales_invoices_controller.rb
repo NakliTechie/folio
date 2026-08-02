@@ -2,9 +2,11 @@
 
 class SalesInvoicesController < BrowserController
   before_action -> { require_capability!("reports.read") }, only: %i[index show print einvoice_json]
-  before_action -> { require_capability!("invoices.create") }, only: %i[new create post prepare_einvoice]
+  before_action -> { require_capability!("invoices.create") },
+    only: %i[new create post prepare_einvoice prepare_einvoice_with_eway]
   before_action -> { require_capability!("documents.reverse") }, only: :reverse
-  before_action :set_document, only: %i[show print einvoice_json prepare_einvoice post reverse]
+  before_action :set_document,
+    only: %i[show print einvoice_json prepare_einvoice prepare_einvoice_with_eway post reverse]
 
   def index
     @documents = document_scope.includes(:party).order(document_date: :desc, created_at: :desc)
@@ -14,15 +16,41 @@ class SalesInvoicesController < BrowserController
     @simulation = Documents::Simulate.call(@document) if @document.postable?
     @einvoice_submission = @document.einvoice_submission
     @einvoice_cancellation = @einvoice_submission&.einvoice_cancellation
+    @eway_bill_submission = @document.eway_bill_submission
   end
 
   def print
     @einvoice_submission = @document.einvoice_submission
     @einvoice_cancellation = @einvoice_submission&.einvoice_cancellation
+    @eway_bill_submission = @document.eway_bill_submission
     return if @document.statutory_printable?
 
     redirect_to sales_invoice_path(@document, tenant_route_options),
       alert: "Print is unavailable because this historical draft predates complete statutory snapshots."
+  end
+
+  def prepare_einvoice_with_eway
+    ApplicationRecord.transaction do
+      Taxes::India::Gst::EwayBill::Prepare.call(
+        document: @document,
+        attributes: eway_bill_params,
+        actor: "u:#{Current.user.id}",
+        actor_user_id: Current.user.id
+      )
+      Taxes::India::Gst::EInvoice::Prepare.call(
+        document: @document,
+        actor: "u:#{Current.user.id}",
+        actor_user_id: Current.user.id
+      )
+    end
+    redirect_to sales_invoice_path(@document, tenant_route_options),
+      notice: "Combined INV-01 and EWB transport JSON prepared. No IRN or e-way bill number has been generated."
+  rescue Taxes::India::Gst::EwayBill::NotReady,
+         Taxes::India::Gst::EwayBill::InvalidPayload,
+         Taxes::India::Gst::EInvoice::NotReady,
+         Taxes::India::Gst::EInvoice::InvalidPayload,
+         ActiveRecord::RecordInvalid => e
+    redirect_to sales_invoice_path(@document, tenant_route_options), alert: e.message
   end
 
   def prepare_einvoice
@@ -161,6 +189,19 @@ class SalesInvoicesController < BrowserController
       :external_reference,
       :narration,
       lines: %i[item_id quantity unit_price]
+    )
+  end
+
+  def eway_bill_params
+    params.require(:eway_bill).permit(
+      :transporter_id,
+      :transporter_name,
+      :transport_mode,
+      :distance_km,
+      :transport_document_number,
+      :transport_document_date,
+      :vehicle_number,
+      :vehicle_type
     )
   end
 end

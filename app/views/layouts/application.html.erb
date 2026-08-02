@@ -22,7 +22,7 @@
   </head>
 
   <body class="<%= authenticated? && Current.tenant ? "app-body" : "public-body" %>">
-    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <a class="skip-link" href="#main-content" data-skip-link>Skip to main content</a>
 
     <% if authenticated? && Current.tenant %>
       <header class="app-header">
@@ -52,6 +52,7 @@
           <div class="user-context">
             <span><%= Current.user.email_address %></span>
             <span class="user-context__role"><%= role_name %></span>
+            <%= link_to "Security", security_path(tenant_route_options), class: "user-context__security" %>
             <%= button_to "Sign out", session_path, method: :delete,
               class: "button button--compact button--quiet" %>
           </div>
@@ -61,6 +62,7 @@
             <div class="mobile-user-menu__panel">
               <strong><%= Current.user.email_address %></strong>
               <span><%= role_name %></span>
+              <%= link_to "Security", security_path(tenant_route_options), class: "button button--compact button--quiet" %>
               <%= button_to "Sign out", session_path, method: :delete,
                 class: "button button--compact button--quiet" %>
             </div>
@@ -89,36 +91,49 @@
             </div>
           </details>
 
-          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("journal_vouchers", "opening_balances", "settlements", "accounts", "exchange_rates", "bank_reconciliations", "inventories", "fixed_assets", "controlling", "consolidation", "enterprise_exports") %>">
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("settlements", "exchange_rates", "bank_reconciliations") %>">
+            <summary>Cash &amp; banking</summary>
+            <div class="nav-group__menu">
+              <%= link_to "Receipts & payments", settlements_path(tenant_route_options), class: navigation_class("settlements") %>
+              <%= link_to "Bank reconciliation", bank_reconciliations_path(tenant_route_options), class: navigation_class("bank_reconciliations") if permitted?("banking.read") %>
+              <%= link_to "Exchange rates", exchange_rates_path(tenant_route_options), class: navigation_class("exchange_rates") if permitted?("currency.read") %>
+            </div>
+          </details>
+
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("journal_vouchers", "opening_balances", "accounts", "inventories", "fixed_assets", "controlling") %>">
             <summary>Accounting</summary>
             <div class="nav-group__menu">
               <%= link_to "Transactions", journal_vouchers_path(tenant_route_options), class: navigation_class("journal_vouchers") %>
-              <%= link_to "Cash", settlements_path(tenant_route_options), class: navigation_class("settlements") %>
               <%= link_to "Opening balances", opening_balances_path(tenant_route_options), class: navigation_class("opening_balances") if permitted?("accounts.manage") %>
               <%= link_to "Chart of accounts", accounts_path(tenant_route_options), class: navigation_class("accounts") if permitted?("accounts.read") %>
-              <%= link_to "Exchange rates", exchange_rates_path(tenant_route_options), class: navigation_class("exchange_rates") if permitted?("currency.read") %>
-              <%= link_to "Bank reconciliation", bank_reconciliations_path(tenant_route_options), class: navigation_class("bank_reconciliations") if permitted?("banking.read") %>
               <%= link_to "Inventory", inventory_path(tenant_route_options), class: navigation_class("inventories") if permitted?("inventory.read") %>
               <%= link_to "Fixed assets", fixed_assets_path(tenant_route_options), class: navigation_class("fixed_assets") if permitted?("assets.read") %>
               <%= link_to "Controlling", controlling_path(tenant_route_options), class: navigation_class("controlling") if permitted?("controlling.read") %>
-              <%= link_to "Consolidation", consolidation_path(tenant_route_options), class: navigation_class("consolidation") if permitted?("consolidation.read") %>
-              <%= link_to "Enterprise exports", enterprise_export_path(tenant_route_options), class: navigation_class("enterprise_exports") if permitted?("exports.read") %>
             </div>
           </details>
+
+          <% if permitted?("consolidation.read") || permitted?("exports.read") || permitted?("grc.read") %>
+            <details class="nav-group <%= "nav-group--active" if navigation_group_active?("consolidation", "enterprise_exports", "access_reviews") %>">
+              <summary>Enterprise</summary>
+              <div class="nav-group__menu">
+                <%= link_to "Consolidation", consolidation_path(tenant_route_options), class: navigation_class("consolidation") if permitted?("consolidation.read") %>
+                <%= link_to "Enterprise exports", enterprise_export_path(tenant_route_options), class: navigation_class("enterprise_exports") if permitted?("exports.read") %>
+                <%= link_to "Access reviews", access_review_path(tenant_route_options), class: navigation_class("access_reviews") if permitted?("grc.read") %>
+              </div>
+            </details>
+          <% end %>
 
           <% if permitted?("reports.read") %>
             <%= link_to "Reports", reports_path(tenant_route_options), class: navigation_class("reports", "period_closes") %>
           <% end %>
 
-          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("business_profiles", "tax_registrations", "items", "team", "security", "access_reviews") %>">
-            <summary>Settings</summary>
+          <details class="nav-group <%= "nav-group--active" if navigation_group_active?("business_profiles", "tax_registrations", "items", "team") %>">
+            <summary>Administration</summary>
             <div class="nav-group__menu">
               <%= link_to "Company details", edit_business_profile_path(tenant_route_options), class: navigation_class("business_profiles") if permitted?("masters.manage") %>
               <%= link_to "Tax registrations", tax_registrations_path(tenant_route_options), class: navigation_class("tax_registrations") if permitted?("masters.read") %>
               <%= link_to "Products & services", items_path(tenant_route_options), class: navigation_class("items") if permitted?("masters.read") %>
               <%= link_to "Team", team_path(tenant_route_options), class: navigation_class("team") if permitted?("users.manage") %>
-              <%= link_to "Access reviews", access_review_path(tenant_route_options), class: navigation_class("access_reviews") if permitted?("grc.read") %>
-              <%= link_to "Security", security_path(tenant_route_options), class: navigation_class("security") %>
             </div>
           </details>
         </nav>

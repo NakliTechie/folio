@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require Rails.root.join("demo/seed/sample_books")
 
 # Runs the native synthetic-book generator end to end against the real engine and asserts
 # the seeded book is coherent: it ties out, the event chain verifies, the statutory reports
@@ -9,9 +10,15 @@ require "test_helper"
 class Folio::SampleBooksTest < ActiveSupport::TestCase
   PASSWORD = "sample-books-test-password"
 
+  test "the committed demo manifest matches the generator contract" do
+    assert Folio::DemoSeed.verify_contract!
+    assert_equal "consulting", Folio::DemoSeed.default_scenario
+    assert_equal Folio::SampleBooks::SCENARIOS.keys.sort, Folio::DemoSeed.scenario_codes.sort
+  end
+
   test "every scenario seeds a fully-posted, tied-out book" do
-    Folio::SampleBooks::SCENARIOS.each_key do |code|
-      result = Folio::SampleBooks.seed!(
+    Folio::DemoSeed.scenario_codes.each do |code|
+      result = Folio::DemoSeed.load!(
         scenario: code, email: "sample-books-#{code}@folio.invalid", password: PASSWORD
       )
       assert result.balanced?, "#{code}: trial balance must tie"

@@ -21,6 +21,7 @@ module Taxes
             party!(payload.fetch("BuyerDtls"), "buyer", buyer: true)
             items!(payload.fetch("ItemList"))
             totals!(payload.fetch("ValDtls"), payload.fetch("ItemList"))
+            eway!(payload.fetch("EwbDtls"), payload.fetch("ItemList")) if payload.key?("EwbDtls")
             true
           rescue KeyError => e
             raise InvalidPayload, "missing required INV-01 field #{e.key}"
@@ -101,6 +102,37 @@ module Taxes
             raise InvalidPayload, "item totals do not reconcile to invoice total" unless close?(
               items.sum { |item| item.fetch("TotItemVal") }, totals.fetch("TotInvVal")
             )
+          end
+
+          def eway!(details, items)
+            object!(details, "e-way bill transport details")
+            unless items.any? { |item| item.fetch("IsServc") == "N" }
+              raise InvalidPayload, "e-way bill transport details require at least one goods line"
+            end
+            raise InvalidPayload, "EWB-01 permits at most 250 item lines" if items.size > 250
+
+            enum!(details.fetch("TransMode"), %w[1 2 3 4], "transport mode")
+            distance = details.fetch("Distance")
+            unless distance.is_a?(Integer) && distance.between?(0, 4_000)
+              raise InvalidPayload, "e-way bill distance must be 0..4,000 km"
+            end
+            enum!(details.fetch("VehType"), %w[R O], "vehicle type")
+            mode = details.fetch("TransMode")
+            if mode == "1"
+              unless details.fetch("VehNo", "").match?(/\A[A-Z0-9]{4,20}\z/)
+                raise InvalidPayload, "road transport requires a valid vehicle number"
+              end
+            else
+              string!(details.fetch("TransDocNo"), "transport document number", max: 15)
+              date = details.fetch("TransDocDt")
+              Date.strptime(date, "%d/%m/%Y")
+            end
+            if details["TransId"].present? && !details["TransId"].match?(/\A[0-9A-Z]{15}\z/)
+              raise InvalidPayload, "transporter ID is invalid"
+            end
+            string!(details["TransName"], "transporter name", max: 100) if details["TransName"].present?
+          rescue Date::Error
+            raise InvalidPayload, "transport document date must be DD/MM/YYYY"
           end
 
           def amount!(value, label)

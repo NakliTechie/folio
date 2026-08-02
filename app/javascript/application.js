@@ -15,12 +15,24 @@ const hideNavigationProgress = () => {
   document.body?.removeAttribute("aria-busy")
 }
 
+const moveFocusToMainContent = (event) => {
+  const target = document.querySelector("#main-content")
+  if (!target) return
+
+  event.preventDefault()
+  target.setAttribute("tabindex", "-1")
+  target.focus({ preventScroll: true })
+  target.scrollIntoView({ block: "start" })
+  window.history.replaceState(null, "", "#main-content")
+}
+
 document.addEventListener("turbo:before-fetch-request", showNavigationProgress)
 document.addEventListener("turbo:before-cache", hideNavigationProgress)
 document.addEventListener("turbo:fetch-request-error", hideNavigationProgress)
 
 document.addEventListener("turbo:load", () => {
   hideNavigationProgress()
+  document.querySelector("[data-skip-link]")?.addEventListener("click", moveFocusToMainContent, { once: true })
   document.querySelectorAll("[data-print-page]").forEach((button) => {
     button.addEventListener("click", () => window.print(), { once: true })
   })

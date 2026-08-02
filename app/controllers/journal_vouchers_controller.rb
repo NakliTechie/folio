@@ -3,6 +3,7 @@
 class JournalVouchersController < BrowserController
   before_action -> { require_capability!("documents.post") }, only: %i[new create edit update destroy post]
   before_action -> { require_capability!("documents.reverse") }, only: :reverse
+  before_action :require_identity_before_form_entry, only: %i[new edit]
   before_action :set_document, only: %i[show edit update destroy post reverse]
 
   def index
@@ -95,6 +96,17 @@ class JournalVouchersController < BrowserController
   end
 
   private
+
+  def require_identity_before_form_entry
+    if Rails.application.config.x.email_verification_required && !Current.user.verified?
+      return redirect_to root_path(tenant_route_options),
+        alert: "Verify your email before recording a business event. No input has been lost."
+    end
+    return unless Rails.application.config.x.mfa_required && !Current.user.mfa_enabled?
+
+    redirect_to mfa_setup_security_path(tenant_route_options.merge(return_to: request.fullpath)),
+      alert: "Protect your account before recording a business event. You will return here after setup."
+  end
 
   def set_document
     @document = document_scope.find(params[:id])
