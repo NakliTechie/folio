@@ -20,6 +20,7 @@ class InventoryConcurrencyTest < ActiveSupport::TestCase
     Onboarding::Seeds.document_types!(@tenant)
     Rbac::Presets.seed_for!(@tenant)
     @user = users(:one)
+    EventSigning::KeyProvisioner.ensure!(@user)
     Membership.create!(tenant: @tenant, user: @user)
     UserOfficeRole.create!(
       tenant_id: @tenant.id, user: @user, office_id: nil,

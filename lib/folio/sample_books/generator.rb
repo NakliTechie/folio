@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "bigdecimal"
+require "digest"
 
 module Folio
   module SampleBooks
@@ -150,17 +151,67 @@ module Folio
       def post_purchases
         s.purchases.each do |purchase|
           vendor = @parties.fetch(purchase.vendor_ref)
+          item = @items.fetch(purchase.service_code)
+          purchase_order = procurement_order_for(purchase, vendor, item) if item.good?
           draft = PurchaseBills::BuildDraft.call(
             tenant: @tenant, party_id: vendor.id, tax_registration_id: @registration.id,
             document_date: purchase.date, due_date: purchase.due_date,
             place_of_supply_state_code: nil, external_reference: purchase.supplier_ref,
-            tds_section: purchase.tds_section,
-            lines: [ { item_id: @items.fetch(purchase.service_code).id,
+            tds_section: purchase.tds_section, purchase_order_id: purchase_order&.id,
+            lines: [ { item_id: item.id,
                        quantity: purchase.quantity, unit_price: purchase.unit_price } ],
-            narration: "#{@items.fetch(purchase.service_code).name} — #{vendor.name}"
+            narration: "#{item.name} — #{vendor.name}"
           )
           Documents::Post.call(draft, actor: actor_string)
           @purchases[purchase.ref] = draft
+        end
+      end
+
+      def procurement_order_for(purchase, vendor, item)
+        profile = VendorProfile.find_by(tenant_id: @tenant.id, party_id: vendor.id)
+        unless profile
+          profile = Procurement::ManageVendor.onboard!(
+            tenant: @tenant, actor: @user, attributes: { party_id: vendor.id }
+          )
+          Procurement::ManageVendor.approve!(profile: profile, actor: procurement_checker)
+        end
+        warehouse = Warehouse.find_by!(tenant_id: @tenant.id, code: "MAIN")
+        order = Procurement::CreateOrder.call(
+          tenant: @tenant, actor: @user,
+          attributes: {
+            vendor_profile_id: profile.id, order_date: purchase.date,
+            expected_on: purchase.date, description: "Sample purchase #{purchase.ref}"
+          },
+          lines: [ {
+            item_id: item.id, warehouse_id: warehouse.id,
+            quantity: purchase.quantity, unit_price: purchase.unit_price
+          } ]
+        )
+        Procurement::ApproveOrder.call(order: order, actor: procurement_checker)
+        Procurement::ReceiveOrder.call(
+          order: order, actor: @user,
+          attributes: {
+            received_on: purchase.date, external_reference: purchase.supplier_ref,
+            idempotency_key: "sample-books:#{purchase.ref}"
+          },
+          lines: [ {
+            purchase_order_line_id: order.purchase_order_lines.sole.id,
+            quantity: purchase.quantity
+          } ]
+        )
+        order
+      end
+
+      def procurement_checker
+        @procurement_checker ||= begin
+          invitation = Onboarding::Invite.create!(
+            tenant: @tenant,
+            email: "procurement-#{Digest::SHA256.hexdigest(@email)[0, 16]}@folio.invalid",
+            role_code: "accountant", invited_by: @user
+          )
+          Onboarding::Invite.accept!(
+            token: invitation.generate_token_for(:invite), password: @password
+          )
         end
       end
 

@@ -12,14 +12,16 @@ require "securerandom"
 class DomainEventsSeamTest < ActiveSupport::TestCase
   setup do
     @tenant = 7_200_000_000 + SecureRandom.random_number(100_000_000)
+    @actor = users(:one)
+    EventSigning::KeyProvisioner.ensure!(@actor)
   end
 
   test "a module producer appends a verifiable domain event end to end" do
     event = DomainEvents::Record.call(
       tenant_id: @tenant,
       kind: "contract.signed",
-      actor: "u:42",
-      actor_user_id: 42,
+      actor: "u:#{@actor.id}",
+      actor_user_id: @actor.id,
       ref: "CTR/26-27/00001",
       payload: { "contract_no" => "CTR/26-27/00001", "counterparty" => "Health & Glow" }
     )
