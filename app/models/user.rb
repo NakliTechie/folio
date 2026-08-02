@@ -21,11 +21,29 @@ class User < ApplicationRecord
   validates :verification_delivery_state, inclusion: { in: VERIFICATION_DELIVERY_STATES }
   validates :password, length: { minimum: MINIMUM_PASSWORD_LENGTH }, if: -> { password.present? }
   validate :password_is_not_trivial, if: -> { password.present? }
+  validate :mfa_configuration_is_complete
 
   generates_token_for :email_verification, expires_in: 2.days
 
   def verify! = update!(verified_at: Time.current)
   def verified? = verified_at.present?
+  def mfa_enabled? = mfa_enabled_at.present?
+
+  def mfa_secret
+    Mfa::Cipher.decrypt(mfa_secret_ciphertext) if mfa_secret_ciphertext.present?
+  end
+
+  def enable_mfa!(secret:, recovery_codes:)
+    update!(
+      mfa_secret_ciphertext: Mfa::Cipher.encrypt(secret),
+      mfa_recovery_code_digests: recovery_codes.map { |code| Mfa::RecoveryCodes.digest(code) },
+      mfa_enabled_at: Time.current
+    )
+  end
+
+  def disable_mfa!
+    update!(mfa_secret_ciphertext: nil, mfa_recovery_code_digests: [], mfa_enabled_at: nil)
+  end
 
   def enterable_tenants
     Tenant.enterable_by(self)
@@ -54,6 +72,12 @@ class User < ApplicationRecord
     return unless TRIVIAL_PASSWORDS.include?(normalized) || normalized.chars.uniq.one?
 
     errors.add(:password, "is too easy to guess")
+  end
+
+  def mfa_configuration_is_complete
+    configured = mfa_secret_ciphertext.present? || mfa_enabled_at.present?
+    complete = mfa_secret_ciphertext.present? && mfa_enabled_at.present?
+    errors.add(:base, "MFA configuration is incomplete") if configured && !complete
   end
 
   def active_delivery_lease?

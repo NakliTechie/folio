@@ -31,6 +31,14 @@ module ApplicationHelper
     nil
   end
 
+  def mfa_qr_svg(provisioning_uri)
+    RQRCode::QRCode.new(provisioning_uri).as_svg(
+      module_size: 4, standalone: true, use_path: true
+    ).html_safe
+  rescue RQRCode::QRCodeRunTimeError
+    nil
+  end
+
   def credit_note_reason_label(reason_code)
     {
       "value_reduction" => "Value reduction",

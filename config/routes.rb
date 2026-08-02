@@ -229,7 +229,12 @@ Rails.application.routes.draw do
   end
   get "invitations/accept", to: "invitations#accept", as: :accept_invitation
   post "invitations/accept", to: "invitations#do_accept"
-  resource :security, only: :show, controller: :security
+  resource :security, only: :show, controller: :security do
+    post "mfa/setup", action: :mfa_setup, as: :mfa_setup
+    post "mfa/enable", action: :enable_mfa, as: :enable_mfa
+    delete "mfa", action: :disable_mfa, as: :disable_mfa
+  end
+  resource :mfa_session, path: "session/mfa", only: %i[new create]
   resources :active_sessions, only: :destroy
   resource :session
   resource :password, only: %i[new create edit update]

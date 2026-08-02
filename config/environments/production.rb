@@ -23,6 +23,8 @@ Rails.application.configure do
 
   # A verified mailbox is required before an authenticated user can mutate company state.
   config.x.email_verification_required = true
+  # Open production is fail-closed: every user enrolls TOTP before mutating company state.
+  config.x.mfa_required = true
 
   # Cache assets for far-future expiry since they are all digest stamped.
   config.public_file_server.headers = { "cache-control" => "public, max-age=#{1.year.to_i}" }

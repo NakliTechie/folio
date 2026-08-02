@@ -38,5 +38,6 @@ module Folio
     # with a required sender identity in config/environments/production.rb.
     config.x.mail_from = "folio@example.invalid"
     config.x.email_verification_required = false
+    config.x.mfa_required = false
   end
 end

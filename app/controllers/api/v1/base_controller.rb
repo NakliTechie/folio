@@ -10,6 +10,7 @@ module Api
       include Authentication
       include TenantScoped
       include EmailVerificationGate
+      include MfaGate
       protect_from_forgery with: :exception
 
       rescue_from ActiveRecord::RecordNotFound, with: :not_found
@@ -55,6 +56,10 @@ module Api
 
       def deny_unverified_email_write
         render_error("email verification required before writes", :forbidden)
+      end
+
+      def deny_mfa_enrollment
+        render_error("multi-factor authentication enrollment required before writes", :forbidden)
       end
 
       def current_user

@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+ENV["RAILS_ENV"] ||= "production"
+require_relative "../config/environment"
+require "json"
+
+abort "verify-restore only runs with RAILS_ENV=production" unless Rails.env.production?
+
+puts JSON.pretty_generate(Folio::RestoreVerification.call)

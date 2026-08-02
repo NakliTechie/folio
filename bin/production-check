@@ -10,6 +10,16 @@ abort "production-check only runs with RAILS_ENV=production" unless Rails.env.pr
 Rails.application.eager_load!
 readiness = Folio::Readiness.call(include_auxiliary: true)
 abort "dependency readiness failed: #{readiness.fetch(:unavailable).join(', ')}" unless readiness.fetch(:status) == "ok"
+database_roles = {
+  primary: Folio::DatabaseTrustBoundary.call(ActiveRecord::Base.connection),
+  queue: Folio::DatabaseTrustBoundary.call(SolidQueue::Record.connection),
+  cache: Folio::DatabaseTrustBoundary.call(SolidCache::Record.connection)
+}
+unsafe_roles = database_roles.select { |_name, result| result.fetch(:status) != "ok" }
+if unsafe_roles.any?
+  details = unsafe_roles.map { |name, result| "#{name}=#{result.fetch(:unsafe).join(',')}" }
+  abort "runtime database roles are unsafe: #{details.join('; ')}"
+end
 
 key = "production-check:#{SecureRandom.uuid}"
 begin
@@ -23,6 +33,7 @@ puts JSON.generate(
   status: "ok",
   environment: Rails.env,
   dependencies: readiness.fetch(:checks),
+  database_roles: database_roles,
   shared_cache: "read_write_ok",
   mail_delivery: Rails.application.config.action_mailer.delivery_method
 )

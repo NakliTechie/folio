@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+ENV["RAILS_ENV"] ||= "production"
+require_relative "../config/environment"
+require "securerandom"
+
+abort "tenant-isolation verification only runs with RAILS_ENV=production" unless Rails.env.production?
+
+suffix = SecureRandom.hex(6)
+password = "production-topology-#{SecureRandom.hex(12)}"
+first = Onboarding::SignUp.call(
+  email: "tenant-a-#{suffix}@folio.invalid", password: password, org_name: "Tenant A #{suffix}"
+)
+second = Onboarding::SignUp.call(
+  email: "tenant-b-#{suffix}@folio.invalid", password: password, org_name: "Tenant B #{suffix}"
+)
+
+Folio::TenantContext.with(first.tenant.id) do
+  abort "own tenant rows are hidden" unless Account.where(tenant_id: first.tenant.id).exists?
+  abort "cross-tenant rows are visible" if Account.where(tenant_id: second.tenant.id).exists?
+end
+
+Folio::TenantContext.clear!
+abort "tenant rows are visible without a tenant context" if Account.exists?
+
+puts "forced tenant isolation ok"

@@ -1,0 +1,16 @@
+<% content_for :title, "MFA enabled · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <header class="page-heading">
+    <div><p class="eyebrow">Account security</p><h1>Multi-factor authentication enabled</h1>
+      <p>Save these one-time recovery codes now. Folio stores only their digests and cannot show them again.</p></div>
+  </header>
+
+  <section class="panel" role="status">
+    <ul class="recovery-code-list">
+      <% @recovery_codes.each do |code| %><li><code><%= code %></code></li><% end %>
+    </ul>
+    <p class="table-note">Each code works once. Store them separately from your password and authenticator device.</p>
+    <%= link_to "I saved these codes", security_path(tenant_route_options), class: "button button--primary" %>
+  </section>
+</main>

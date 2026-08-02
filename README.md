@@ -76,9 +76,13 @@ ledger is a projection. Folio keeps that shape, server-side:
 ## 5. Tenancy & identity
 - **Tenant = a firm** (an account/organization). Tenant-owned application queries bind `tenant_id`
   from the authenticated membership or resource and cross-tenant behaviour is covered by integration
-  tests. PostgreSQL RLS is **not implemented yet**; it remains pre-production defense-in-depth work.
-- **Auth today** — email/password sessions, invitations, password recovery, and active-session
-  revocation. TOTP and Google/Microsoft SSO are planned pre-launch identity work.
+  tests. Production also uses a non-owner runtime role and forced PostgreSQL row-level security on
+  tenant-owned business tables; identity/control-plane lookup tables remain outside RLS so an
+  authenticated membership can be resolved before the database tenant context is set.
+- **Auth today** — email/password sessions, TOTP with one-time recovery codes, invitations,
+  password recovery, and active-session revocation. Production requires MFA enrollment before
+  company mutations and enrolled accounts complete MFA at every new sign-in. Google/Microsoft SSO
+  remains optional future identity work.
 - **Signing today** — signup provisions an encrypted per-user P-256 key and financial/lifecycle
   events carry independently verifiable actor signatures. Imported `.khata` events retain their
   declared external JWK identity. Key rotation/recovery, trusted head timestamps, and external

@@ -1,0 +1,24 @@
+<% content_for :title, "Set up MFA · Folio" %>
+
+<main id="main-content" class="page-shell page-shell--narrow">
+  <header class="page-heading">
+    <div><p class="eyebrow">Account security</p><h1>Set up your authenticator</h1>
+      <p>Scan the QR code in your authenticator app, then confirm one six-digit code with your password.</p></div>
+  </header>
+
+  <section class="panel">
+    <div class="qr-code"><%= mfa_qr_svg(@provisioning_uri) %></div>
+    <p><strong>Cannot scan?</strong> Enter this secret manually:</p>
+    <p class="account-code"><%= @mfa_secret.scan(/.{1,4}/).join(" ") %></p>
+
+    <%= form_with url: enable_mfa_security_path(tenant_route_options), class: "stacked-form" do |form| %>
+      <div class="form-group"><%= form.label :password, "Current password" %>
+        <%= form.password_field :password, required: true, autocomplete: "current-password" %></div>
+      <div class="form-group"><%= form.label :code, "Six-digit authenticator code" %>
+        <%= form.text_field :code, required: true, autofocus: true, autocomplete: "one-time-code",
+          inputmode: "numeric", pattern: "[0-9]{6}", maxlength: 6 %></div>
+      <%= form.submit "Enable multi-factor authentication", class: "button button--primary" %>
+      <%= link_to "Cancel", security_path(tenant_route_options), class: "button button--quiet" %>
+    <% end %>
+  </section>
+</main>

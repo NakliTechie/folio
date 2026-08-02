@@ -24,23 +24,25 @@ module Onboarding
           functional_currency: profile.functional_currency,
           time_zone: profile.time_zone
         )
-        Membership.create!(user: user, tenant: tenant)
-        Rbac::Presets.seed_for!(tenant)
-        Grc::Rules.seed_for!(tenant)
-        UserOfficeRole.create!(user: user, tenant_id: tenant.id,
-          role_template: Rbac::Presets.role_for(tenant, "owner"))
-        spine = Seeds.org_spine!(
-          tenant,
-          jurisdiction_profile: profile.jurisdiction_profile,
-          fiscal_year_variant: profile.fiscal_year_variant
-        )
-        Seeds.warehouse!(tenant, entity: spine.fetch(:entity), office: spine.fetch(:office))
-        Seeds.chart_of_accounts!(tenant, jurisdiction_profile: profile.jurisdiction_profile)
-        Seeds.asset_class!(tenant)
-        Seeds.controlling!(tenant, entity: spine.fetch(:entity))
-        Seeds.consolidation!(tenant, entity: spine.fetch(:entity), actor: user)
-        Seeds.document_types!(tenant)
-        Seeds.financial_statements!(tenant)
+        Folio::TenantContext.with(tenant.id) do
+          Membership.create!(user: user, tenant: tenant)
+          Rbac::Presets.seed_for!(tenant)
+          Grc::Rules.seed_for!(tenant)
+          UserOfficeRole.create!(user: user, tenant_id: tenant.id,
+            role_template: Rbac::Presets.role_for(tenant, "owner"))
+          spine = Seeds.org_spine!(
+            tenant,
+            jurisdiction_profile: profile.jurisdiction_profile,
+            fiscal_year_variant: profile.fiscal_year_variant
+          )
+          Seeds.warehouse!(tenant, entity: spine.fetch(:entity), office: spine.fetch(:office))
+          Seeds.chart_of_accounts!(tenant, jurisdiction_profile: profile.jurisdiction_profile)
+          Seeds.asset_class!(tenant)
+          Seeds.controlling!(tenant, entity: spine.fetch(:entity))
+          Seeds.consolidation!(tenant, entity: spine.fetch(:entity), actor: user)
+          Seeds.document_types!(tenant)
+          Seeds.financial_statements!(tenant)
+        end
         Result.new(user: user, tenant: tenant)
       end
     end

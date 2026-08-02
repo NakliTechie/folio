@@ -106,7 +106,10 @@ module Folio
       if urls.values.any?(&:present?)
         missing = urls.select { |_name, url| url.blank? }.keys
         fail_with("database URL topology is incomplete: #{missing.join(', ')}") if missing.any?
-        identities = urls.transform_values { |url| database_identity!(url) }
+        identities = urls.transform_values do |url|
+          validate_database_tls!(url)
+          database_identity!(url)
+        end
         if identities.values.uniq.length != identities.length
           fail_with("primary, queue, and cache database URLs must name three distinct databases")
         end
@@ -117,6 +120,21 @@ module Folio
       if password.blank? || placeholder?(password)
         fail_with("set all three database URLs or a non-placeholder FOLIO_DATABASE_PASSWORD")
       end
+    end
+
+    def validate_database_tls!(url)
+      uri = URI.parse(url)
+      parameters = URI.decode_www_form(uri.query.to_s).to_h
+      mode = parameters["sslmode"]
+      loopback = %w[localhost 127.0.0.1 ::1].include?(uri.host)
+      if mode.blank?
+        fail_with("database URLs must set sslmode explicitly")
+      end
+      return if mode == "verify-full" || (loopback && mode == "disable")
+
+      fail_with("remote database URLs must use sslmode=verify-full")
+    rescue URI::InvalidURIError, ArgumentError
+      fail_with("database URLs must be valid PostgreSQL URLs")
     end
 
     def database_identity!(url)

@@ -441,6 +441,29 @@ input[type="submit"] {
   margin-inline: auto;
 }
 
+.qr-code svg {
+  width: min(18rem, 100%);
+  height: auto;
+  background: #fff;
+  padding: 0.75rem;
+}
+
+.recovery-code-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-code-list code {
+  display: block;
+  padding: 0.75rem;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
 .event-choice-grid {
   display: grid;
   gap: 1rem;

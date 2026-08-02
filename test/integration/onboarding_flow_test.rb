@@ -5,6 +5,11 @@ require "test_helper"
 # Onboarding over HTTP: self-signup creates an org and logs in; only an owner can invite;
 # invite → accept joins the invitee and logs them in.
 class OnboardingFlowTest < ActionDispatch::IntegrationTest
+  class FailingQueueAdapter
+    def enqueue(*) = raise("queue unavailable")
+    def enqueue_at(*) = raise("queue unavailable")
+  end
+
   test "self-signup creates an org, seeds books, and logs the user in" do
     assert_difference [ "Tenant.count", "User.count" ], 1 do
       post registration_path, params: { org_name: "Acme Co", email_address: "founder@acme.com", password: "correct-horse-battery" }
@@ -135,6 +140,25 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_response :forbidden, "an operator cannot invite users"
   end
 
+  test "invitation creation does not claim queued delivery when enqueue fails" do
+    org = Onboarding::SignUp.call(
+      email: "invite-failure-owner@x.com", password: "correct-horse-battery", org_name: "Org"
+    )
+    sign_in_as(org.user)
+
+    original_adapter = ActiveJob::Base.queue_adapter
+    ActiveJob::Base.queue_adapter = FailingQueueAdapter.new
+    begin
+      post invitations_path, params: { email: "delivery-failed@x.com", role_code: "viewer" }
+    ensure
+      ActiveJob::Base.queue_adapter = original_adapter
+    end
+
+    assert_redirected_to team_path(tenant_id: org.tenant.id)
+    follow_redirect!
+    assert_select "[role=alert]", text: /delivery could not be queued/i
+  end
+
   test "invite → accept joins the invitee with the assigned role and logs them in" do
     org = Onboarding::SignUp.call(email: "o@x.com", password: "correct-horse-battery", org_name: "Org")
     inv = Onboarding::Invite.create!(tenant: org.tenant, email: "joiner@x.com", role_code: "viewer", invited_by: org.user)
@@ -221,7 +245,11 @@ class OnboardingFlowTest < ActionDispatch::IntegrationTest
     assert_equal "/verify", URI.parse(verify_email_url(token: token)).path
     assert_equal "/invitations/accept", URI.parse(accept_invitation_url(token: token)).path
     assert_equal "/password/edit", URI.parse(edit_password_url(token: token)).path
-    assert Rails.application.config.filter_parameters.any? { |filter| filter.to_s.include?("token") }
+    filters = Rails.application.config.filter_parameters.map(&:to_s).join(" ")
+    assert_includes filters, "token"
+    %w[narration gstin pan external_reference reviewed_itc provider_response].each do |parameter|
+      assert_includes filters, parameter
+    end
   end
 
   test "an existing account must authenticate before accepting an invitation" do

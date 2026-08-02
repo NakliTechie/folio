@@ -1,0 +1,16 @@
+<% content_for :title, "Verify sign in · Folio" %>
+
+<main id="main-content" class="public-form-shell public-form-shell--centered">
+  <section class="panel form-panel public-form-card">
+    <p class="eyebrow">Protected sign in</p>
+    <h1>Enter your authentication code</h1>
+    <p>Use the current six-digit code from your authenticator app, or one of your saved recovery codes.</p>
+    <%= form_with url: mfa_session_path, class: "stacked-form" do |form| %>
+      <div class="form-group"><%= form.label :code, "Authenticator or recovery code" %>
+        <%= form.text_field :code, required: true, autofocus: true,
+          autocomplete: "one-time-code", inputmode: "numeric" %></div>
+      <%= form.submit "Verify and sign in", class: "button button--primary button--full" %>
+    <% end %>
+    <p class="auth-card__footer"><%= link_to "Start sign in again", new_session_path %></p>
+  </section>
+</main>

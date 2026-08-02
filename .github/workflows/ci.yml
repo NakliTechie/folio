@@ -124,9 +124,9 @@ jobs:
         run: |
           docker run --rm \
             -e SECRET_KEY_BASE=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
-            -e DATABASE_URL=postgresql://folio:folio@primary.folio.test/folio_primary \
-            -e QUEUE_DATABASE_URL=postgresql://folio:folio@queue.folio.test/folio_queue \
-            -e CACHE_DATABASE_URL=postgresql://folio:folio@cache.folio.test/folio_cache \
+            -e DATABASE_URL='postgresql://folio:folio@primary.folio.test/folio_primary?sslmode=verify-full' \
+            -e QUEUE_DATABASE_URL='postgresql://folio:folio@queue.folio.test/folio_queue?sslmode=verify-full' \
+            -e CACHE_DATABASE_URL='postgresql://folio:folio@cache.folio.test/folio_cache?sslmode=verify-full' \
             -e FOLIO_APP_HOST=ci.folio.test \
             -e FOLIO_MAIL_FROM=notifications@folio.test \
             -e FOLIO_SMTP_ADDRESS=smtp.folio.test \
@@ -179,3 +179,65 @@ jobs:
           RAILS_ENV: test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432
         run: bin/rails test:system
+
+  production_topology:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-bookworm@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=3
+    env:
+      RAILS_ENV: production
+      SECRET_KEY_BASE: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      FOLIO_APP_HOST: ci.folio.test
+      FOLIO_MAIL_FROM: notifications@folio.test
+      FOLIO_SMTP_ADDRESS: smtp.folio.test
+      FOLIO_SMTP_USERNAME: ci-account
+      FOLIO_SMTP_PASSWORD: ci-smtp-secret
+      PGPASSWORD: postgres
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
+        with:
+          bundler-cache: true
+
+      - name: Create the three databases and runtime role
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE folio_runtime LOGIN PASSWORD 'runtime-ci-password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+          CREATE DATABASE folio_primary;
+          CREATE DATABASE folio_queue;
+          CREATE DATABASE folio_cache;
+          SQL
+
+      - name: Prepare schemas with release credentials
+        env:
+          FOLIO_RELEASE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/folio_primary?sslmode=disable
+          FOLIO_RELEASE_QUEUE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/folio_queue?sslmode=disable
+          FOLIO_RELEASE_CACHE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/folio_cache?sslmode=disable
+        run: bin/release
+
+      - name: Grant runtime DML without schema ownership
+        run: |
+          for database in folio_primary folio_queue folio_cache; do
+            psql -h localhost -U postgres -d "$database" -v ON_ERROR_STOP=1 \
+              -v runtime_role=folio_runtime -f db/runtime-privileges.sql
+          done
+
+      - name: Probe production database, queue, cache, and trust boundary
+        env:
+          DATABASE_URL: postgresql://folio_runtime:runtime-ci-password@localhost:5432/folio_primary?sslmode=disable
+          QUEUE_DATABASE_URL: postgresql://folio_runtime:runtime-ci-password@localhost:5432/folio_queue?sslmode=disable
+          CACHE_DATABASE_URL: postgresql://folio_runtime:runtime-ci-password@localhost:5432/folio_cache?sslmode=disable
+        run: |
+          bin/production-check
+          bin/rails runner 'abort "queue unavailable" unless SolidQueue::Job.count >= 0; puts "queue query ok"'
+          bin/verify-tenant-isolation

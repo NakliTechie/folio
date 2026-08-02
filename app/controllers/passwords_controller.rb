@@ -1,8 +1,13 @@
+require "digest"
+
 class PasswordsController < ApplicationController
   allow_unauthenticated_access
   allow_unverified_write_access
   before_action :set_user_by_token, only: %i[ edit update ]
   rate_limit to: 10, within: 3.minutes, only: :create, with: -> { redirect_to new_password_path, alert: "Try again later." }
+  rate_limit to: 3, within: 30.minutes, only: :create, name: "account",
+    by: -> { Digest::SHA256.hexdigest(params[:email_address].to_s.strip.downcase) },
+    with: -> { redirect_to new_password_path, alert: "Try again later." }
 
   def new
   end

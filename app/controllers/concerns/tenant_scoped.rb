@@ -11,13 +11,24 @@ module TenantScoped
 
   included do
     before_action :require_tenant
+    around_action :clear_database_tenant_context
   end
 
   private
 
   def require_tenant
     Current.tenant = resolve_tenant
-    render_no_tenant unless Current.tenant
+    if Current.tenant
+      Folio::TenantContext.activate!(Current.tenant.id)
+    else
+      render_no_tenant
+    end
+  end
+
+  def clear_database_tenant_context
+    yield
+  ensure
+    Folio::TenantContext.clear!
   end
 
   def resolve_tenant

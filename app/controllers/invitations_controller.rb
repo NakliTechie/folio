@@ -7,9 +7,11 @@ require "digest"
 # account yet) and needs no current tenant.
 class InvitationsController < ApplicationController
   include TenantScoped
+  include MfaGate
   allow_unauthenticated_access only: %i[accept do_accept]
   allow_unverified_write_access only: :do_accept
   skip_before_action :require_tenant, only: %i[accept do_accept]
+  skip_before_action :require_mfa_enrollment, only: %i[accept do_accept]
   rate_limit to: 20, within: 10.minutes, only: :do_accept, name: "ip",
     with: -> { redirect_to accept_invitation_path(token: params[:token]), alert: "Too many attempts. Try again later." }
   rate_limit to: 8, within: 10.minutes, only: :do_accept, name: "token",
@@ -20,8 +22,12 @@ class InvitationsController < ApplicationController
     return head :forbidden unless owner?
     inv = Onboarding::Invite.create!(tenant: Current.tenant, email: params[:email],
                                      role_code: params[:role_code], invited_by: Current.session.user)
-    inv.queue_delivery!
-    redirect_to team_path(tenant_id: Current.tenant.id), notice: "Invitation queued for #{inv.email}."
+    if inv.queue_delivery!
+      redirect_to team_path(tenant_id: Current.tenant.id), notice: "Invitation queued for #{inv.email}."
+    else
+      redirect_to team_path(tenant_id: Current.tenant.id),
+        alert: "Invitation saved, but delivery could not be queued. Retry from the invitation list."
+    end
   rescue ActiveRecord::RecordInvalid => e
     redirect_to team_path(tenant_id: Current.tenant.id), alert: e.record.errors.full_messages.to_sentence
   rescue ActiveRecord::RecordNotUnique

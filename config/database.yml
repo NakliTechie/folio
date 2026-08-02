@@ -82,7 +82,7 @@ production:
   primary: &primary_production
     <<: *default
     database: folio_production
-    username: folio
+    username: <%= ENV.fetch("FOLIO_DATABASE_USERNAME", "folio_runtime") %>
     password: <%= ENV["FOLIO_DATABASE_PASSWORD"] %>
     <% unless ENV["DATABASE_URL"].to_s.empty? %>
     url: <%= ENV["DATABASE_URL"] %>

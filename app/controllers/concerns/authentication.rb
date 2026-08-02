@@ -56,8 +56,11 @@ module Authentication
       session.delete(:return_to_after_authenticating) || root_url
     end
 
-    def start_new_session_for(user)
-      user.sessions.create!(user_agent: request.user_agent, ip_address: request.remote_ip).tap do |session|
+    def start_new_session_for(user, mfa_verified: false)
+      user.sessions.create!(
+        user_agent: request.user_agent, ip_address: request.remote_ip,
+        mfa_verified_at: mfa_verified ? Time.current : nil
+      ).tap do |session|
         Current.session = session
         cookies.signed[:session_id] = {
           value: session.id, expires: session.expires_at,

@@ -17,8 +17,32 @@ Solid Cache with an in-process cache in a multi-process deployment.
 Provide one signing strategy (`RAILS_MASTER_KEY` or a 64+ character `SECRET_KEY_BASE`), a real host
 and verified SMTP sender, and either:
 
-- `DATABASE_URL`, `QUEUE_DATABASE_URL`, and `CACHE_DATABASE_URL`, each naming a different database; or
+- `DATABASE_URL`, `QUEUE_DATABASE_URL`, and `CACHE_DATABASE_URL`, each naming a different database
+  and the non-owner runtime role; or
 - `FOLIO_DATABASE_PASSWORD` for the three conventionally named databases in `config/database.yml`.
+
+Every URL must set `sslmode` explicitly. Remote databases require `sslmode=verify-full`; mount and
+name `sslrootcert`, `sslcert`, and `sslkey` in the URLs when the provider does not chain to the libpq
+trust store. `bin/backup` carries those settings into `pg_dump`. Only loopback CI/development
+connections may use `sslmode=disable`.
+
+Migration credentials are separate secrets named `FOLIO_RELEASE_DATABASE_URL`,
+`FOLIO_RELEASE_QUEUE_DATABASE_URL`, and `FOLIO_RELEASE_CACHE_DATABASE_URL`. They must be exposed only
+to a one-shot release task, never to web or worker tasks. After first migration, create a login role
+without `SUPERUSER`, `CREATEDB`, `CREATEROLE`, or schema ownership and apply
+`psql -v runtime_role=folio_runtime -f db/runtime-privileges.sql` in each database as the release
+owner. The runtime URLs name that role. `bin/production-check` rejects owner-like runtime privileges.
+
+The primary schema forces row-level security on tenant-owned business tables. The application sets
+`folio.tenant_id` only after resolving an authenticated membership and clears it after every request
+or tenant job. Identity/control-plane tables needed for that resolution remain outside RLS, but are
+still protected from DDL by the non-owner runtime role.
+
+Backups need a separate read-only role with `BYPASSRLS` (or the release owner only inside an
+isolated restore environment), because the web role intentionally cannot see all tenants without a
+tenant context. Supply it only to the backup task through `FOLIO_BACKUP_DATABASE_URL`,
+`FOLIO_BACKUP_QUEUE_DATABASE_URL`, and `FOLIO_BACKUP_CACHE_DATABASE_URL`; never expose those URLs to
+web or worker tasks.
 
 Also set `FOLIO_APP_HOST`, `FOLIO_MAIL_FROM`, `FOLIO_SMTP_ADDRESS`, `FOLIO_SMTP_USERNAME`, and
 `FOLIO_SMTP_PASSWORD`. Optional host, port, authentication, and timeout settings are documented in
@@ -28,12 +52,17 @@ the README. Never place values in the image, repository, Tunnel YAML, or process
 
 1. Build the image once and promote that digest; CI must run a container build.
 2. Take a provider snapshot or run `bin/backup` to an encrypted, access-controlled volume.
-3. Start one web task. Its entrypoint runs `db:prepare` for all three databases.
-4. Run `bin/production-check` in that exact release image.
-5. Start at least one separate worker with `bin/jobs` (or set `SOLID_QUEUE_IN_PUMA=1` only for a
+3. Run `bin/release` once with only the release database URLs available; it prepares all three schemas.
+4. Apply `db/runtime-privileges.sql` after migrations that add tables, then remove the release
+   credentials from the task environment.
+5. Start one web task with only the runtime database URLs and run `bin/production-check` in that
+   exact release image.
+6. Start at least one separate worker with `bin/jobs` (or set `SOLID_QUEUE_IN_PUMA=1` only for a
    single-server installation).
-6. Route the Tunnel to port 3000. Use `/up` for process liveness and `/ready` for database readiness.
-7. Exercise signup, verification confirmation, invitation acceptance, password reset, a safe draft,
+7. Route the Tunnel to port 3000. Use `/up` for process liveness and `/ready` for schema-aware
+   primary/queue/cache readiness.
+8. Exercise signup, verification confirmation, MFA enrollment/login, invitation acceptance,
+   password reset, a safe draft,
    and a worker restart. Confirm the reverse proxy redacts token query values.
 
 Rollback means routing back to the previous immutable image. Do not roll database structure back
@@ -49,9 +78,11 @@ custom-format dumps plus a SHA-256 manifest. `bin/verify-backup PATH` checks eve
 Keep at least 7 daily, 5 weekly, and 12 monthly primary backups, subject to the business's retention
 policy. Queue/cache archives aid incident diagnosis but primary is authoritative. Perform a real
 restore into three isolated, disposable databases quarterly and before a migration-heavy release;
-then run `bin/production-check`, the full test suite, event-chain verification, and a representative
-trial balance. Record the restore duration and the latest recoverable timestamp. Backup existence is
-not a recovery proof.
+then run `bin/production-check`, the full test suite, and `bin/verify-restore` with the isolated
+restore's release/read-all primary URL. The restore verifier
+checks both event chains and every legal entity's representative trial balance for every tenant.
+Record the restore duration and the latest recoverable timestamp. Backup existence is not a recovery
+proof.
 
 ## Monitoring and alerting
 

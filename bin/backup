@@ -2,6 +2,15 @@
 # frozen_string_literal: true
 
 ENV["RAILS_ENV"] ||= "production"
+backup_urls = %w[
+  FOLIO_BACKUP_DATABASE_URL FOLIO_BACKUP_QUEUE_DATABASE_URL FOLIO_BACKUP_CACHE_DATABASE_URL
+]
+if backup_urls.any? { |name| !ENV[name].to_s.strip.empty? }
+  missing = backup_urls.select { |name| ENV[name].to_s.strip.empty? }
+  abort "backup database URL topology is incomplete: #{missing.join(', ')}" if missing.any?
+  ENV["DATABASE_URL"], ENV["QUEUE_DATABASE_URL"], ENV["CACHE_DATABASE_URL"] =
+    backup_urls.map { |name| ENV.fetch(name) }
+end
 require_relative "../config/environment"
 require "digest"
 require "fileutils"
@@ -9,6 +18,7 @@ require "json"
 require "open3"
 require "pathname"
 require "time"
+require_relative "../lib/folio/postgres_connection"
 
 abort "backup only runs with RAILS_ENV=production" unless Rails.env.production?
 
@@ -35,7 +45,7 @@ archives = %w[primary queue cache].map do |name|
   command << "--host=#{config.fetch(:host)}" if config[:host].present?
   command << "--port=#{config.fetch(:port)}" if config[:port].present?
   command << "--username=#{config.fetch(:username)}" if config[:username].present?
-  environment = { "PGPASSWORD" => config[:password].to_s }
+  environment = Folio::PostgresConnection.environment(config)
   _stdout, stderr, status = Open3.capture3(environment, *command)
   abort "#{name} backup failed: #{stderr.lines.first.to_s.strip}" unless status.success?
   output.chmod(0o600)

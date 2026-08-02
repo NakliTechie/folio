@@ -13,9 +13,9 @@ class Folio::ProductionSettingsTest < ActiveSupport::TestCase
       "FOLIO_SMTP_PASSWORD" => "provider-secret",
       "FOLIO_ALLOWED_HOSTS" => "books.acme.test,internal.acme.test",
       "SECRET_KEY_BASE" => "s" * 64,
-      "DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_primary",
-      "QUEUE_DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_queue",
-      "CACHE_DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_cache"
+      "DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_primary?sslmode=verify-full",
+      "QUEUE_DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_queue?sslmode=verify-full",
+      "CACHE_DATABASE_URL" => "postgresql://folio:secret@db.acme.test/folio_cache?sslmode=verify-full"
     }
   end
 
@@ -68,5 +68,24 @@ class Folio::ProductionSettingsTest < ActiveSupport::TestCase
       )
     end
     assert_match(/three distinct databases/, error.message)
+  end
+
+  test "requires explicit verified TLS for remote PostgreSQL URLs" do
+    no_tls = @environment.transform_values { |value| value.to_s.sub("?sslmode=verify-full", "") }
+    error = assert_raises(Folio::ProductionSettings::InvalidConfiguration) do
+      Folio::ProductionSettings.load!(no_tls)
+    end
+    assert_match(/sslmode explicitly/, error.message)
+
+    weak = @environment.transform_values { |value| value.to_s.sub("verify-full", "require") }
+    error = assert_raises(Folio::ProductionSettings::InvalidConfiguration) do
+      Folio::ProductionSettings.load!(weak)
+    end
+    assert_match(/verify-full/, error.message)
+
+    local = @environment.transform_values do |value|
+      value.to_s.gsub("db.acme.test", "localhost").sub("verify-full", "disable")
+    end
+    assert Folio::ProductionSettings.load!(local)
   end
 end

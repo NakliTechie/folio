@@ -324,6 +324,8 @@ CREATE TABLE public.access_review_attestations (
     CONSTRAINT access_review_attestations_outcome_valid CHECK (((outcome)::text = ANY (ARRAY[('approved'::character varying)::text, ('remediation_required'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.access_review_attestations FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: access_review_attestations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -358,6 +360,8 @@ CREATE TABLE public.access_review_runs (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.access_review_runs FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -394,6 +398,8 @@ CREATE TABLE public.accounts (
     active boolean DEFAULT true NOT NULL,
     monetary boolean DEFAULT false NOT NULL
 );
+
+ALTER TABLE ONLY public.accounts FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -438,6 +444,8 @@ CREATE TABLE public.allocation_cycles (
     CONSTRAINT allocation_cycles_type_valid CHECK (((allocation_type)::text = 'distribution'::text))
 );
 
+ALTER TABLE ONLY public.allocation_cycles FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: allocation_cycles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -472,6 +480,8 @@ CREATE TABLE public.allocation_receivers (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT allocation_receivers_weight_valid CHECK (((weight_basis_points >= 1) AND (weight_basis_points <= 10000)))
 );
+
+ALTER TABLE ONLY public.allocation_receivers FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -510,6 +520,8 @@ CREATE TABLE public.allocation_run_items (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT allocation_run_items_amount_positive CHECK ((amount_minor > 0))
 );
+
+ALTER TABLE ONLY public.allocation_run_items FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -557,6 +569,8 @@ CREATE TABLE public.allocation_runs (
     CONSTRAINT allocation_runs_mode_valid CHECK (((mode)::text = ANY (ARRAY[('simulate'::character varying)::text, ('post'::character varying)::text]))),
     CONSTRAINT allocation_runs_status_valid CHECK (((status)::text = ANY (ARRAY[('simulated'::character varying)::text, ('posted'::character varying)::text])))
 );
+
+ALTER TABLE ONLY public.allocation_runs FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -611,6 +625,8 @@ CREATE TABLE public.asset_classes (
     CONSTRAINT asset_classes_useful_life_positive CHECK ((default_useful_life_months > 0))
 );
 
+ALTER TABLE ONLY public.asset_classes FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: asset_classes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -656,6 +672,8 @@ CREATE TABLE public.asset_transactions (
     CONSTRAINT asset_transactions_code_valid CHECK (((valuation_code)::text = ANY (ARRAY[('BOOK'::character varying)::text, ('TAX_IT'::character varying)::text]))),
     CONSTRAINT asset_transactions_type_valid CHECK (((transaction_type)::text = ANY (ARRAY[('acquisition'::character varying)::text, ('depreciation'::character varying)::text, ('retirement'::character varying)::text])))
 );
+
+ALTER TABLE ONLY public.asset_transactions FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -704,6 +722,8 @@ CREATE TABLE public.asset_valuation_terms (
     CONSTRAINT asset_valuation_terms_residual_nonnegative CHECK ((residual_value_minor >= 0))
 );
 
+ALTER TABLE ONLY public.asset_valuation_terms FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: asset_valuation_terms_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -744,6 +764,8 @@ CREATE TABLE public.asset_valuations (
     CONSTRAINT asset_valuations_code_valid CHECK (((valuation_code)::text = ANY (ARRAY[('BOOK'::character varying)::text, ('TAX_IT'::character varying)::text]))),
     CONSTRAINT asset_valuations_values_coherent CHECK (((gross_block_minor >= 0) AND (accumulated_depreciation_minor >= 0) AND (accumulated_depreciation_minor <= gross_block_minor)))
 );
+
+ALTER TABLE ONLY public.asset_valuations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -795,6 +817,8 @@ CREATE TABLE public.bank_statement_imports (
     CONSTRAINT bank_statement_imports_row_count_positive CHECK ((row_count > 0)),
     CONSTRAINT bank_statement_imports_status_valid CHECK (((status)::text = ANY (ARRAY[('imported'::character varying)::text, ('reconciled'::character varying)::text])))
 );
+
+ALTER TABLE ONLY public.bank_statement_imports FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -849,6 +873,8 @@ CREATE TABLE public.bank_statement_lines (
     CONSTRAINT bank_statement_lines_status_valid CHECK (((status)::text = ANY (ARRAY[('unmatched'::character varying)::text, ('matched'::character varying)::text, ('ignored'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.bank_statement_lines FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: bank_statement_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -886,6 +912,8 @@ CREATE TABLE public.consolidation_elimination_runs (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.consolidation_elimination_runs FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -925,6 +953,8 @@ CREATE TABLE public.consolidation_group_members (
     CONSTRAINT consolidation_members_ownership_valid CHECK ((ownership_basis_points = 10000))
 );
 
+ALTER TABLE ONLY public.consolidation_group_members FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: consolidation_group_members_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -959,6 +989,8 @@ CREATE TABLE public.consolidation_groups (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.consolidation_groups FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -997,6 +1029,8 @@ CREATE TABLE public.contract_allocation_lines (
     CONSTRAINT contract_allocation_lines_amounts_nonnegative CHECK (((standalone_selling_price_minor >= 0) AND (allocated_price_minor >= 0))),
     CONSTRAINT contract_allocation_lines_ratio_valid CHECK (((allocation_ratio >= (0)::numeric) AND (allocation_ratio <= (1)::numeric)))
 );
+
+ALTER TABLE ONLY public.contract_allocation_lines FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1039,6 +1073,8 @@ CREATE TABLE public.contract_allocation_runs (
     CONSTRAINT contract_allocation_runs_method_valid CHECK (((method)::text = 'relative_ssp'::text)),
     CONSTRAINT contract_allocation_runs_version_positive CHECK ((version > 0))
 );
+
+ALTER TABLE ONLY public.contract_allocation_runs FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1086,6 +1122,8 @@ CREATE TABLE public.contract_milestones (
     CONSTRAINT contract_milestones_status_valid CHECK (((status)::text = ANY (ARRAY[('planned'::character varying)::text, ('achieved'::character varying)::text, ('cancelled'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.contract_milestones FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: contract_milestones_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -1121,6 +1159,8 @@ CREATE TABLE public.contract_number_ranges (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT contract_number_ranges_next_value_positive CHECK ((next_value > 0))
 );
+
+ALTER TABLE ONLY public.contract_number_ranges FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1171,6 +1211,8 @@ CREATE TABLE public.contract_performance_obligations (
     CONSTRAINT contract_obligations_ssp_nonnegative CHECK ((standalone_selling_price_minor >= 0))
 );
 
+ALTER TABLE ONLY public.contract_performance_obligations FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: contract_performance_obligations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -1207,6 +1249,8 @@ CREATE TABLE public.contract_posting_run_items (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT contract_posting_run_items_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('simulated'::character varying)::text, ('posted'::character varying)::text, ('skipped'::character varying)::text, ('failed'::character varying)::text])))
 );
+
+ALTER TABLE ONLY public.contract_posting_run_items FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1253,6 +1297,8 @@ CREATE TABLE public.contract_posting_runs (
     CONSTRAINT contract_posting_runs_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('running'::character varying)::text, ('simulated'::character varying)::text, ('posted'::character varying)::text, ('failed'::character varying)::text]))),
     CONSTRAINT contract_posting_runs_type_valid CHECK (((run_type)::text = 'revenue_recognition'::text))
 );
+
+ALTER TABLE ONLY public.contract_posting_runs FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1301,6 +1347,8 @@ CREATE TABLE public.contract_schedule_lines (
     CONSTRAINT contract_schedule_lines_status_valid CHECK (((status)::text = ANY (ARRAY[('planned'::character varying)::text, ('posted'::character varying)::text, ('superseded'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.contract_schedule_lines FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: contract_schedule_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -1347,6 +1395,8 @@ CREATE TABLE public.contract_schedules (
     CONSTRAINT contract_schedules_status_valid CHECK (((status)::text = ANY (ARRAY[('current'::character varying)::text, ('superseded'::character varying)::text]))),
     CONSTRAINT contract_schedules_version_positive CHECK ((version > 0))
 );
+
+ALTER TABLE ONLY public.contract_schedules FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1430,6 +1480,8 @@ CREATE TABLE public.contracts (
     CONSTRAINT contracts_total_value_nonnegative CHECK ((total_contract_value_minor >= 0))
 );
 
+ALTER TABLE ONLY public.contracts FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: contracts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -1470,6 +1522,8 @@ CREATE TABLE public.controlling_plan_lines (
     CONSTRAINT controlling_plan_lines_period_valid CHECK (((period_no >= 1) AND (period_no <= 16)))
 );
 
+ALTER TABLE ONLY public.controlling_plan_lines FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: controlling_plan_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -1503,6 +1557,8 @@ CREATE TABLE public.controlling_segments (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.controlling_segments FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1542,6 +1598,8 @@ CREATE TABLE public.cost_centers (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT cost_centers_range_valid CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))
 );
+
+ALTER TABLE ONLY public.cost_centers FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1586,6 +1644,8 @@ CREATE TABLE public.depreciation_runs (
     CONSTRAINT depreciation_runs_status_valid CHECK (((status)::text = ANY (ARRAY[('simulated'::character varying)::text, ('posted'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.depreciation_runs FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: depreciation_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -1622,6 +1682,8 @@ CREATE TABLE public.dimensions (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.dimensions FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1668,6 +1730,8 @@ CREATE TABLE public.document_allocations (
     CONSTRAINT chk_document_allocations_mode CHECK (((clearing_mode)::text = ANY (ARRAY[('partial'::character varying)::text, ('residual'::character varying)::text]))),
     CONSTRAINT chk_document_allocations_positive CHECK ((amount_minor > 0))
 );
+
+ALTER TABLE ONLY public.document_allocations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1723,6 +1787,8 @@ CREATE TABLE public.document_lines (
     CONSTRAINT chk_document_lines_tax_rate CHECK (((tax_rate_basis_points IS NULL) OR ((tax_rate_basis_points >= 0) AND (tax_rate_basis_points <= 4000))))
 );
 
+ALTER TABLE ONLY public.document_lines FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: document_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -1759,6 +1825,8 @@ CREATE TABLE public.document_types (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.document_types FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1841,6 +1909,8 @@ CREATE TABLE public.documents (
     CONSTRAINT chk_documents_tds_snapshot_complete CHECK ((((tds_section IS NULL) AND (tds_statutory_reference IS NULL) AND (tds_base_basis IS NULL) AND (tds_trigger_event IS NULL) AND (tds_rate_basis_points = 0) AND (tds_taxable_minor = 0) AND (tds_prior_taxable_minor = 0) AND (tds_prior_deducted_base_minor = 0) AND (tds_deductible_base_minor = 0) AND (tds_minor = 0)) OR ((tds_section IS NOT NULL) AND (tds_statutory_reference IS NOT NULL) AND (tds_base_basis IS NOT NULL) AND (tds_trigger_event IS NOT NULL) AND (tds_taxable_minor > 0) AND (tds_minor <= tds_deductible_base_minor))))
 );
 
+ALTER TABLE ONLY public.documents FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: documents_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -1885,6 +1955,8 @@ CREATE TABLE public.domain_events (
     signing_key_id bigint,
     CONSTRAINT domain_events_seq_positive CHECK ((seq > 0))
 );
+
+ALTER TABLE ONLY public.domain_events FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1937,6 +2009,8 @@ CREATE TABLE public.einvoice_cancellations (
     CONSTRAINT einvoice_cancellations_reason_valid CHECK (((reason_code)::text = ANY (ARRAY[('1'::character varying)::text, ('2'::character varying)::text]))),
     CONSTRAINT einvoice_cancellations_status_valid CHECK (((status)::text = ANY (ARRAY[('prepared'::character varying)::text, ('submitting'::character varying)::text, ('cancelled'::character varying)::text, ('rejected'::character varying)::text, ('indeterminate'::character varying)::text])))
 );
+
+ALTER TABLE ONLY public.einvoice_cancellations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1995,6 +2069,8 @@ CREATE TABLE public.einvoice_submissions (
     CONSTRAINT einvoice_submissions_status_valid CHECK (((status)::text = ANY (ARRAY[('prepared'::character varying)::text, ('submitting'::character varying)::text, ('acknowledged'::character varying)::text, ('rejected'::character varying)::text, ('indeterminate'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.einvoice_submissions FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: einvoice_submissions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2030,6 +2106,8 @@ CREATE TABLE public.entities (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.entities FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2075,6 +2153,8 @@ CREATE TABLE public.entries (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT chk_entries_period_no CHECK (((period_no >= 0) AND (period_no <= 16)))
 );
+
+ALTER TABLE ONLY public.entries FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2164,6 +2244,8 @@ CREATE TABLE public.entry_lines (
     CONSTRAINT chk_entry_lines_tax_component CHECK (((tax_component IS NULL) OR ((tax_component)::text = ANY (ARRAY[('cgst'::character varying)::text, ('sgst'::character varying)::text, ('utgst'::character varying)::text, ('igst'::character varying)::text, ('cess'::character varying)::text]))))
 );
 
+ALTER TABLE ONLY public.entry_lines FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: entry_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2205,6 +2287,8 @@ CREATE TABLE public.exchange_rates (
     CONSTRAINT exchange_rates_type_valid CHECK (((rate_type)::text = ANY (ARRAY[('spot'::character varying)::text, ('closing'::character varying)::text, ('average'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.exchange_rates FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: exchange_rates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2244,6 +2328,8 @@ CREATE TABLE public.exchange_revaluation_items (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.exchange_revaluation_items FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2289,6 +2375,8 @@ CREATE TABLE public.exchange_revaluation_runs (
     CONSTRAINT exchange_revaluation_runs_status_valid CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('simulated'::character varying)::text, ('posted'::character varying)::text, ('failed'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.exchange_revaluation_runs FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: exchange_revaluation_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2325,6 +2413,8 @@ CREATE TABLE public.external_signing_keys (
     CONSTRAINT external_signing_keys_algorithm_valid CHECK (((algorithm)::text = 'ecdsa-p256-sha256'::text))
 );
 
+ALTER TABLE ONLY public.external_signing_keys FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: external_signing_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2358,6 +2448,8 @@ CREATE TABLE public.financial_statement_assignments (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.financial_statement_assignments FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2399,6 +2491,8 @@ CREATE TABLE public.financial_statement_sections (
     CONSTRAINT chk_statement_sections_type CHECK (((statement_type)::text = ANY (ARRAY[('balance_sheet'::character varying)::text, ('profit_and_loss'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.financial_statement_sections FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: financial_statement_sections_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2436,6 +2530,8 @@ CREATE TABLE public.financial_statement_versions (
     CONSTRAINT chk_statement_versions_dates CHECK (((effective_to IS NULL) OR (effective_to >= effective_from))),
     CONSTRAINT chk_statement_versions_status CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('active'::character varying)::text, ('retired'::character varying)::text])))
 );
+
+ALTER TABLE ONLY public.financial_statement_versions FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2489,6 +2585,8 @@ CREATE TABLE public.fixed_assets (
     CONSTRAINT fixed_assets_status_valid CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('active'::character varying)::text, ('retired'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.fixed_assets FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: fixed_assets_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2524,6 +2622,8 @@ CREATE TABLE public.goods_receipt_lines (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT goods_receipt_lines_quantity_positive CHECK ((received_quantity > (0)::numeric))
 );
+
+ALTER TABLE ONLY public.goods_receipt_lines FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2562,6 +2662,8 @@ CREATE TABLE public.goods_receipts (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.goods_receipts FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2608,6 +2710,8 @@ CREATE TABLE public.intercompany_transactions (
     CONSTRAINT intercompany_transactions_distinct_entities CHECK ((seller_entity_id <> buyer_entity_id))
 );
 
+ALTER TABLE ONLY public.intercompany_transactions FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: intercompany_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2651,6 +2755,8 @@ CREATE TABLE public.inventory_movements (
     CONSTRAINT inventory_movements_quantity_nonzero CHECK ((quantity <> (0)::numeric)),
     CONSTRAINT inventory_movements_value_nonzero CHECK ((inventory_value_minor <> 0))
 );
+
+ALTER TABLE ONLY public.inventory_movements FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2703,6 +2809,8 @@ CREATE TABLE public.inventory_transactions (
     CONSTRAINT inventory_transactions_value_positive CHECK ((total_value_minor > 0)),
     CONSTRAINT inventory_transactions_warehouse_coherent CHECK (((((transaction_type)::text = ANY (ARRAY[('issue'::character varying)::text, ('adjustment_out'::character varying)::text])) AND (source_warehouse_id IS NOT NULL) AND (destination_warehouse_id IS NULL) AND (offset_account_code IS NOT NULL)) OR (((transaction_type)::text = ANY (ARRAY[('receipt'::character varying)::text, ('adjustment_in'::character varying)::text])) AND (source_warehouse_id IS NULL) AND (destination_warehouse_id IS NOT NULL) AND (offset_account_code IS NOT NULL) AND (unit_cost_minor IS NOT NULL)) OR (((transaction_type)::text = 'transfer'::text) AND (source_warehouse_id IS NOT NULL) AND (destination_warehouse_id IS NOT NULL) AND (source_warehouse_id <> destination_warehouse_id) AND (offset_account_code IS NULL))))
 );
+
+ALTER TABLE ONLY public.inventory_transactions FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2791,6 +2899,8 @@ CREATE TABLE public.items (
     CONSTRAINT items_inventory_profile_coherent CHECK (((((item_type)::text = 'service'::text) AND (inventory_class IS NULL) AND (revision IS NULL) AND (valuation_method IS NULL) AND (inventory_account_code IS NULL)) OR (((item_type)::text = 'good'::text) AND ((inventory_class)::text = ANY (ARRAY[('raw_material'::character varying)::text, ('wip'::character varying)::text, ('finished_good'::character varying)::text, ('trading'::character varying)::text])) AND (revision IS NOT NULL) AND ((valuation_method)::text = 'moving_average'::text) AND (inventory_account_code IS NOT NULL))))
 );
 
+ALTER TABLE ONLY public.items FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2830,6 +2940,8 @@ CREATE TABLE public.journal_entry_line_amounts (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.journal_entry_line_amounts FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2873,6 +2985,8 @@ CREATE TABLE public.khata_import_runs (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.khata_import_runs FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2951,6 +3065,8 @@ CREATE TABLE public.khata_recovery_snapshots (
     CONSTRAINT khata_recovery_snapshots_schema_version_valid CHECK ((schema_version = 1))
 );
 
+ALTER TABLE ONLY public.khata_recovery_snapshots FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: khata_recovery_snapshots_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -2998,6 +3114,8 @@ CREATE TABLE public.ledger_events (
     CONSTRAINT ledger_events_seq_positive CHECK ((seq > 0))
 );
 
+ALTER TABLE ONLY public.ledger_events FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: ledger_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -3035,6 +3153,8 @@ CREATE TABLE public.ledgers (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.ledgers FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3105,6 +3225,8 @@ CREATE TABLE public.number_ranges (
     updated_at timestamp(6) without time zone NOT NULL
 );
 
+ALTER TABLE ONLY public.number_ranges FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: number_ranges_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -3137,6 +3259,8 @@ CREATE TABLE public.office_tax_registrations (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+ALTER TABLE ONLY public.office_tax_registrations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3178,6 +3302,8 @@ CREATE TABLE public.offices (
     state_code character varying,
     country_code character varying(2)
 );
+
+ALTER TABLE ONLY public.offices FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3221,6 +3347,8 @@ CREATE TABLE public.parties (
     country_code character varying(2) DEFAULT 'IN'::character varying NOT NULL,
     default_tds_section character varying
 );
+
+ALTER TABLE ONLY public.parties FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3293,6 +3421,8 @@ CREATE TABLE public.party_tax_registrations (
     CONSTRAINT chk_party_tax_registration_dates CHECK (((valid_to IS NULL) OR (valid_from IS NULL) OR (valid_to >= valid_from)))
 );
 
+ALTER TABLE ONLY public.party_tax_registrations FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: party_tax_registrations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -3332,6 +3462,8 @@ CREATE TABLE public.period_controls (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT chk_period_controls_period_no CHECK (((period_no >= 0) AND (period_no <= 16)))
 );
+
+ALTER TABLE ONLY public.period_controls FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3408,6 +3540,8 @@ CREATE TABLE public.procurement_matches (
     CONSTRAINT procurement_matches_status_valid CHECK (((status)::text = ANY (ARRAY[('matched'::character varying)::text, ('exception'::character varying)::text])))
 );
 
+ALTER TABLE ONLY public.procurement_matches FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: procurement_matches_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -3446,6 +3580,8 @@ CREATE TABLE public.profit_centers (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT profit_centers_range_valid CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))
 );
+
+ALTER TABLE ONLY public.profit_centers FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3494,6 +3630,8 @@ CREATE TABLE public.purchase_order_lines (
     CONSTRAINT purchase_order_lines_value_valid CHECK (((unit_price_minor >= 0) AND (line_total_minor > 0)))
 );
 
+ALTER TABLE ONLY public.purchase_order_lines FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: purchase_order_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -3529,6 +3667,8 @@ CREATE TABLE public.purchase_order_number_ranges (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT purchase_order_ranges_next_positive CHECK ((next_value > 0))
 );
+
+ALTER TABLE ONLY public.purchase_order_number_ranges FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3579,6 +3719,8 @@ CREATE TABLE public.purchase_orders (
     CONSTRAINT purchase_orders_status_valid CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('approved'::character varying)::text, ('partially_received'::character varying)::text, ('received'::character varying)::text, ('closed'::character varying)::text]))),
     CONSTRAINT purchase_orders_subtotal_positive CHECK ((subtotal_minor > 0))
 );
+
+ALTER TABLE ONLY public.purchase_orders FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3686,7 +3828,8 @@ CREATE TABLE public.sessions (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     last_seen_at timestamp(6) without time zone NOT NULL,
-    expires_at timestamp(6) without time zone NOT NULL
+    expires_at timestamp(6) without time zone NOT NULL,
+    mfa_verified_at timestamp(6) without time zone
 );
 
 
@@ -3731,6 +3874,8 @@ CREATE TABLE public.settlement_reallocations (
     CONSTRAINT chk_settlement_reallocations_mode CHECK (((clearing_mode)::text = ANY (ARRAY[('partial'::character varying)::text, ('residual'::character varying)::text]))),
     CONSTRAINT chk_settlement_reallocations_positive CHECK ((amount_minor > 0))
 );
+
+ALTER TABLE ONLY public.settlement_reallocations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3812,6 +3957,8 @@ CREATE TABLE public.stock_balances (
     CONSTRAINT stock_balances_zero_position_coherent CHECK ((((quantity = (0)::numeric) AND (inventory_value_minor = 0)) OR (quantity > (0)::numeric)))
 );
 
+ALTER TABLE ONLY public.stock_balances FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: stock_balances_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -3851,6 +3998,8 @@ CREATE TABLE public.tax_registrations (
     active boolean DEFAULT true NOT NULL,
     CONSTRAINT chk_tax_registration_dates CHECK (((valid_to IS NULL) OR (valid_from IS NULL) OR (valid_to >= valid_from)))
 );
+
+ALTER TABLE ONLY public.tax_registrations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -3908,6 +4057,8 @@ CREATE TABLE public.tds_deductions (
     CONSTRAINT tds_deductions_quarter_valid CHECK (((quarter >= 1) AND (quarter <= 4))),
     CONSTRAINT tds_deductions_reversal_link_valid CHECK (((((kind)::text = 'deduction'::text) AND (reverses_tds_deduction_id IS NULL)) OR (((kind)::text = 'reversal'::text) AND (reverses_tds_deduction_id IS NOT NULL))))
 );
+
+ALTER TABLE ONLY public.tds_deductions FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -4051,7 +4202,12 @@ CREATE TABLE public.users (
     updated_at timestamp(6) without time zone NOT NULL,
     verified_at timestamp(6) without time zone,
     verification_delivery_state character varying DEFAULT 'not_sent'::character varying NOT NULL,
-    verification_delivery_attempted_at timestamp(6) without time zone
+    verification_delivery_attempted_at timestamp(6) without time zone,
+    mfa_secret_ciphertext text,
+    mfa_recovery_code_digests jsonb DEFAULT '[]'::jsonb NOT NULL,
+    mfa_enabled_at timestamp(6) without time zone,
+    CONSTRAINT chk_users_mfa_complete CHECK ((((mfa_enabled_at IS NULL) AND (mfa_secret_ciphertext IS NULL) AND (jsonb_array_length(mfa_recovery_code_digests) = 0)) OR ((mfa_enabled_at IS NOT NULL) AND (mfa_secret_ciphertext IS NOT NULL) AND (jsonb_typeof(mfa_recovery_code_digests) = 'array'::text)))),
+    CONSTRAINT chk_users_mfa_recovery_array CHECK ((jsonb_typeof(mfa_recovery_code_digests) = 'array'::text))
 );
 
 
@@ -4099,6 +4255,8 @@ CREATE TABLE public.vendor_profiles (
     CONSTRAINT vendor_profiles_terms_nonnegative CHECK ((payment_terms_days >= 0))
 );
 
+ALTER TABLE ONLY public.vendor_profiles FORCE ROW LEVEL SECURITY;
+
 
 --
 -- Name: vendor_profiles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
@@ -4136,6 +4294,8 @@ CREATE TABLE public.warehouses (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT warehouses_type_valid CHECK (((warehouse_type)::text = ANY (ARRAY[('general'::character varying)::text, ('raw_material'::character varying)::text, ('wip'::character varying)::text, ('finished_goods'::character varying)::text])))
 );
+
+ALTER TABLE ONLY public.warehouses FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -9349,12 +9509,1015 @@ ALTER TABLE ONLY public.user_office_roles
 
 
 --
+-- Name: access_review_attestations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.access_review_attestations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: access_review_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.access_review_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: accounts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: allocation_cycles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.allocation_cycles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: allocation_receivers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.allocation_receivers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: allocation_run_items; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.allocation_run_items ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: allocation_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.allocation_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: asset_classes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.asset_classes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: asset_transactions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.asset_transactions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: asset_valuation_terms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.asset_valuation_terms ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: asset_valuations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.asset_valuations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: bank_statement_imports; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.bank_statement_imports ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: bank_statement_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.bank_statement_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: consolidation_elimination_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.consolidation_elimination_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: consolidation_group_members; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.consolidation_group_members ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: consolidation_groups; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.consolidation_groups ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_allocation_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_allocation_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_allocation_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_allocation_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_milestones; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_milestones ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_number_ranges; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_number_ranges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_performance_obligations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_performance_obligations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_posting_run_items; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_posting_run_items ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_posting_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_posting_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_schedule_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_schedule_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contract_schedules; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contract_schedules ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: contracts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.contracts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: controlling_plan_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.controlling_plan_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: controlling_segments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.controlling_segments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cost_centers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cost_centers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: depreciation_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.depreciation_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: dimensions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.dimensions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: document_allocations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.document_allocations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: document_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.document_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: document_types; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.document_types ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: documents; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: domain_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.domain_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: einvoice_cancellations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.einvoice_cancellations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: einvoice_submissions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.einvoice_submissions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entities; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.entities ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entries; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.entries ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entry_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.entry_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: exchange_rates; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.exchange_rates ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: exchange_revaluation_items; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.exchange_revaluation_items ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: exchange_revaluation_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.exchange_revaluation_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: external_signing_keys; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.external_signing_keys ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: financial_statement_assignments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.financial_statement_assignments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: financial_statement_sections; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.financial_statement_sections ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: financial_statement_versions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.financial_statement_versions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: fixed_assets; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.fixed_assets ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: access_review_attestations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.access_review_attestations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: access_review_runs folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.access_review_runs USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: accounts folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.accounts USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: allocation_cycles folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.allocation_cycles USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: allocation_receivers folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.allocation_receivers USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: allocation_run_items folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.allocation_run_items USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: allocation_runs folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.allocation_runs USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: asset_classes folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.asset_classes USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: asset_transactions folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.asset_transactions USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: asset_valuation_terms folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.asset_valuation_terms USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: asset_valuations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.asset_valuations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: bank_statement_imports folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.bank_statement_imports USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: bank_statement_lines folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.bank_statement_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: consolidation_elimination_runs folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.consolidation_elimination_runs USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: consolidation_group_members folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.consolidation_group_members USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: consolidation_groups folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.consolidation_groups USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_allocation_lines folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_allocation_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_allocation_runs folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_allocation_runs USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_milestones folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_milestones USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_number_ranges folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_number_ranges USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_performance_obligations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_performance_obligations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_posting_run_items folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_posting_run_items USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_posting_runs folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_posting_runs USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_schedule_lines folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_schedule_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contract_schedules folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contract_schedules USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: contracts folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.contracts USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: controlling_plan_lines folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.controlling_plan_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: controlling_segments folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.controlling_segments USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: cost_centers folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.cost_centers USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: depreciation_runs folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.depreciation_runs USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: dimensions folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.dimensions USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: document_allocations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.document_allocations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: document_lines folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.document_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: document_types folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.document_types USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: documents folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.documents USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: domain_events folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.domain_events USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: einvoice_cancellations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.einvoice_cancellations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: einvoice_submissions folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.einvoice_submissions USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: entities folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.entities USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: entries folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.entries USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: entry_lines folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.entry_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: exchange_rates folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.exchange_rates USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: exchange_revaluation_items folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.exchange_revaluation_items USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: exchange_revaluation_runs folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.exchange_revaluation_runs USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: external_signing_keys folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.external_signing_keys USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: financial_statement_assignments folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.financial_statement_assignments USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: financial_statement_sections folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.financial_statement_sections USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: financial_statement_versions folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.financial_statement_versions USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: fixed_assets folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.fixed_assets USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: goods_receipt_lines folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.goods_receipt_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: goods_receipts folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.goods_receipts USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: intercompany_transactions folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.intercompany_transactions USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: inventory_movements folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.inventory_movements USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: inventory_transactions folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.inventory_transactions USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: items folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.items USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: journal_entry_line_amounts folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.journal_entry_line_amounts USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: khata_import_runs folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.khata_import_runs USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: khata_recovery_snapshots folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.khata_recovery_snapshots USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: ledger_events folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.ledger_events USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: ledgers folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.ledgers USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: number_ranges folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.number_ranges USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: office_tax_registrations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.office_tax_registrations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: offices folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.offices USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: parties folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.parties USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: party_tax_registrations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.party_tax_registrations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: period_controls folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.period_controls USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: procurement_matches folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.procurement_matches USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: profit_centers folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.profit_centers USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: purchase_order_lines folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.purchase_order_lines USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: purchase_order_number_ranges folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.purchase_order_number_ranges USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: purchase_orders folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.purchase_orders USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: settlement_reallocations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.settlement_reallocations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: stock_balances folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.stock_balances USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: tax_registrations folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.tax_registrations USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: tds_deductions folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.tds_deductions USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: vendor_profiles folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.vendor_profiles USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: warehouses folio_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY folio_tenant_isolation ON public.warehouses USING ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint)) WITH CHECK ((tenant_id = (NULLIF(current_setting('folio.tenant_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: goods_receipt_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.goods_receipt_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: goods_receipts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.goods_receipts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: intercompany_transactions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.intercompany_transactions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: inventory_movements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_movements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: inventory_transactions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_transactions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: items; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: journal_entry_line_amounts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.journal_entry_line_amounts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: khata_import_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.khata_import_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: khata_recovery_snapshots; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.khata_recovery_snapshots ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ledger_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ledger_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ledgers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ledgers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: number_ranges; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.number_ranges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: office_tax_registrations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.office_tax_registrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: offices; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.offices ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: parties; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.parties ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: party_tax_registrations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.party_tax_registrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: period_controls; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.period_controls ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: procurement_matches; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.procurement_matches ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: profit_centers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.profit_centers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchase_order_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchase_order_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchase_order_number_ranges; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchase_order_number_ranges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchase_orders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: settlement_reallocations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.settlement_reallocations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: stock_balances; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.stock_balances ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: tax_registrations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.tax_registrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: tds_deductions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.tds_deductions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: vendor_profiles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.vendor_profiles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: warehouses; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.warehouses ENABLE ROW LEVEL SECURITY;
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260802033000'),
+('20260802032000'),
 ('20260802031000'),
 ('20260802030000'),
 ('20260802020000'),

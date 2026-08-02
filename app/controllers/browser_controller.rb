@@ -3,6 +3,7 @@
 # Shared base for the authenticated, server-rendered product surface.
 class BrowserController < ApplicationController
   include TenantScoped
+  include MfaGate
 
   helper_method :current_tenant, :current_role_assignment, :permitted?, :tenant_route_options,
     :business_date
